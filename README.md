@@ -2,6 +2,10 @@
 
 A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due dates, urgent flags, recurring reminders, natural-language quick add, smart lists, floating time zones, a token API for external agents, completed history, dark mode, and web push. No frontend framework and no build step.
 
+## What's New in v2.3.6
+
+- **Every sheet now matches** — the editor, list, notifications, time-zone and Settings sheets use the same thin 6px faint scrollbar as the reminders list, over a transparent track in both light and dark mode, instead of the OS default. Scrolling is unchanged. Service worker cache bumped to `todo-v2.3.6`.
+
 ## What's New in v2.3.5
 
 - **Undo skip** — skipped occurrences in a recurring to-do's history now have an **Undo skip** action. It removes the skip record entirely (the skipped date disappears from history) and puts the occurrence back in play: if it sits before the series' current date, the series moves back to it and notifications re-arm; a later skipped occurrence simply comes up naturally when the series reaches it.
@@ -259,7 +263,7 @@ Sessions are stored in SQLite, so refreshing the page or restarting the process 
 
 ## Version
 
-2.3.5
+2.3.6
 
 ## License
 

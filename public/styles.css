@@ -713,16 +713,24 @@ body.list-dragging .list-grip { cursor: grabbing; }
   padding: 16px 36px 120px;
   overflow-y: auto;
   overscroll-behavior: contain;
+}
+
+/* Thin, faint scrollbars in place of the OS default: a quiet position cue
+   that stays out of the way in both light and dark mode. */
+.content,
+.sheet-card {
   scrollbar-width: thin;
   scrollbar-color: var(--line) transparent;
 }
 
-/* Thin, faint reminders-list scrollbar in place of the OS default: a quiet
-   position cue that stays out of the way in both light and dark mode. */
-.content::-webkit-scrollbar { width: 6px; height: 6px; }
-.content::-webkit-scrollbar-track { background: transparent; }
-.content::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
-.content::-webkit-scrollbar-thumb:hover { background: var(--text-3); }
+.content::-webkit-scrollbar,
+.sheet-card::-webkit-scrollbar { width: 6px; height: 6px; }
+.content::-webkit-scrollbar-track,
+.sheet-card::-webkit-scrollbar-track { background: transparent; }
+.content::-webkit-scrollbar-thumb,
+.sheet-card::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
+.content::-webkit-scrollbar-thumb:hover,
+.sheet-card::-webkit-scrollbar-thumb:hover { background: var(--text-3); }
 
 /* ---------- Reminders ---------- */
 
