@@ -2,6 +2,11 @@
 
 A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due dates, urgent flags, recurring reminders, natural-language quick add, smart lists, floating time zones, a token API for external agents, completed history, dark mode, and web push. No frontend framework and no build step.
 
+## What's New in v2.3.5
+
+- **Undo skip** — skipped occurrences in a recurring to-do's history now have an **Undo skip** action. It removes the skip record entirely (the skipped date disappears from history) and puts the occurrence back in play: if it sits before the series' current date, the series moves back to it and notifications re-arm; a later skipped occurrence simply comes up naturally when the series reaches it.
+- **Thin, faint reminders-list scrollbar** — the list no longer shows the OS default scrollbar. It now uses a thin 6px thumb tinted from the theme's line colour (faint in both light and dark mode) over a transparent track, keeping a quiet position cue without spoiling the clean look. Scrolling is unchanged. Service worker cache bumped to `todo-v2.3.5`.
+
 ## What's New in v2.3.4
 
 - **Save feedback is visible before the sheet closes** — Add, Save and the list editor now hold their **Adding...** / **Saving...** state for at least 0.7 s (or until the request finishes, whichever is longer), so a fast connection no longer makes the sheet vanish before you see confirmation.
@@ -126,7 +131,7 @@ A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due
 
 - Lists with a 15-color palette (new lists auto-pick the first unused color, then rotate), drag-to-reorder handles (pointer, touch, and keyboard), and a pinned Unlisted list that stays first.
 - Reminders with title, notes, date, optional time, and an urgent flag. Notes render as a text row plus a separate row of compact link chips; bare domains like example.com work, and joining commas are not shown between chips.
-- Recurring reminders (daily/weekly/monthly/yearly/custom) with per-occurrence completion history, skip, a **Next occurrence** row action for due series, and this-occurrence-vs-series editing.
+- Recurring reminders (daily/weekly/monthly/yearly/custom) with per-occurrence completion history, skip with undo, a **Next occurrence** row action for due series, and this-occurrence-vs-series editing.
 - Natural-language quick add: "call mom tomorrow 6pm" pre-fills the editor with a removable preview.
 - Smart lists: Today (overdue pinned), Scheduled (grouped by date), All, Flagged (urgent), Completed.
 - Time models: fixed instant, floating wall-clock (default; follows the device's last-synced zone), or zone-anchored (with a styled Time zone picker in the editor). Settings has a default model and default zone; changing them affects new reminders only, never existing ones.
@@ -211,7 +216,7 @@ Authenticated routes require the `todo.sid` session cookie. State-changing reque
 - `POST` / `PATCH` / `DELETE /api/lists[/:id]`
 - `PUT /api/lists/order`
 - `POST /api/reminders`, `PATCH` / `DELETE /api/reminders/:id`
-- `POST /api/reminders/:id/skip|snooze|reschedule`, `GET /api/reminders/:id/occurrences`
+- `POST /api/reminders/:id/skip|unskip|snooze|reschedule`, `GET /api/reminders/:id/occurrences`
 - `POST /api/parse` (natural-language title parsing)
 - `GET /api/lists`, `GET /api/reminders` (also usable with a token)
 - `GET /api/tokens`, `POST /api/tokens`, `POST /api/tokens/:id/revoke`
@@ -254,7 +259,7 @@ Sessions are stored in SQLite, so refreshing the page or restarting the process 
 
 ## Version
 
-2.3.4
+2.3.5
 
 ## License
 

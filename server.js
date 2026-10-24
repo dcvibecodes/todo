@@ -442,6 +442,75 @@ async function skipOccurrence(id) {
   return { nextDue: next };
 }
 
+// Undo a skip: remove the skip record entirely (it disappears from history)
+// and put the occurrence back in play. If the skipped occurrence is earlier
+// than the series' current due date, the series moves back to it and re-arms
+// notifications; a later skipped occurrence simply has its record removed and
+// comes up naturally when the series reaches it.
+async function unskipOccurrence(id, occurrenceAt) {
+  const reminder = await loadReminder(id);
+  if (!reminder) {
+    const err = new Error('To-do not found');
+    err.status = 404;
+    throw err;
+  }
+  const rule = parseRuleColumn(reminder.repeat_rule);
+  if (!recurrence.isRecurringRule(rule) || !reminder.due_at) {
+    const err = new Error('Only dated repeating to-dos can undo a skip');
+    err.status = 400;
+    throw err;
+  }
+  const occurrenceMs = Date.parse(occurrenceAt);
+  if (typeof occurrenceAt !== 'string' || Number.isNaN(occurrenceMs)) {
+    const err = new Error('A valid occurrence_at is required');
+    err.status = 400;
+    throw err;
+  }
+  const row = await db.get(
+    'SELECT status, title, notes, list_id, urgent FROM reminder_occurrences WHERE reminder_id = ? AND occurrence_at = ?',
+    [id, occurrenceAt]
+  );
+  if (!row || row.status !== 'skipped') {
+    const err = new Error('That skipped occurrence was not found');
+    err.status = 404;
+    throw err;
+  }
+  const now = new Date().toISOString();
+  // A skipped row can still carry a this-occurrence edit (skipping only
+  // flipped its status). Keep that edit by reverting to 'exception';
+  // otherwise remove the row so the skipped date leaves the history.
+  const hasOverride = row.title !== null || row.notes !== null
+    || (row.list_id !== null && row.list_id !== undefined)
+    || (row.urgent !== null && row.urgent !== undefined);
+  if (hasOverride) {
+    await db.run(
+      `UPDATE reminder_occurrences SET status = 'exception'
+       WHERE reminder_id = ? AND occurrence_at = ?`,
+      [id, occurrenceAt]
+    );
+  } else {
+    await db.run(
+      'DELETE FROM reminder_occurrences WHERE reminder_id = ? AND occurrence_at = ?',
+      [id, occurrenceAt]
+    );
+  }
+  let dueAt = reminder.due_at;
+  if (occurrenceMs < Date.parse(reminder.due_at)) {
+    dueAt = occurrenceAt;
+    await db.run(
+      `UPDATE reminders SET due_at = ?, notified_at = NULL, last_push_at = NULL,
+         push_count = 0, snoozed_until = NULL, updated_at = ?, revision = revision + 1 WHERE id = ?`,
+      [dueAt, now, id]
+    );
+  } else {
+    await db.run(
+      'UPDATE reminders SET updated_at = ?, revision = revision + 1 WHERE id = ?',
+      [now, id]
+    );
+  }
+  return { dueAt };
+}
+
 async function snoozeReminder(id, untilISO) {
   const reminder = await loadReminder(id);
   if (!reminder) {
@@ -1277,6 +1346,18 @@ async function main() {
     try {
       const result = await skipOccurrence(id);
       res.json({ ok: true, nextDue: result.nextDue });
+    } catch (err) {
+      res.status(err.status || 500).json({ error: err.message || 'Server error' });
+    }
+  });
+
+  app.post('/api/reminders/:id/unskip', async (req, res) => {
+    const id = parseId(req.params.id);
+    if (req.token) return denyToken(res);
+    if (!id) return res.status(400).json({ error: 'Invalid to-do' });
+    try {
+      const result = await unskipOccurrence(id, req.body ? req.body.occurrence_at : undefined);
+      res.json({ ok: true, dueAt: result.dueAt });
     } catch (err) {
       res.status(err.status || 500).json({ error: err.message || 'Server error' });
     }
