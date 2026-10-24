@@ -1479,13 +1479,15 @@ function reminderRow(reminder, options = {}) {
   const dueOnToday = Boolean(reminder.due_at)
     && localDateValue(new Date(reminder.due_at)) === localDateValue(new Date());
   if (!reminder.completed && reminder.due_at && !isSnoozed(reminder) && dueToday) {
-    snoozeActions.push(el('button', {
-      type: 'button',
-      class: 'mini-btn',
-      text: '1 hour',
-      'aria-label': `Snooze ${reminder.title} until 1 hour from now`,
-      onclick: (event) => { event.stopPropagation(); snoozeRow(reminder, 1); },
-    }));
+    for (const hours of [1, 3, 6]) {
+      snoozeActions.push(el('button', {
+        type: 'button',
+        class: 'mini-btn',
+        text: `${hours} hour${hours === 1 ? '' : 's'}`,
+        'aria-label': `Snooze ${reminder.title} until ${hours} hour${hours === 1 ? '' : 's'} from now`,
+        onclick: (event) => { event.stopPropagation(); snoozeRow(reminder, hours); },
+      }));
+    }
     if (recurring) {
       snoozeActions.push(el('button', {
         type: 'button',
