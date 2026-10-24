@@ -248,13 +248,39 @@ button, a, input, select, textarea, [tabindex] { touch-action: manipulation; }
   padding: 0;
 }
 
-.sidebar-head-actions {
+.head-actions {
   display: flex;
   align-items: center;
-  /* Same gap as .main-head so refresh/menu sit at identical coordinates
-     on Home and detail. */
-  gap: 12px;
+  gap: 14px;
+  flex: none;
 }
+
+/* Header actions are bare glyphs, Scrawl-style: no filled hover box. */
+.head-actions .icon-btn {
+  position: relative;
+  width: auto;
+  height: auto;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-2);
+  opacity: 0.75;
+  transition: opacity 0.15s, color 0.15s;
+}
+
+.head-actions .icon-btn:hover,
+.head-actions .icon-btn:focus-visible {
+  background: transparent;
+  color: var(--text);
+  opacity: 1;
+}
+
+.head-actions .icon-btn .ic { width: 18px; height: 18px; }
+
+/* A non-overlapping invisible pad (32px) around each bare glyph. */
+.head-actions .icon-btn::after { content: ""; position: absolute; inset: -7px; }
+
+#view-menu { font-size: 1.25rem; line-height: 1; font-weight: 600; letter-spacing: 0.06em; }
 
 #sidebar-menu-btn { display: grid; }
 
@@ -1159,7 +1185,8 @@ body.sheet-open .sidebar {
 /* The editor and Settings primary action swaps to "Adding..."/"Saving...";
    reserving the width keeps the centred title from shifting. */
 .sheet-head #editor-submit,
-.sheet-head #settings-save { min-width: 64px; justify-content: flex-end; }
+.sheet-head #settings-save,
+.sheet-head #list-save { min-width: 64px; justify-content: flex-end; }
 
 .sheet-body {
   padding: 16px 18px calc(20px + env(safe-area-inset-bottom));
@@ -2060,12 +2087,7 @@ body.sheet-open .sidebar {
   .title-wrap { order: 2; flex-direction: row; align-items: baseline; gap: 8px; }
   .title-wrap h2 { font-size: 1.375rem; }
   .view-count { font-size: 0.8125rem; }
-  #view-menu { order: 3; }
-  #refresh-btn { order: 4; }
-  #menu-btn { order: 5; }
-  /* Pin the action icons to the top edge exactly like the Home header
-     actions, so they never drift when the title size changes. */
-  #menu-btn, #refresh-btn { align-self: flex-start; }
+  .head-actions { order: 3; align-self: flex-start; }
 
   .search input, .main-search input,
   .auth-card input, .settings-group input, .e-title, .e-notes,

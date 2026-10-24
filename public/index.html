@@ -128,7 +128,7 @@
       <div class="sidebar-top">
       <div class="sidebar-head">
         <h1 class="wordmark">Your To-Dos</h1>
-        <div class="sidebar-head-actions">
+        <div class="head-actions">
           <button id="refresh-btn-side" class="icon-btn refresh-btn" title="Refresh to-dos" aria-label="Refresh to-dos">
             <svg class="ic"><use href="#i-refresh"/></svg>
           </button>
@@ -203,13 +203,15 @@
           <h2 id="view-title">Today</h2>
           <span id="view-count" class="view-count"></span>
         </div>
-        <button id="view-menu" class="icon-btn" aria-label="List options" hidden>&#8943;</button>
-        <button id="refresh-btn" class="icon-btn refresh-btn" title="Refresh to-dos" aria-label="Refresh to-dos">
-          <svg class="ic"><use href="#i-refresh"/></svg>
-        </button>
-        <button id="menu-btn" class="icon-btn" aria-label="Toggle sidebar" aria-expanded="true" title="Sidebar">
-          <svg class="ic"><use href="#i-list"/></svg>
-        </button>
+        <div class="head-actions">
+          <button id="view-menu" class="icon-btn" aria-label="List options" hidden>&#8943;</button>
+          <button id="refresh-btn" class="icon-btn refresh-btn" title="Refresh to-dos" aria-label="Refresh to-dos">
+            <svg class="ic"><use href="#i-refresh"/></svg>
+          </button>
+          <button id="menu-btn" class="icon-btn" aria-label="Toggle sidebar" aria-expanded="true" title="Sidebar">
+            <svg class="ic"><use href="#i-list"/></svg>
+          </button>
+        </div>
       </header>
 
       <form id="main-search-form" class="main-search" role="search">
@@ -408,7 +410,7 @@
       <header class="sheet-head">
         <button type="button" class="text-btn" data-close>Cancel</button>
         <span id="list-heading">New List</span>
-        <button type="submit" class="text-btn strong">Done</button>
+        <button type="submit" id="list-save" class="text-btn strong">Save</button>
       </header>
       <div class="sheet-body">
         <input id="l-name" class="e-title" placeholder="List Name" maxlength="120" required autocomplete="off">

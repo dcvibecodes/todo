@@ -1947,6 +1947,13 @@ function syncEditorSubmit() {
   if (submit) submit.disabled = !editorCanSubmit();
 }
 
+const MIN_SUBMIT_FEEDBACK_MS = 700;
+
+async function settleSubmit(startedAt) {
+  const remaining = MIN_SUBMIT_FEEDBACK_MS - (Date.now() - startedAt);
+  if (remaining > 0) await new Promise((resolve) => setTimeout(resolve, remaining));
+}
+
 function setEditorSubmitting(active) {
   state.editorSaving = active;
   const submit = $('#editor-submit');
@@ -2154,6 +2161,7 @@ async function saveEditor(event) {
     if (!editingSeries) body.completed = $('#e-completed').checked;
   }
 
+  const startedAt = Date.now();
   setEditorSubmitting(true);
   try {
     if (state.editingId) {
@@ -2163,6 +2171,7 @@ async function saveEditor(event) {
       state.justAddedId = created && created.id ? created.id : null;
     }
     setLastList(listId);
+    await settleSubmit(startedAt);
     closeSheet('#editor');
     await loadState();
     render();
@@ -2300,6 +2309,22 @@ function nextListColor() {
   return COLORS[state.lists.length % COLORS.length];
 }
 
+let listSnapshot = null;
+let listSaving = false;
+
+function listCanSubmit() {
+  if (listSaving) return false;
+  const name = $('#l-name').value.trim();
+  if (!name) return false;
+  if (!listSnapshot) return true;
+  return name !== listSnapshot.name || state.selectedColor !== listSnapshot.color;
+}
+
+function syncListSubmit() {
+  const submit = $('#list-save');
+  if (submit) submit.disabled = !listCanSubmit();
+}
+
 function openListSheet(list) {
   const system = Boolean(list && list.is_system);
   state.editingListId = list ? list.id : null;
@@ -2309,7 +2334,13 @@ function openListSheet(list) {
   clearFieldError($('#l-name'), $('#l-name-error'));
   $('#l-name').disabled = system;
   $('#l-delete').hidden = !list || system;
+  $('#list-save').textContent = 'Save';
+  $('#list-sheet').removeAttribute('aria-busy');
   renderSwatches();
+  listSnapshot = list
+    ? { name: $('#l-name').value.trim(), color: state.selectedColor }
+    : null;
+  syncListSubmit();
   openSheet('#list-sheet');
   if (!system) setTimeout(() => $('#l-name').focus(), 80);
 }
@@ -2326,6 +2357,7 @@ function renderSwatches() {
       onclick: () => {
         state.selectedColor = color;
         renderSwatches();
+        syncListSubmit();
       },
     }));
   }
@@ -2333,21 +2365,9 @@ function renderSwatches() {
 
 async function saveList(event) {
   event.preventDefault();
+  if (listSaving || $('#list-save').disabled) return;
   const existing = state.editingListId ? listById(state.editingListId) : null;
-  if (existing && existing.is_system) {
-    try {
-      await api('/api/lists/' + existing.id, {
-        method: 'PATCH',
-        body: { color: state.selectedColor },
-      });
-      closeSheet('#list-sheet');
-      await loadState();
-      render();
-    } catch (err) {
-      toast(err.message);
-    }
-    return;
-  }
+  const system = Boolean(existing && existing.is_system);
   const nameInput = $('#l-name');
   const name = nameInput.value.trim();
   if (!name) {
@@ -2356,21 +2376,36 @@ async function saveList(event) {
   }
   clearFieldError(nameInput, $('#l-name-error'));
 
-  const body = { name, color: state.selectedColor };
+  const body = system
+    ? { color: state.selectedColor }
+    : { name, color: state.selectedColor };
+  const startedAt = Date.now();
+  let created = null;
+  listSaving = true;
+  $('#list-save').textContent = 'Saving...';
+  $('#list-save').disabled = true;
+  $('#list-sheet').setAttribute('aria-busy', 'true');
   try {
-    if (state.editingListId) {
+    if (system) {
+      await api('/api/lists/' + existing.id, { method: 'PATCH', body });
+    } else if (state.editingListId) {
       await api('/api/lists/' + state.editingListId, { method: 'PATCH', body });
-      closeSheet('#list-sheet');
-      await loadState();
-      render();
     } else {
-      const created = await api('/api/lists', { method: 'POST', body });
-      closeSheet('#list-sheet');
-      await loadState();
-      go('list/' + created.id);
+      created = await api('/api/lists', { method: 'POST', body });
     }
+    listSnapshot = { name, color: state.selectedColor };
+    await settleSubmit(startedAt);
+    closeSheet('#list-sheet');
+    await loadState();
+    if (!system && !state.editingListId) go('list/' + created.id);
+    else render();
   } catch (err) {
     toast(err.message);
+  } finally {
+    listSaving = false;
+    $('#list-save').textContent = 'Save';
+    $('#list-sheet').removeAttribute('aria-busy');
+    syncListSubmit();
   }
 }
 
@@ -2865,6 +2900,7 @@ async function saveAppSettings() {
   if (!defaultsChanged && !notifyChanged && !appearanceDirty) return;
 
   const saveBtn = $('#settings-save');
+  const startedAt = Date.now();
   settingsSaving = true;
   saveBtn.textContent = 'Saving...';
   saveBtn.disabled = true;
@@ -2895,6 +2931,7 @@ async function saveAppSettings() {
     }
     appearanceSnapshot = null;
     saveBtn.disabled = true;
+    await settleSubmit(startedAt);
     closeSheet('#settings-sheet');
   } finally {
     settingsSaving = false;
@@ -3295,7 +3332,14 @@ $('#sort-dir').addEventListener('change', (event) => {
   render();
 });
 $('#list-form').addEventListener('submit', saveList);
-$('#l-name').addEventListener('input', () => clearFieldError($('#l-name'), $('#l-name-error')));
+$('#l-name').addEventListener('input', () => {
+  clearFieldError($('#l-name'), $('#l-name-error'));
+  syncListSubmit();
+});
+$('#l-name').addEventListener('keydown', (event) => {
+  if (event.key !== 'Enter' || event.isComposing) return;
+  if ($('#list-save').disabled) event.preventDefault();
+});
 $('#l-delete').addEventListener('click', deleteList);
 
 document.addEventListener('click', (event) => {
