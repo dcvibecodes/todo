@@ -710,7 +710,16 @@ body.list-dragging .list-grip { cursor: grabbing; }
   padding: 16px 36px 120px;
   overflow-y: auto;
   overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
 }
+
+/* Thin, faint reminders-list scrollbar in place of the OS default: a quiet
+   position cue that stays out of the way in both light and dark mode. */
+.content::-webkit-scrollbar { width: 6px; height: 6px; }
+.content::-webkit-scrollbar-track { background: transparent; }
+.content::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
+.content::-webkit-scrollbar-thumb:hover { background: var(--text-3); }
 
 /* ---------- Reminders ---------- */
 
@@ -1605,6 +1614,21 @@ body.sheet-open .sidebar {
 }
 
 .history-status { font-weight: 600; min-width: 74px; }
+
+.history-undo {
+  margin-left: auto;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-3);
+  font-family: inherit;
+  font-size: 0.75rem;
+  font-weight: 550;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+.history-undo:hover { color: var(--text); background: var(--hover); }
 .history-empty { margin: 0; font-size: 0.8125rem; color: var(--text-3); }
 
 .danger-btn {

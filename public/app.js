@@ -1887,14 +1887,50 @@ async function loadHistory(id) {
     for (const occurrence of rows) {
       const label = occurrence.status === 'completed' ? 'Done'
         : occurrence.status === 'skipped' ? 'Skipped' : 'Edited';
-      wrap.append(el('div', { class: 'history-row' }, [
+      const row = el('div', { class: 'history-row' }, [
         el('span', { class: 'history-status', text: label }),
         el('span', { class: 'history-date', text: formatOccurrenceDate(occurrence.occurrence_at) }),
-      ]));
+      ]);
+      if (occurrence.status === 'skipped') {
+        row.append(el('button', {
+          class: 'history-undo',
+          type: 'button',
+          text: 'Undo skip',
+          onclick: () => undoSkip(id, occurrence.occurrence_at),
+        }));
+      }
+      wrap.append(row);
     }
     wrap.hidden = false;
   } catch {
     wrap.hidden = true;
+  }
+}
+
+// Removing the skip record entirely: if the occurrence sits before the
+// series' current date the server moves the series back to it, so refresh
+// the editor's date fields too when that to-do is open.
+async function undoSkip(id, occurrenceAt) {
+  try {
+    const result = await api('/api/reminders/' + id + '/unskip', {
+      method: 'POST',
+      body: { occurrence_at: occurrenceAt },
+    });
+    await loadState();
+    render();
+    const reminder = findReminder(id);
+    if (reminder && state.editingId === id) {
+      const due = reminder.due_at ? new Date(reminder.due_at) : null;
+      $('#e-date').value = due ? localDateValue(due) : '';
+      $('#e-time').value = due && reminder.has_time ? localTimeValue(due) : '';
+      editorSnapshot = editorValues();
+      syncEditorSubmit();
+    }
+    await loadHistory(id);
+    const next = new Date(result.dueAt);
+    toast(`Skip undone — next: ${next.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}`);
+  } catch (err) {
+    toast(err.message);
   }
 }
 
