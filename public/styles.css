@@ -962,6 +962,8 @@ body.list-dragging .list-grip { cursor: grabbing; }
     justify-content: flex-end;
   }
   .reminder-body > .row-actions .row-actions-label { flex-basis: auto; }
+  /* Space between the Snooze and Reschedule rows matches the 8px chip gap. */
+  .reminder-body > .row-actions ~ .row-actions { margin-top: 8px; }
 }
 
 .snooze-hours { display: inline-flex; gap: 8px; }
