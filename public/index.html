@@ -247,13 +247,9 @@
     <div class="sheet-backdrop" data-close></div>
     <form id="editor-form" class="sheet-card editor-card" novalidate>
       <header class="sheet-head editor-head">
-        <button type="button" class="round-btn" data-close aria-label="Cancel">
-          <svg class="ic"><use href="#i-x"/></svg>
-        </button>
+        <button type="button" class="text-btn" data-close>Cancel</button>
         <span id="editor-heading">New To-Do</span>
-        <button type="submit" class="round-btn save" aria-label="Save to-do">
-          <svg class="ic"><use href="#i-check"/></svg>
-        </button>
+        <button type="submit" id="editor-submit" class="text-btn strong">Add</button>
       </header>
       <div class="sheet-body editor-body">
         <div class="editor-fields">
@@ -270,7 +266,6 @@
             <svg class="ic"><use href="#i-chevron"/></svg>
             <span id="e-more-label">More options</span>
           </button>
-          <button type="submit" id="e-add-btn" class="primary-btn e-add-btn">Add</button>
         </div>
 
         <div id="e-more" class="e-more">

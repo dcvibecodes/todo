@@ -2,6 +2,12 @@
 
 A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due dates, urgent flags, recurring reminders, natural-language quick add, smart lists, floating time zones, a token API for external agents, completed history, dark mode, and web push. No frontend framework and no build step.
 
+## What's New in v2.3.2
+
+- **Cancel and Add live in the editor header** — adding a to-do now uses the same header pattern as Settings: Cancel on the left, the title in the middle, and a text **Add** on the right that stays visible while options are expanded. Editing uses the same pattern with **Save**. The oversized white Add pill under the title is gone; Enter still saves and Shift+Enter still adds a line.
+- **More options is plain text** — the toggle no longer draws a hover/focus background (which was misaligned and stuck after tapping on a phone).
+- **Date and time values are vertically centred** — the row is now the field and the native date/time control sits inside it, so the value no longer hugs the top of the box on iOS. Service worker cache bumped to `todo-v2.3.2`.
+
 ## What's New in v2.3.1
 
 - **More snooze choices** — due items now offer Snooze 1 hour, 3 hours and 6 hours (plus Next occurrence on repeats). A snooze can run past midnight. Service worker cache bumped to `todo-v2.3.1`.
@@ -237,7 +243,7 @@ Sessions are stored in SQLite, so refreshing the page or restarting the process 
 
 ## Version
 
-2.2.1
+2.3.2
 
 ## License
 

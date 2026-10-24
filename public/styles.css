@@ -304,7 +304,6 @@ button, a, input, select, textarea, [tabindex] { touch-action: manipulation; }
   .back-btn::after,
   .check::after,
   .row-delete::after,
-  .round-btn::after,
   .list-grip::after,
   .swatch::after {
     content: "";
@@ -317,7 +316,6 @@ button, a, input, select, textarea, [tabindex] { touch-action: manipulation; }
   .back-btn::after { inset: -2px -6px; }
   .check::after { inset: -10px; }
   .row-delete::after { inset: -5px; }
-  .round-btn::after { inset: -3px; }
   .list-grip::after { inset: -11px; }
   .swatch::after { inset: -5px; }
 }
@@ -1206,32 +1204,6 @@ body.sheet-open .sidebar {
   letter-spacing: -0.01em;
 }
 
-.round-btn {
-  position: relative;
-  width: 38px;
-  height: 38px;
-  flex: none;
-  display: grid;
-  place-items: center;
-  border: 0;
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--text) 10%, transparent);
-  color: var(--text-2);
-  transition: background 0.15s, color 0.15s;
-}
-
-.round-btn:hover {
-  background: color-mix(in srgb, var(--text) 16%, transparent);
-  color: var(--text);
-}
-
-.round-btn .ic { width: 17px; height: 17px; }
-.round-btn.save { color: var(--accent); }
-
-/* New to-do: the header check is invisible (not removed) so the header
-   layout matches edit mode; the labelled Add is the only usable submit. */
-#editor.is-new .round-btn.save { visibility: hidden; }
-
 #editor .editor-body {
   gap: 18px;
   padding: 10px 18px calc(26px + env(safe-area-inset-bottom));
@@ -1423,20 +1395,50 @@ body.sheet-open .sidebar {
   padding: 0 14px 10px 48px;
 }
 
-.ed-subrow input[type="date"],
-.ed-subrow input[type="time"] {
+/* The row is the field; the native date/time control sits inside it so its
+   value is vertically centred on every platform (iOS anchors the value to
+   the top of a fixed-height input otherwise). */
+#e-date-row,
+#e-time-row {
+  display: flex;
+  align-items: center;
+  height: var(--control-height);
+  margin: 0 14px 10px 48px;
+  padding: 0 10px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+}
+
+#e-date-row input,
+#e-time-row input {
   flex: 1 1 auto;
   width: auto;
   max-width: 100%;
   min-width: 0;
-  height: var(--control-height);
+  height: auto;
+  margin: 0;
+  padding: 0;
   border: 0;
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--text) 7%, transparent);
-  padding: 7px 10px;
+  border-radius: 0;
+  background: transparent;
   color: var(--text);
-  font-size: 0.9375rem;
 }
+
+#e-date-row:focus-within,
+#e-time-row:focus-within {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+#e-date-row input:focus,
+#e-time-row input:focus { box-shadow: none; }
+
+/* The row carries the focus ring (:focus-within); the native control's own
+   outline would draw a second box inside it. */
+#e-date-row input:focus-visible,
+#e-time-row input:focus-visible { outline: none; }
+
+.ed-subrow input[type="date"],
+.ed-subrow input[type="time"] { font-size: 0.9375rem; }
 
 .ed-subrow input[type="date"]::-webkit-calendar-picker-indicator,
 .ed-subrow input[type="time"]::-webkit-calendar-picker-indicator {
@@ -2069,6 +2071,12 @@ body.sheet-open .sidebar {
     overflow: hidden;
   }
 
+  #e-date-row,
+  #e-time-row {
+    margin: 0 14px 12px;
+    padding: 0 12px;
+  }
+
   .ed-subrow input[type="date"],
   .ed-subrow input[type="time"] {
     display: block;
@@ -2165,8 +2173,6 @@ body.sheet-open .sidebar {
   .icon-btn.small::after { inset: -4px; }
   .check { width: 28px; height: 28px; }
   .check::after { inset: -8px; }
-  .round-btn { width: 42px; height: 42px; }
-  .round-btn::after { inset: -1px; }
   .back-btn { min-height: var(--control-height-touch); padding: 10px 8px 10px 0; }
   .back-btn::after { inset: 0 -6px; }
   .text-btn { min-height: var(--control-height-touch); padding: 10px 12px; }
@@ -2216,13 +2222,9 @@ body.sheet-open .sidebar {
 .e-quick-actions {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 10px;
   margin-top: -8px;
-}
-
-.e-add-btn {
-  min-width: 88px;
 }
 
 .e-more-toggle {
@@ -2242,7 +2244,7 @@ body.sheet-open .sidebar {
   transition: background 0.15s, color 0.15s;
 }
 
-.e-more-toggle:hover { background: var(--fill); color: var(--text); }
+.e-more-toggle:hover { color: var(--text); }
 
 .e-more-toggle .ic {
   width: 14px;

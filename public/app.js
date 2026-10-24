@@ -1905,7 +1905,10 @@ function setEditorMode(editing) {
   const quick = $('#e-quick-actions');
   const more = $('#e-more');
   const toggle = $('#e-more-toggle');
+  const submit = $('#editor-submit');
   clearTimeout(more._hideTimer);
+  submit.textContent = editing ? 'Save' : 'Add';
+  submit.setAttribute('aria-label', editing ? 'Save to-do' : 'Add to-do');
   if (editing) {
     quick.hidden = true;
     more.hidden = false;
