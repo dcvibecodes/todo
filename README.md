@@ -2,6 +2,11 @@
 
 A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due dates, urgent flags, recurring reminders, natural-language quick add, smart lists, floating time zones, a token API for external agents, completed history, dark mode, and web push. No frontend framework and no build step.
 
+## What's New in v2.3.3
+
+- **Notes hold a full article** — the notes field now accepts up to 50,000 characters (roughly 8,000 words) on create, edit, occurrence overrides, import and backup. Long notes scroll inside the editor instead of stretching the sheet, list rows keep their 2-line preview, and the request body limit was raised so multi-note imports still work.
+- **Add and Save tell you they registered** — the editor's header action starts disabled until the title has text (Add) or a field actually changes (Save), then swaps to **Adding...** / **Saving...** and disables itself while the request runs, restoring on failure. The Settings **Save** button does the same. Service worker cache bumped to `todo-v2.3.3`.
+
 ## What's New in v2.3.2
 
 - **Cancel and Add live in the editor header** — adding a to-do now uses the same header pattern as Settings: Cancel on the left, the title in the middle, and a text **Add** on the right that stays visible while options are expanded. Editing uses the same pattern with **Save**. The oversized white Add pill under the title is gone; Enter still saves and Shift+Enter still adds a line.
@@ -243,7 +248,7 @@ Sessions are stored in SQLite, so refreshing the page or restarting the process 
 
 ## Version
 
-2.3.2
+2.3.3
 
 ## License
 

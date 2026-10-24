@@ -1156,6 +1156,10 @@ body.sheet-open .sidebar {
 .sheet-head .text-btn { padding: 4px 2px; color: var(--text-2); font-size: 0.8125rem; }
 .sheet-head .text-btn:hover { background: transparent; color: var(--text); }
 .sheet-head .strong { color: var(--accent); font-weight: 600; }
+/* The editor and Settings primary action swaps to "Adding..."/"Saving...";
+   reserving the width keeps the centred title from shifting. */
+.sheet-head #editor-submit,
+.sheet-head #settings-save { min-width: 64px; justify-content: flex-end; }
 
 .sheet-body {
   padding: 16px 18px calc(20px + env(safe-area-inset-bottom));
@@ -1186,6 +1190,9 @@ body.sheet-open .sidebar {
   font-size: 0.875rem;
   resize: vertical;
   min-height: 64px;
+  /* Long notes scroll inside the editor instead of making the sheet grow
+     by thousands of pixels. */
+  max-height: 45dvh;
 }
 
 /* ---------- Reminder editor ---------- */

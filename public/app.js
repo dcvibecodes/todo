@@ -1712,6 +1712,7 @@ function setScope(scope) {
   $('#scope-series').classList.toggle('active', state.editScope === 'series');
   $('#scope-occurrence').setAttribute('aria-pressed', state.editScope === 'occurrence' ? 'true' : 'false');
   $('#scope-series').setAttribute('aria-pressed', state.editScope === 'series' ? 'true' : 'false');
+  syncEditorSubmit();
 }
 
 function syncRepeatRows() {
@@ -1900,13 +1901,75 @@ async function loadHistory(id) {
 // A new to-do asks for a name and nothing else: notes, date, time, repeat
 // and list options stay behind More options until asked for. Editing an
 // existing to-do always shows everything.
+let editorSnapshot = null;
+
+// Only compare values that the save actually sends: inactive date/time, the
+// custom-repeat inputs when repeat is off, and the zone when the model is not
+// anchored should not make the form look dirty.
+function editorValues() {
+  const dateOn = $('#e-date-on').checked;
+  const timeOn = $('#e-time-on').checked;
+  const repeat = $('#e-repeat').value;
+  const model = $('#e-model').value;
+  return {
+    title: $('#e-title').value.trim(),
+    notes: $('#e-notes').value.trim(),
+    list: $('#e-list').value,
+    dateOn,
+    date: dateOn ? $('#e-date').value : '',
+    timeOn,
+    time: dateOn && timeOn ? $('#e-time').value : '',
+    urgent: $('#e-urgent').checked,
+    repeat,
+    repeatInterval: repeat === 'custom' ? $('#e-repeat-interval').value : '',
+    repeatUnit: repeat === 'custom' ? $('#e-repeat-unit').value : '',
+    model,
+    zone: model === 'anchored' ? $('#e-zone').value : '',
+    completed: $('#e-completed').checked,
+    scope: $('#series-section').hidden ? '' : state.editScope,
+  };
+}
+
+function editorIsDirty() {
+  if (!editorSnapshot) return false;
+  const current = editorValues();
+  return Object.keys(current).some((key) => current[key] !== editorSnapshot[key]);
+}
+
+function editorCanSubmit() {
+  if (state.editorSaving) return false;
+  if (!$('#e-title').value.trim()) return false;
+  return state.editingId ? editorIsDirty() : true;
+}
+
+function syncEditorSubmit() {
+  const submit = $('#editor-submit');
+  if (submit) submit.disabled = !editorCanSubmit();
+}
+
+function setEditorSubmitting(active) {
+  state.editorSaving = active;
+  const submit = $('#editor-submit');
+  const form = $('#editor-form');
+  submit.textContent = active
+    ? (state.editingId ? 'Saving...' : 'Adding...')
+    : (state.editingId ? 'Save' : 'Add');
+  if (active) {
+    form.setAttribute('aria-busy', 'true');
+    submit.disabled = true;
+  } else {
+    form.removeAttribute('aria-busy');
+    syncEditorSubmit();
+  }
+}
+
 function setEditorMode(editing) {
   $('#editor').classList.toggle('is-new', !editing);
   const quick = $('#e-quick-actions');
   const more = $('#e-more');
   const toggle = $('#e-more-toggle');
-  const submit = $('#editor-submit');
   clearTimeout(more._hideTimer);
+  const submit = $('#editor-submit');
   submit.textContent = editing ? 'Save' : 'Add';
   submit.setAttribute('aria-label', editing ? 'Save to-do' : 'Add to-do');
   if (editing) {
@@ -2008,6 +2071,8 @@ function openEditor(id) {
   syncSnoozeRow();
   $('#e-history').hidden = true;
   if (editing && rule.type !== 'none') loadHistory(reminder.id);
+  editorSnapshot = editing ? editorValues() : null;
+  syncEditorSubmit();
 
   openSheet('#editor');
   setTimeout(() => {
@@ -2089,7 +2154,7 @@ async function saveEditor(event) {
     if (!editingSeries) body.completed = $('#e-completed').checked;
   }
 
-  state.editorSaving = true;
+  setEditorSubmitting(true);
   try {
     if (state.editingId) {
       await api('/api/reminders/' + state.editingId, { method: 'PATCH', body });
@@ -2105,7 +2170,7 @@ async function saveEditor(event) {
     // Sheet stays open with the fields intact, so nothing typed is lost.
     toast(err.message);
   } finally {
-    state.editorSaving = false;
+    setEditorSubmitting(false);
   }
 }
 
@@ -2190,6 +2255,7 @@ function applyParse(result) {
   if (result.repeat && result.repeat !== 'none') parts.push(repeatLabel(result.repeat));
   $('#e-parse-text').textContent = parts.join(' · ') || 'Parsed';
   $('#e-parse-chip').hidden = false;
+  syncEditorSubmit();
 }
 
 function clearParse() {
@@ -2207,6 +2273,7 @@ function clearParse() {
   parseSnapshot = null;
   scheduleLocked = true;
   hideParseChip();
+  syncEditorSubmit();
 }
 
 async function deleteReminder() {
@@ -2699,6 +2766,7 @@ const SETTINGS_DEFAULT_KEYS = ['default_time_model', 'default_time_zone', 'defau
 const SETTINGS_NOTIFY_KEYS = ['repush_enabled', 'repush_cadence_min', 'repush_max', 'quiet_start', 'quiet_end'];
 let settingsSnapshot = null;
 let appearanceSnapshot = null;
+let settingsSaving = false;
 
 function appearanceValues() {
   return {
@@ -2737,13 +2805,13 @@ function settingsValues() {
   };
 }
 
-function updateSettingsDirty() {
+function updateSettingsDirty(preserveMessage = false) {
   if (!settingsSnapshot) return;
   const current = settingsValues();
   const dirty = appearanceIsDirty()
     || Object.keys(current).some((key) => current[key] !== settingsSnapshot[key]);
-  $('#settings-save').disabled = !dirty;
-  if (dirty) $('#settings-msg').hidden = true;
+  $('#settings-save').disabled = settingsSaving || !dirty;
+  if (dirty && !preserveMessage) $('#settings-msg').hidden = true;
 }
 
 async function openSettings() {
@@ -2771,6 +2839,8 @@ async function openSettings() {
   $('#token-once').hidden = true;
   $('#token-name').value = '';
   await renderTokenList();
+  $('#settings-save').textContent = 'Save';
+  $('#settings-sheet').removeAttribute('aria-busy');
   appearanceSnapshot = appearanceValues();
   settingsSnapshot = settingsValues();
   updateSettingsDirty();
@@ -2785,6 +2855,7 @@ function settingsMessage(message, ok = false) {
 }
 
 async function saveAppSettings() {
+  if (settingsSaving) return;
   const current = settingsValues();
   const previous = settingsSnapshot || {};
   const changed = (keys) => keys.some((key) => current[key] !== previous[key]);
@@ -2792,32 +2863,45 @@ async function saveAppSettings() {
   const notifyChanged = changed(SETTINGS_NOTIFY_KEYS);
   const appearanceDirty = appearanceIsDirty();
   if (!defaultsChanged && !notifyChanged && !appearanceDirty) return;
-  if (defaultsChanged || notifyChanged) {
-    try {
-      const result = await api('/api/settings', {
-        method: 'POST',
-        body: { settings: current },
-      });
-      state.settings = result.settings || state.settings;
-      settingsSnapshot = current;
-      let message = 'Saved. Applies to new to-dos only — existing to-dos were not changed.';
-      if (defaultsChanged && notifyChanged) {
-        message = 'Saved. New-to-do defaults apply to new to-dos only; notification changes apply to all to-dos from now on.';
-      } else if (notifyChanged) {
-        message = 'Saved — applies to how all to-dos notify from now on.';
+
+  const saveBtn = $('#settings-save');
+  settingsSaving = true;
+  saveBtn.textContent = 'Saving...';
+  saveBtn.disabled = true;
+  $('#settings-sheet').setAttribute('aria-busy', 'true');
+  try {
+    if (defaultsChanged || notifyChanged) {
+      try {
+        const result = await api('/api/settings', {
+          method: 'POST',
+          body: { settings: current },
+        });
+        state.settings = result.settings || state.settings;
+        settingsSnapshot = current;
+        let message = 'Saved. Applies to new to-dos only — existing to-dos were not changed.';
+        if (defaultsChanged && notifyChanged) {
+          message = 'Saved. New-to-do defaults apply to new to-dos only; notification changes apply to all to-dos from now on.';
+        } else if (notifyChanged) {
+          message = 'Saved — applies to how all to-dos notify from now on.';
+        }
+        $('#settings-msg').hidden = true;
+        toast(message);
+      } catch (err) {
+        settingsMessage(err.message);
+        return;
       }
-      $('#settings-msg').hidden = true;
-      toast(message);
-    } catch (err) {
-      settingsMessage(err.message);
-      return;
+    } else {
+      toast('Saved — appearance applies to this device.');
     }
-  } else {
-    toast('Saved — appearance applies to this device.');
+    appearanceSnapshot = null;
+    saveBtn.disabled = true;
+    closeSheet('#settings-sheet');
+  } finally {
+    settingsSaving = false;
+    saveBtn.textContent = 'Save';
+    $('#settings-sheet').removeAttribute('aria-busy');
+    updateSettingsDirty(true);
   }
-  appearanceSnapshot = null;
-  $('#settings-save').disabled = true;
-  closeSheet('#settings-sheet');
 }
 
 async function renderTokenList() {
@@ -3017,8 +3101,8 @@ $('#notify-enable').addEventListener('click', enableNotifications);
 $('#notify-disable').addEventListener('click', disableNotifications);
 $('#notify-test').addEventListener('click', sendTestNotification);
 $('#settings-save').addEventListener('click', saveAppSettings);
-$('#settings-sheet').addEventListener('input', updateSettingsDirty);
-$('#settings-sheet').addEventListener('change', updateSettingsDirty);
+$('#settings-sheet').addEventListener('input', () => updateSettingsDirty());
+$('#settings-sheet').addEventListener('change', () => updateSettingsDirty());
 $('#set-density').addEventListener('change', () => {
   const density = $('#set-density').value === 'compact' ? 'compact' : 'comfortable';
   localStorage.setItem(DENSITY_KEY, density);
@@ -3181,6 +3265,7 @@ $('#e-title').addEventListener('keydown', (event) => {
   if (event.key !== 'Enter' || event.shiftKey || event.isComposing) return;
   if (state.editingId) return; // editing keeps Enter as a plain newline
   event.preventDefault();
+  if ($('#editor-submit').disabled) return;
   $('#editor-form').requestSubmit();
 });
 
@@ -3190,7 +3275,11 @@ $('#e-title').addEventListener('input', () => {
   autoGrowTitle();
   clearFieldError($('#e-title'), $('#e-title-error'));
   scheduleParse();
+  syncEditorSubmit();
 });
+
+$('#editor-form').addEventListener('input', syncEditorSubmit);
+$('#editor-form').addEventListener('change', syncEditorSubmit);
 $('#e-notes').addEventListener('input', () => {
   autoGrowNotes();
   renderEditorLinks();

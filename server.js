@@ -21,12 +21,13 @@ const PUBLIC_DIR = path.join(__dirname, 'public');
 const SESSION_SECRET_KEY = 'session_secret';
 const DEFAULT_LIST_COLOR = 'blue';
 const LIST_COLORS = new Set(['red', 'rose', 'orange', 'yellow', 'lime', 'green', 'teal', 'cyan', 'blue', 'indigo', 'purple', 'pink', 'brown', 'slate', 'gray']);
+const NOTES_MAX = 50000;
 
 const app = express();
 app.set('trust proxy', 1);
 app.disable('x-powered-by');
 app.use(compression());
-app.use(express.json({ limit: '256kb' }));
+app.use(express.json({ limit: '2mb' }));
 
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -1070,7 +1071,7 @@ async function main() {
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)
         `, [
           reminder.id, reminder.list_id, String(reminder.title).slice(0, 500),
-          String(reminder.notes || '').slice(0, 5000),
+          String(reminder.notes || '').slice(0, NOTES_MAX),
           typeof reminder.due_at === 'string' ? reminder.due_at : null,
           reminder.has_time ? 1 : 0, reminder.completed ? 1 : 0,
           typeof reminder.completed_at === 'string' ? reminder.completed_at : null,
@@ -1103,7 +1104,7 @@ async function main() {
         `, [
           occurrence.reminder_id, occurrence.occurrence_at, occurrence.status,
           typeof occurrence.title === 'string' ? occurrence.title.slice(0, 500) : null,
-          typeof occurrence.notes === 'string' ? occurrence.notes.slice(0, 5000) : null,
+          typeof occurrence.notes === 'string' ? occurrence.notes.slice(0, NOTES_MAX) : null,
           typeof occurrence.completed_at === 'string' ? occurrence.completed_at : null,
           typeof occurrence.created_at === 'string' ? occurrence.created_at : new Date().toISOString(),
         ]);
@@ -1762,7 +1763,7 @@ async function main() {
          repeat_rule, time_model, time_zone, notified_at, last_push_at, push_count,
          sort_order, created_at, updated_at, revision)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 0, ?, ?, ?, 1)
-    `, [prep.listId, prep.title, text(body.notes, 5000), prep.dueAt, prep.hasTime,
+    `, [prep.listId, prep.title, text(body.notes, NOTES_MAX), prep.dueAt, prep.hasTime,
       prep.completed, prep.completed ? now : null,
       prep.urgent, recurrence.encodeRepeatRule(prep.rule), prep.timeModel, prep.timeZone, notifiedAt,
       max.s + 1, now, now]);
@@ -1966,7 +1967,7 @@ async function main() {
             if (!title) return { status: 400, body: { error: 'Title is required' } };
             overrides.title = title;
           }
-          if (body.notes !== undefined) overrides.notes = text(body.notes, 5000);
+          if (body.notes !== undefined) overrides.notes = text(body.notes, NOTES_MAX);
           if (body.list_id !== undefined) {
             const list = await db.get('SELECT id FROM lists WHERE id = ?', [body.list_id]);
             if (!list) return { status: 400, body: { error: 'Choose a valid list' } };
@@ -2001,7 +2002,7 @@ async function main() {
         }
         if (body.notes !== undefined) {
           fields.push('notes = ?');
-          params.push(text(body.notes, 5000));
+          params.push(text(body.notes, NOTES_MAX));
         }
         if (body.list_id !== undefined) {
           const list = await db.get('SELECT id FROM lists WHERE id = ?', [body.list_id]);
@@ -2169,7 +2170,7 @@ async function main() {
         if (!title) return res.status(400).json({ error: 'Title is required' });
         overrides.title = title;
       }
-      if (req.body.notes !== undefined) overrides.notes = text(req.body.notes, 5000);
+      if (req.body.notes !== undefined) overrides.notes = text(req.body.notes, NOTES_MAX);
       if (req.body.list_id !== undefined) {
         const listId = parseId(req.body.list_id);
         const list = listId ? await db.get('SELECT id FROM lists WHERE id = ?', [listId]) : null;
@@ -2203,7 +2204,7 @@ async function main() {
 
     if (req.body.notes !== undefined) {
       fields.push('notes = ?');
-      params.push(text(req.body.notes, 5000));
+      params.push(text(req.body.notes, NOTES_MAX));
     }
 
     if (req.body.list_id !== undefined) {
