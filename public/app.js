@@ -1479,8 +1479,9 @@ function reminderRow(reminder, options = {}) {
   const dueOnToday = Boolean(reminder.due_at)
     && localDateValue(new Date(reminder.due_at)) === localDateValue(new Date());
   if (!reminder.completed && reminder.due_at && !isSnoozed(reminder) && dueToday) {
+    const hourChips = [];
     for (const hours of [1, 3, 6]) {
-      snoozeActions.push(el('button', {
+      hourChips.push(el('button', {
         type: 'button',
         class: 'mini-btn',
         text: `${hours} hour${hours === 1 ? '' : 's'}`,
@@ -1488,6 +1489,7 @@ function reminderRow(reminder, options = {}) {
         onclick: (event) => { event.stopPropagation(); snoozeRow(reminder, hours); },
       }));
     }
+    snoozeActions.push(el('span', { class: 'snooze-hours' }, hourChips));
     if (recurring) {
       snoozeActions.push(el('button', {
         type: 'button',
