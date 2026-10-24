@@ -2,6 +2,13 @@
 
 A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due dates, urgent flags, recurring reminders, natural-language quick add, smart lists, floating time zones, a token API for external agents, completed history, dark mode, and web push. No frontend framework and no build step.
 
+## What's New in v2.3.0
+
+- **Quick add asks for a name and nothing else** — a new to-do opens with just the title field. Enter or the Add button saves it (Shift+Enter still adds a line); notes, date, time, repeat and list options stay tucked behind More options until you ask for them. Editing an existing to-do still shows everything.
+- **Desktop cards use their width** — a reminder's Snooze and Reschedule actions sit compactly on the right of the card instead of stacking under the text, and rows are a touch clearer. Mobile keeps the stacked layout; row height, padding and Compact density are unchanged.
+- **Fluid feedback** — new rows ease into place, the complete check pops as it fills, and More options expands smoothly. Nothing waits on an animation, and everything is still under Reduce Motion.
+- **Skeleton loading** — while to-dos load, placeholder rows shaped like the real list show instead of a blank screen, and they are replaced the moment data arrives (no artificial delay). Service worker cache bumped to `todo-v2.3.0`.
+
 ## What's New in v2.2.1
 
 - **Save in Settings now responds to theme and density** — these are per-device preferences, so Save used to stay disabled when only they changed, and Cancel was the only enabled button. Changing either now enables Save, which commits the choice and closes the sheet; Cancel, the backdrop, and Escape restore the appearance from when Settings opened. Theme buttons also trigger the same check now. Service worker cache bumped to `todo-v2.2.1`.

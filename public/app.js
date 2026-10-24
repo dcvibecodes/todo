@@ -28,6 +28,7 @@ const state = {
   showCompleted: false,
   editingId: null,
   editingListId: null,
+  justAddedId: null,
   selectedColor: 'blue',
   csrfToken: null,
   subscription: null,
@@ -411,11 +412,14 @@ async function boot() {
     if (!session.authenticated) return showAuth();
     state.csrfToken = session.csrfToken;
     state.vapidPublicKey = session.vapidPublicKey;
+    showAppLoading();
     await loadState();
     showApp();
     syncPushState();
     syncDeviceZone();
   } catch (err) {
+    // Replace skeletons with real (empty) views so the screen never hangs on them.
+    if (state.authenticated) render();
     toast(err.message);
   }
 }
@@ -460,6 +464,7 @@ async function submitAuth(event) {
     state.needsSetup = false;
     state.csrfToken = session.csrfToken;
     state.vapidPublicKey = session.vapidPublicKey;
+    showAppLoading();
     await loadState();
     showApp();
     syncPushState();
@@ -474,6 +479,46 @@ function showApp() {
   $('#auth').hidden = true;
   $('#shell').hidden = false;
   route();
+}
+
+/* Skeletons: placeholder rows shaped like the real list, shown only while
+   the first state load is in flight. They are replaced the moment data
+   arrives - there is no artificial delay, and later reloads keep the real
+   rows on screen. */
+function showAppLoading() {
+  state.authenticated = true;
+  $('#auth').hidden = true;
+  $('#shell').hidden = false;
+  renderSkeletons();
+}
+
+function renderSkeletons() {
+  // Mirror the screen the loaded view will use, or the main column stays
+  // hidden behind the home default while skeletons are showing.
+  document.body.dataset.screen = parseRoute() === 'home' ? 'home' : 'detail';
+  const wrap = $('#lists');
+  wrap.replaceChildren();
+  for (let i = 0; i < 4; i++) {
+    wrap.append(el('div', { class: 'skel-list-row', 'aria-hidden': 'true' }, [
+      el('span', { class: 'skel skel-dot' }),
+      el('span', { class: 'skel skel-bar', style: { width: `${92 - i * 14}px` } }),
+    ]));
+  }
+
+  const content = $('#content');
+  content.replaceChildren();
+  if (parseRoute() === 'home') return;
+  const group = el('div', { class: 'skel-group', 'aria-hidden': 'true' });
+  for (let i = 0; i < 4; i++) {
+    group.append(el('div', { class: 'skel-row' }, [
+      el('span', { class: 'skel skel-check' }),
+      el('div', { class: 'skel-lines' }, [
+        el('span', { class: 'skel skel-bar skel-bar-title', style: { width: `${54 + (i % 3) * 12}%` } }),
+        el('span', { class: 'skel skel-bar skel-bar-meta', style: { width: `${30 + (i % 2) * 8}%` } }),
+      ]),
+    ]));
+  }
+  content.append(group);
 }
 
 async function logout() {
@@ -699,6 +744,7 @@ function render() {
   renderSidebar();
   renderMain();
   updateBadge();
+  state.justAddedId = null;
 }
 
 function getAccountMenu() {
@@ -1486,7 +1532,7 @@ function reminderRow(reminder, options = {}) {
   });
   check.addEventListener('click', (event) => {
     event.stopPropagation();
-    toggleCompleted(reminder);
+    toggleCompleted(reminder, event.currentTarget.closest('.reminder'));
   });
 
   // Web delete affordance: the × appears on hover (mouse only); first click
@@ -1525,7 +1571,8 @@ function reminderRow(reminder, options = {}) {
   const titleOnly = meta.childElementCount === 0 && !reminder.notes;
 
   return el('div', {
-    class: 'reminder' + (reminder.completed ? ' done' : '') + (titleOnly ? ' reminder--single' : ''),
+    class: 'reminder' + (reminder.completed ? ' done' : '') + (titleOnly ? ' reminder--single' : '')
+      + (state.justAddedId === reminder.id ? ' entering' : ''),
     style: { '--c': color },
     'data-reminder-id': reminder.id,
     onclick: (event) => {
@@ -1613,7 +1660,10 @@ function escapeHtml(value) {
 
 /* ---------------- Reminder actions ---------------- */
 
-async function toggleCompleted(reminder) {
+async function toggleCompleted(reminder, row) {
+  // Optimistic feedback only: the check fills while the request is already
+  // in flight. A failure re-renders the row's real state.
+  if (row && !reminder.completed) row.classList.add('completing');
   try {
     const result = await api('/api/reminders/' + reminder.id, {
       method: 'PATCH',
@@ -1626,6 +1676,7 @@ async function toggleCompleted(reminder) {
       toast(`Done — next: ${next.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}`);
     }
   } catch (err) {
+    if (row) row.classList.remove('completing');
     toast(err.message);
   }
 }
@@ -1840,6 +1891,52 @@ async function loadHistory(id) {
   }
 }
 
+// A new to-do asks for a name and nothing else: notes, date, time, repeat
+// and list options stay behind More options until asked for. Editing an
+// existing to-do always shows everything.
+function setEditorMode(editing) {
+  $('#editor').classList.toggle('is-new', !editing);
+  const quick = $('#e-quick-actions');
+  const more = $('#e-more');
+  const toggle = $('#e-more-toggle');
+  clearTimeout(more._hideTimer);
+  if (editing) {
+    quick.hidden = true;
+    more.hidden = false;
+    more.classList.add('expanded');
+    $('#e-title').setAttribute('enterkeyhint', 'enter');
+  } else {
+    quick.hidden = false;
+    more.hidden = true;
+    more.classList.remove('expanded');
+    toggle.setAttribute('aria-expanded', 'false');
+    $('#e-more-label').textContent = 'More options';
+    $('#e-title').setAttribute('enterkeyhint', 'done');
+  }
+}
+
+function toggleEditorMore() {
+  const more = $('#e-more');
+  const toggle = $('#e-more-toggle');
+  const expanded = toggle.getAttribute('aria-expanded') === 'true';
+  clearTimeout(more._hideTimer);
+  if (expanded) {
+    toggle.setAttribute('aria-expanded', 'false');
+    $('#e-more-label').textContent = 'More options';
+    more.classList.remove('expanded');
+    // Hide for keyboard/screen-reader users once the collapse has played.
+    more._hideTimer = setTimeout(() => {
+      if (toggle.getAttribute('aria-expanded') === 'false') more.hidden = true;
+    }, 260);
+  } else {
+    toggle.setAttribute('aria-expanded', 'true');
+    $('#e-more-label').textContent = 'Fewer options';
+    more.hidden = false;
+    requestAnimationFrame(() => requestAnimationFrame(() => more.classList.add('expanded')));
+    setTimeout(() => autoGrowNotes(), 260);
+  }
+}
+
 function openEditor(id) {
   const reminder = id ? findReminder(id) : null;
   if (!state.lists.length) {
@@ -1894,6 +1991,7 @@ function openEditor(id) {
   syncModelRows();
 
   const editing = Boolean(reminder);
+  setEditorMode(editing);
   $('#e-completed').checked = editing && reminder.completed;
   syncRecordRows();
   $('#e-delete').hidden = !editing;
@@ -1912,6 +2010,7 @@ function openEditor(id) {
 
 async function saveEditor(event) {
   event.preventDefault();
+  if (state.editorSaving) return; // already saving - ignore double Enter/Add
   const titleInput = $('#e-title');
   const title = titleInput.value.trim();
   if (!title) {
@@ -1981,18 +2080,23 @@ async function saveEditor(event) {
     if (!editingSeries) body.completed = $('#e-completed').checked;
   }
 
+  state.editorSaving = true;
   try {
     if (state.editingId) {
       await api('/api/reminders/' + state.editingId, { method: 'PATCH', body });
     } else {
-      await api('/api/reminders', { method: 'POST', body });
+      const created = await api('/api/reminders', { method: 'POST', body });
+      state.justAddedId = created && created.id ? created.id : null;
     }
     setLastList(listId);
     closeSheet('#editor');
     await loadState();
     render();
   } catch (err) {
+    // Sheet stays open with the fields intact, so nothing typed is lost.
     toast(err.message);
+  } finally {
+    state.editorSaving = false;
   }
 }
 
@@ -3064,6 +3168,15 @@ $('#e-time').addEventListener('change', () => {
   }
 });
 $('#e-list').addEventListener('change', updateEditorListVisual);
+$('#e-title').addEventListener('keydown', (event) => {
+  if (event.key !== 'Enter' || event.shiftKey || event.isComposing) return;
+  if (state.editingId) return; // editing keeps Enter as a plain newline
+  event.preventDefault();
+  $('#editor-form').requestSubmit();
+});
+
+$('#e-more-toggle').addEventListener('click', toggleEditorMore);
+
 $('#e-title').addEventListener('input', () => {
   autoGrowTitle();
   clearFieldError($('#e-title'), $('#e-title-error'));
