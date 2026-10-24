@@ -695,7 +695,7 @@ body.list-dragging .list-grip { cursor: grabbing; }
   border: 1px solid var(--line-soft);
   border-radius: var(--radius);
   overflow: hidden;
-  margin-bottom: 14px;
+  margin-bottom: 15px;
 }
 
 .reminder {
@@ -839,7 +839,7 @@ body.list-dragging .list-grip { cursor: grabbing; }
 .reminder.done .check .ic { opacity: 1; }
 .reminder.done .reminder-title { text-decoration: line-through; color: var(--text-3); }
 
-.reminder-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.reminder-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 
 .reminder-title {
   font-size: 0.9375rem;
@@ -936,6 +936,30 @@ body.list-dragging .list-grip { cursor: grabbing; }
   align-items: center;
   gap: 8px;
   margin-top: 6px;
+}
+
+/* Desktop: a reminder card is wide, so its contextual actions (Snooze /
+   Reschedule) use the blank right side instead of stacking under the text.
+   Title/meta/notes keep the left column; each action group is one compact
+   line on the right, wrapping underneath only when the card gets narrow.
+   Mobile keeps the stacked full-width layout above. */
+@media (min-width: 769px) {
+  .reminder-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: 20px;
+    align-items: center;
+  }
+  .reminder-body > .reminder-title,
+  .reminder-body > .reminder-meta,
+  .reminder-body > .reminder-notes,
+  .reminder-body > .reminder-links { grid-column: 1; }
+  .reminder-body > .row-actions {
+    grid-column: 2;
+    margin-top: 0;
+    justify-content: flex-end;
+  }
+  .reminder-body > .row-actions .row-actions-label { flex-basis: auto; }
 }
 
 .row-actions-label {
@@ -1183,6 +1207,10 @@ body.sheet-open .sidebar {
 
 .round-btn .ic { width: 17px; height: 17px; }
 .round-btn.save { color: var(--accent); }
+
+/* New to-do: the header check is invisible (not removed) so the header
+   layout matches edit mode; the labelled Add is the only usable submit. */
+#editor.is-new .round-btn.save { visibility: hidden; }
 
 #editor .editor-body {
   gap: 18px;
@@ -2080,6 +2108,14 @@ body.sheet-open .sidebar {
     height: 94dvh;
     max-height: 94dvh;
   }
+
+  /* New to-do: compact content-height card docked at the bottom instead of
+     a mostly empty full-height sheet. Expanding grows within the viewport
+     and scrolls as needed. Editing keeps the full-height sheet above. */
+  #editor.is-new .editor-card {
+    height: auto;
+    max-height: 94dvh;
+  }
   .swipe-content { padding: 12px 14px; }
   .reminder-title { font-size: 0.9375rem; }
   .reminder-meta { font-size: 0.75rem; }
@@ -2154,3 +2190,158 @@ body.sheet-open .sidebar {
 
 ::selection { background: rgba(44, 36, 27, 0.18); }
 [data-theme="dark"] ::selection { background: rgba(245, 245, 245, 0.2); }
+
+/* ---------- Quick add: name-only default, options on demand ---------- */
+
+.e-quick-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: -8px;
+}
+
+.e-add-btn {
+  min-width: 88px;
+}
+
+.e-more-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: -8px;
+  padding: 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-2);
+  font-family: inherit;
+  font-size: 0.8125rem;
+  font-weight: 550;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.e-more-toggle:hover { background: var(--fill); color: var(--text); }
+
+.e-more-toggle .ic {
+  width: 14px;
+  height: 14px;
+  transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.e-more-toggle[aria-expanded="true"] .ic { transform: rotate(90deg); }
+
+/* The optional fields collapse to zero height; the grid-rows trick animates
+   the expand without measuring anything in JS. */
+.e-more {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.e-more.expanded { grid-template-rows: 1fr; }
+
+/* A class display rule beats the [hidden] UA style, so restore it. */
+.e-more[hidden] { display: none; }
+
+.e-more-inner {
+  overflow: hidden;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* ---------- Skeleton loading ---------- */
+
+.skel {
+  display: block;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--text) 8%, transparent) 25%,
+    color-mix(in srgb, var(--text) 15%, transparent) 50%,
+    color-mix(in srgb, var(--text) 8%, transparent) 75%
+  );
+  background-size: 300% 100%;
+  animation: skel-shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes skel-shimmer {
+  from { background-position: 100% 0; }
+  to { background-position: 0 0; }
+}
+
+.skel-group {
+  background: var(--surface);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  overflow: hidden;
+  margin-bottom: 18px;
+}
+
+.skel-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 68px;
+  padding: 16px 15px;
+  border-bottom: 1px solid var(--line);
+}
+
+.skel-row:last-child { border-bottom: 0; }
+
+.skel-check { width: 24px; height: 24px; border-radius: 50%; flex: none; }
+
+.skel-lines { flex: 1; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+
+.skel-bar { height: 10px; border-radius: 999px; }
+.skel-bar-title { height: 12px; }
+
+.skel-list-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+}
+
+.skel-dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+
+@media (max-width: 899px) {
+  .skel-row { padding: 14px 15px; }
+}
+
+/* ---------- Fluid feedback ---------- */
+
+/* New rows ease into place; completing a row fills its check immediately
+   (the request fires at the same time - nothing waits on the animation). */
+.reminder.completing .check { background: var(--c); border-color: var(--c); }
+.reminder.completing .check .ic { opacity: 1; }
+.reminder.completing .reminder-title { text-decoration: line-through; color: var(--text-3); }
+
+@media (prefers-reduced-motion: no-preference) {
+  .reminder.entering {
+    animation: row-enter 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .reminder.completing .check {
+    animation: check-pop 0.18s ease-out;
+  }
+}
+
+@keyframes row-enter {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes check-pop {
+  0% { transform: scale(0.7); }
+  60% { transform: scale(1.12); }
+  100% { transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skel { animation: none; }
+  .e-more { transition: none; }
+  .e-more-toggle .ic { transition: none; }
+}
