@@ -946,7 +946,9 @@ body.list-dragging .list-grip { cursor: grabbing; }
 @media (min-width: 769px) {
   .reminder-body {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    /* The text column keeps at least 220px; when the chips would squeeze
+       it, Next occurrence drops to its own line in the action column. */
+    grid-template-columns: minmax(220px, 1fr) auto;
     column-gap: 20px;
     align-items: center;
   }
@@ -961,6 +963,8 @@ body.list-dragging .list-grip { cursor: grabbing; }
   }
   .reminder-body > .row-actions .row-actions-label { flex-basis: auto; }
 }
+
+.snooze-hours { display: inline-flex; gap: 8px; }
 
 .row-actions-label {
   flex-basis: 100%;
