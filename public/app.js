@@ -1521,13 +1521,15 @@ function reminderRow(reminder, options = {}) {
       onclick: (event) => { event.stopPropagation(); rescheduleRow(reminder, 'tomorrow'); },
     }));
   }
+  const actionGroups = [];
   for (const [label, actions] of [['Snooze', snoozeActions], ['Reschedule', rescheduleActions]]) {
     if (!actions.length) continue;
-    body.append(el('div', { class: 'row-actions', 'aria-label': label }, [
+    actionGroups.push(el('div', { class: 'row-actions', 'aria-label': label }, [
       el('span', { class: 'row-actions-label', text: label }),
       ...actions,
     ]));
   }
+  if (actionGroups.length) body.append(el('div', { class: 'row-action-stack' }, actionGroups));
 
   const check = el('button', {
     class: 'check',
