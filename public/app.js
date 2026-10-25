@@ -849,7 +849,7 @@ async function syncSortWithServer() {
 const SORT_DIR_LABELS = {
   due: { asc: 'Soonest on top', desc: 'Latest on top' },
   created: { asc: 'Oldest on top', desc: 'Newest on top' },
-  name: { asc: 'AâZ', desc: 'ZâA' },
+  name: { asc: 'A–Z', desc: 'Z–A' },
 };
 
 function syncSortDirLabels(fieldSelect, dirSelect) {
@@ -1266,7 +1266,7 @@ function renderSidebar() {
 }
 
 function renderSearchResults(content) {
-  document.title = 'ToDo â Search';
+  document.title = 'ToDo — Search';
   $('#view-title').textContent = 'Search';
   const totals = state.searchTotals || { open: 0, completed: 0 };
   const total = totals.open + totals.completed;
@@ -1281,7 +1281,7 @@ function renderSearchResults(content) {
   });
 
   if (state.searchLoading && state.searchQuery !== state.search) {
-    content.append(el('p', { class: 'search-status', text: 'Searchingâ¦' }));
+    content.append(el('p', { class: 'search-status', text: 'Searching…' }));
     return;
   }
   if (!open.length && !completed.length) {
@@ -1289,10 +1289,10 @@ function renderSearchResults(content) {
     return;
   }
   if (state.searchOffline) {
-    content.append(el('p', { class: 'search-status', text: 'Offline â showing recent to-dos only.' }));
+    content.append(el('p', { class: 'search-status', text: 'Offline — showing recent to-dos only.' }));
   }
   if (state.searchTruncated) {
-    content.append(el('p', { class: 'search-status', text: 'Showing the first results â refine the search to see the rest.' }));
+    content.append(el('p', { class: 'search-status', text: 'Showing the first results — refine the search to see the rest.' }));
   }
   if (open.length) {
     content.append(el('h3', { class: 'group-title', text: `Open (${totals.open})` }));
@@ -1312,7 +1312,7 @@ function emptySearchState() {
   return el('div', { class: 'empty' }, [
     el('span', { html: ICON('search') }),
     el('h3', { class: 'empty-heading', text: 'No matches' }),
-    el('p', { text: `No to-dos match â${state.search}â in any list.` }),
+    el('p', { text: `No to-dos match “${state.search}” in any list.` }),
     el('button', {
       type: 'button',
       class: 'primary-btn',
@@ -1372,7 +1372,7 @@ function renderMain() {
     $('#view-menu').hidden = false;
     $('#view-menu').onclick = () => openListSheet(list);
   }
-  document.title = `ToDo â ${title}`;
+  document.title = `ToDo — ${title}`;
 
   if (!items.length) {
     content.append(emptyState(view));
@@ -1420,7 +1420,7 @@ function renderMain() {
 function emptyState(view) {
   // Warmer empty states with a primary action where one makes sense.
   const copy = {
-    today: { icon: 'calendar', heading: 'All clear', message: 'Nothing is due today. Enjoy the quiet â or get ahead.' },
+    today: { icon: 'calendar', heading: 'All clear', message: 'Nothing is due today. Enjoy the quiet — or get ahead.' },
     scheduled: { icon: 'clock', heading: 'Nothing scheduled', message: 'Give a to-do a date and it will show up here, grouped by when it is due.' },
     all: { icon: 'all', heading: 'A fresh start', message: 'No to-dos yet. Capture the first thing on your mind.' },
     flagged: { icon: 'flag', heading: 'Nothing flagged', message: 'Mark a to-do urgent and it will wait for you here.' },
@@ -1468,7 +1468,7 @@ function scheduledBucket(dueAt) {
 function renderOverdueSection(content, items) {
   const overdue = items.filter(isOverdue);
   if (!overdue.length) return [];
-  content.append(el('h3', { class: 'group-title overdue-title', text: `Overdue Â· ${overdue.length}` }));
+  content.append(el('h3', { class: 'group-title overdue-title', text: `Overdue · ${overdue.length}` }));
   const group = el('div', { class: 'reminder-group' });
   for (const reminder of overdue) group.append(reminderRow(reminder, { reschedule: true }));
   content.append(group);
@@ -1529,7 +1529,7 @@ function domainOf(url) {
 
 function linkChip(url) {
   // Compact chip (icon + domain) instead of a full magenta URL: the full
-  // address stays in the notes field. No third-party favicon service â the
+  // address stays in the notes field. No third-party favicon service — the
   // link glyph is inline SVG so domains never leak to Google.
   const href = toHref(url);
   return el('a', {
@@ -1612,7 +1612,7 @@ function timeModelLabel(reminder) {
   // different: its zone IS the rule, so keep it on the card.
   if (reminder.time_model === 'floating') return 'Floating';
   if (reminder.time_model === 'anchored') {
-    return reminder.time_zone ? `Anchored Â· ${reminder.time_zone}` : 'Anchored';
+    return reminder.time_zone ? `Anchored · ${reminder.time_zone}` : 'Anchored';
   }
   return null;
 }
@@ -1802,7 +1802,7 @@ function reminderRow(reminder, options = {}) {
     toggleCompleted(reminder, event.currentTarget.closest('.reminder'));
   });
 
-  // Web delete affordance: the Ã appears on hover (mouse only); first click
+  // Web delete affordance: the × appears on hover (mouse only); first click
   // turns it into an inline Confirm?, second click deletes. No browser popup.
   const remove = el('button', {
     type: 'button',
@@ -1940,7 +1940,7 @@ async function toggleCompleted(reminder, row) {
     render();
     if (result && result.advanced && result.nextDue) {
       const next = new Date(result.nextDue);
-      toast(`Done â next: ${next.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}`);
+      toast(`Done — next: ${next.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}`);
     }
   } catch (err) {
     if (row) row.classList.remove('completing');
@@ -2126,7 +2126,7 @@ async function skipCurrentOccurrence() {
     await loadState();
     render();
     const next = new Date(result.nextDue);
-    toast(`Skipped â next: ${next.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}`);
+    toast(`Skipped — next: ${next.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}`);
   } catch (err) {
     toast(err.message);
   }
@@ -2189,7 +2189,7 @@ async function undoSkip(id, occurrenceAt) {
     }
     await loadHistory(id);
     const next = new Date(result.dueAt);
-    toast(`Skip undone â next: ${next.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}`);
+    toast(`Skip undone — next: ${next.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}`);
   } catch (err) {
     toast(err.message);
   }
@@ -2454,7 +2454,7 @@ async function saveEditor(event) {
     body.repeat_rule = repeatRule;
     body.time_model = model;
     body.time_zone = model === 'anchored' ? $('#e-zone').value : (model === 'floating' ? deviceZone() || null : null);
-    // Recurring series are never marked completed â completing advances them.
+    // Recurring series are never marked completed — completing advances them.
     if (!editingSeries) body.completed = $('#e-completed').checked;
   }
 
@@ -2518,7 +2518,7 @@ function chipDateLabel(dateStr, timeStr) {
   const [h, mi] = timeStr.split(':').map(Number);
   const time = new Date(y, mo - 1, d, h, mi)
     .toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
-  return `${label} Â· ${time}`;
+  return `${label} · ${time}`;
 }
 
 function applyParse(result) {
@@ -2559,7 +2559,7 @@ function applyParse(result) {
   const parts = [];
   if (result.date) parts.push(chipDateLabel(result.date, result.time));
   if (result.repeat && result.repeat !== 'none') parts.push(repeatLabel(result.repeat));
-  $('#e-parse-text').textContent = parts.join(' Â· ') || 'Parsed';
+  $('#e-parse-text').textContent = parts.join(' · ') || 'Parsed';
   $('#e-parse-chip').hidden = false;
   syncEditorSubmit();
 }
@@ -2956,7 +2956,7 @@ function releaseSwipePointer(current) {
 }
 
 $('#content').addEventListener('pointerdown', (event) => {
-  // Swipe-to-reveal is a touch gesture. On the web, the Ã is the delete path.
+  // Swipe-to-reveal is a touch gesture. On the web, the × is the delete path.
   if (event.pointerType === 'mouse') {
     mouseDrag = event.button === 0 ? { x: event.clientX, y: event.clientY } : null;
     return;
@@ -3032,7 +3032,7 @@ async function endSwipe(commit) {
     return;
   }
   // Park the row on the red Delete action. The user must tap Delete, then
-  // Confirm? â no browser dialog. Completed rows can be deleted too.
+  // Confirm? — no browser dialog. Completed rows can be deleted too.
   snapSwipeOpen(current.row);
 }
 
@@ -3086,8 +3086,8 @@ function renderDeviceZoneRow() {
   const s = state.settings;
   const serverZone = s.device_zone || '';
   $('#device-zone-label').textContent = serverZone
-    ? `Floating to-dos follow ${serverZone} â the last zone a device confirmed${s.device_zone_updated_at ? ` (${new Date(s.device_zone_updated_at).toLocaleString()})` : ''}.`
-    : 'No device has confirmed its time zone yet â open the app once online.';
+    ? `Floating to-dos follow ${serverZone} — the last zone a device confirmed${s.device_zone_updated_at ? ` (${new Date(s.device_zone_updated_at).toLocaleString()})` : ''}.`
+    : 'No device has confirmed its time zone yet — open the app once online.';
   const device = deviceZone();
   const useDevice = $('#zone-use-device');
   useDevice.hidden = !device || device === canonicalZone(serverZone);
@@ -3250,9 +3250,9 @@ async function saveAppSettings() {
         if (defaultsChanged && notifyChanged) {
           message = 'Saved. New-to-do defaults apply to new to-dos only; notification changes apply to all to-dos from now on.';
         } else if (notifyChanged) {
-          message = 'Saved â applies to how all to-dos notify from now on.';
+          message = 'Saved — applies to how all to-dos notify from now on.';
         } else {
-          message = 'Saved. Applies to new to-dos only â existing to-dos were not changed.';
+          message = 'Saved. Applies to new to-dos only — existing to-dos were not changed.';
         }
         $('#settings-msg').hidden = true;
       } catch (err) {
@@ -3272,9 +3272,9 @@ async function saveAppSettings() {
       render();
       message = message
         ? `${message} Sorting applied to all lists.`
-        : 'Saved â sorting applied to all lists.';
+        : 'Saved — sorting applied to all lists.';
     }
-    if (!message) message = 'Saved â appearance applies to this device.';
+    if (!message) message = 'Saved — appearance applies to this device.';
     toast(message);
     appearanceSnapshot = null;
     saveBtn.disabled = true;
@@ -3312,8 +3312,8 @@ async function renderTokenList() {
       el('span', {
         class: 'token-meta',
         text: token.revoked_at
-          ? `revoked Â· ${profileLabel}`
-          : `${profileLabel} Â· used ${token.last_used_at ? new Date(token.last_used_at).toLocaleDateString() : 'never'}`,
+          ? `revoked · ${profileLabel}`
+          : `${profileLabel} · used ${token.last_used_at ? new Date(token.last_used_at).toLocaleDateString() : 'never'}`,
       }),
     ]);
     if (!token.revoked_at) {
@@ -3507,7 +3507,7 @@ $('#token-copy').addEventListener('click', async () => {
     await navigator.clipboard.writeText($('#token-value').textContent);
     toast('Token copied');
   } catch {
-    toast('Copy failed â select the token manually');
+    toast('Copy failed — select the token manually');
   }
 });
 $('#export-btn').addEventListener('click', exportBackup);
@@ -3747,7 +3747,7 @@ async function refreshOnResume() {
   try {
     await loadState();
     render();
-  } catch { /* offline â keep showing cached state */ }
+  } catch { /* offline — keep showing cached state */ }
   syncDeviceZone();
 }
 
