@@ -1,6 +1,6 @@
 'use strict';
 
-const CACHE = 'todo-v2.3.6';
+const CACHE = 'todo-v2.4.0';
 const ASSETS = [
   '/',
   '/index.html',

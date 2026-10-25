@@ -1162,7 +1162,7 @@ function emptyState(view) {
   // Warmer empty states with a primary action where one makes sense.
   const copy = {
     today: { icon: 'calendar', heading: 'All clear', message: 'Nothing is due today. Enjoy the quiet — or get ahead.', action: 'New To-Do' },
-    scheduled: { icon: 'clock', heading: 'Nothing scheduled', message: 'Give a to-do a date and it will show up here, grouped by day.', action: 'New To-Do' },
+    scheduled: { icon: 'clock', heading: 'Nothing scheduled', message: 'Give a to-do a date and it will show up here, grouped by when it is due.', action: 'New To-Do' },
     all: { icon: 'all', heading: 'A fresh start', message: 'No to-dos yet. Capture the first thing on your mind.', action: 'New To-Do' },
     flagged: { icon: 'flag', heading: 'Nothing flagged', message: 'Mark a to-do urgent and it will wait for you here.', action: null },
     completed: { icon: 'done', heading: 'No history yet', message: 'Finished to-dos land here for the next 30 days.', action: null },
@@ -1190,16 +1190,25 @@ function emptyState(view) {
   return el('div', { class: 'empty' }, children);
 }
 
-function dateGroupLabel(dueAt) {
-  const date = new Date(dueAt);
+// Scheduled groups upcoming items into time buckets instead of one heading
+// per date: each item lands in the first bucket it fits, and its row still
+// shows the exact due date. Weeks run Monday to Sunday.
+const SCHEDULED_BUCKETS = ['Today', 'Tomorrow', 'This Week', 'Next Week', 'Later This Month', 'Later'];
+
+function scheduledBucket(dueAt) {
   const today = startOfToday();
-  const day = new Date(date);
-  day.setHours(0, 0, 0, 0);
-  const diff = Math.round((day - today) / 86400000);
-  if (diff === 0) return 'Today';
+  const dueDay = new Date(dueAt);
+  dueDay.setHours(0, 0, 0, 0);
+  const diff = Math.round((dueDay - today) / 86400000);
+  if (diff <= 0) return 'Today';
   if (diff === 1) return 'Tomorrow';
-  if (diff === -1) return 'Yesterday';
-  return date.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+  const daysToSunday = 6 - ((today.getDay() + 6) % 7);
+  if (diff <= daysToSunday) return 'This Week';
+  if (diff <= daysToSunday + 7) return 'Next Week';
+  const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+  const monthEndDiff = Math.round((monthEnd - today) / 86400000);
+  if (diff <= monthEndDiff) return 'Later This Month';
+  return 'Later';
 }
 
 // Overdue items stay pinned at the top until completed or rescheduled,
@@ -1228,14 +1237,14 @@ function renderScheduled(content, items) {
   const upcoming = items.filter((reminder) => !seen.has(reminder.id));
   const groups = new Map();
   for (const reminder of upcoming) {
-    const day = new Date(reminder.due_at);
-    day.setHours(0, 0, 0, 0);
-    const key = day.getTime();
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key).push(reminder);
+    const bucket = scheduledBucket(reminder.due_at);
+    if (!groups.has(bucket)) groups.set(bucket, []);
+    groups.get(bucket).push(reminder);
   }
-  for (const [key, group] of [...groups.entries()].sort((a, b) => a[0] - b[0])) {
-    content.append(el('h3', { class: 'group-title', text: dateGroupLabel(group[0].due_at) }));
+  for (const bucket of SCHEDULED_BUCKETS) {
+    const group = groups.get(bucket);
+    if (!group) continue;
+    content.append(el('h3', { class: 'group-title', text: bucket }));
     const wrap = el('div', { class: 'reminder-group' });
     for (const reminder of group) wrap.append(reminderRow(reminder));
     content.append(wrap);
