@@ -2,6 +2,10 @@
 
 A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due dates, urgent flags, recurring reminders, natural-language quick add, smart lists, floating time zones, a token API for external agents, completed history, dark mode, and web push. No frontend framework and no build step.
 
+## What's New in v2.6.6
+
+- **Edit Item heading** — the heading of the editor for an existing item now reads **Edit Item**, matching New Item and Delete Item. Service worker cache bumped to `todo-v2.6.6`.
+
 ## What's New in v2.6.5
 
 - **Item wording, one create button** — the home heading now reads **Your TODOs**, the editor heading is **New Item**, its delete button is **Delete Item**, and the + button is labelled **New Item**. The large create button in empty states is gone from every view; the + button is the single way to add an item. Service worker cache bumped to `todo-v2.6.5`.
@@ -298,7 +302,7 @@ Sessions are stored in SQLite, so refreshing the page or restarting the process 
 
 ## Version
 
-2.6.5
+2.6.6
 
 ## License
 
