@@ -543,6 +543,7 @@ async function loadState() {
   state.lists = data.lists || [];
   state.reminders = data.reminders || [];
   state.settings = data.settings || {};
+  await syncSortWithServer();
   if (state.lastListId && !listById(state.lastListId)) {
     state.lastListId = state.lists[0] ? state.lists[0].id : null;
   }
@@ -687,6 +688,138 @@ function saveSortOverrides() {
   localStorage.setItem('todo.sort.v2', JSON.stringify(state.sortOverrides));
 }
 
+/* ---------------- Sorting sync ---------------- */
+
+// Sorting lives on the server (settings.sort) so it follows the user across
+// devices; localStorage stays as the instant-paint cache and offline copy.
+// Writes are single intents merged server-side, so this tab never sends the
+// whole map and can never wipe choices made on another device.
+const SORT_PENDING_KEY = 'todo.sort.pending';
+
+function readSortPending() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(SORT_PENDING_KEY) || '{}');
+    return raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveSortPending(pending) {
+  if (pending && (pending.applyAll || (pending.views && Object.keys(pending.views).length))) {
+    localStorage.setItem(SORT_PENDING_KEY, JSON.stringify(pending));
+  } else {
+    localStorage.removeItem(SORT_PENDING_KEY);
+  }
+}
+
+function serverSort() {
+  try {
+    const raw = state.settings && state.settings.sort;
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+    return {
+      default: parsed.default && parsed.default.field ? parsed.default : null,
+      overrides: parsed.overrides && typeof parsed.overrides === 'object' && !Array.isArray(parsed.overrides)
+        ? parsed.overrides : {},
+    };
+  } catch {
+    return null;
+  }
+}
+
+function applyServerSort(sort) {
+  if (sort.default) state.sortDefault = { field: sort.default.field, dir: sort.default.dir };
+  state.sortOverrides = sort.overrides;
+  localStorage.setItem('todo.sortField', state.sortDefault.field);
+  localStorage.setItem('todo.sortDir', state.sortDefault.dir);
+  saveSortOverrides();
+}
+
+async function pushSortWrite(body, pendingEntry) {
+  try {
+    const result = await api('/api/settings/sort', { method: 'POST', body });
+    if (result && result.sort) state.settings.sort = JSON.stringify(result.sort);
+  } catch {
+    // Offline (or signed out): keep the change locally and queue it; the
+    // next successful state load pushes it before adopting the server copy.
+    const pending = readSortPending();
+    if (pendingEntry.applyAll) {
+      pending.applyAll = pendingEntry.applyAll;
+      pending.views = {};
+    } else {
+      pending.views = pending.views || {};
+      for (const [view, dims] of Object.entries(pendingEntry.views || {})) {
+        pending.views[view] = Object.assign(pending.views[view] || {}, dims);
+      }
+    }
+    saveSortPending(pending);
+  }
+}
+
+let sortSyncing = false;
+
+async function syncSortWithServer() {
+  if (sortSyncing) return;
+  sortSyncing = true;
+  try {
+    // 1. Queued offline changes are the user's latest explicit choices:
+    //    push them before adopting anything from the server.
+    const pending = readSortPending();
+    const pendingViews = Object.entries(pending.views || {});
+    if (pending.applyAll || pendingViews.length) {
+      if (pending.applyAll) {
+        await api('/api/settings/sort', {
+          method: 'POST',
+          body: { apply_all: true, field: pending.applyAll.field, dir: pending.applyAll.dir },
+        });
+      }
+      for (const [view, dims] of pendingViews) {
+        await api('/api/settings/sort', {
+          method: 'POST',
+          body: { view, ...dims },
+        });
+      }
+      saveSortPending({});
+      state.settings = await api('/api/settings');
+    }
+    // 2. Adopt the server's sorting; on first run after the upgrade, offer
+    //    this device's local choices as the seed (only an empty server value
+    //    takes it, so the first device wins and nothing jumps).
+    const server = serverSort();
+    if (server) {
+      applyServerSort(server);
+      return;
+    }
+    const overrides = readSortOverrides();
+    const legacyField = localStorage.getItem('todo.sortField');
+    const legacyDir = localStorage.getItem('todo.sortDir');
+    const hasLocalChoices = Object.keys(overrides).length > 0
+      || (legacyField && legacyField !== 'due') || (legacyDir && legacyDir !== 'asc');
+    if (hasLocalChoices) {
+      const result = await api('/api/settings/sort', {
+        method: 'POST',
+        body: {
+          seed: {
+            default: { field: legacyField || 'due', dir: legacyDir || 'asc' },
+            overrides,
+          },
+        },
+      });
+      if (result && result.sort) {
+        state.settings.sort = JSON.stringify(result.sort);
+        applyServerSort(result.sort);
+      }
+    }
+  } catch {
+    // Offline or server error: the local copy stays in effect and the next
+    // state load retries.
+  } finally {
+    sortSyncing = false;
+  }
+}
+
 // Sorting is remembered per view: each list (and each smart view, including
 // Scheduled) keeps its own field + direction. Views without their own choice
 // fall back to the app default, which starts from the pre-2.5.0 global
@@ -709,11 +842,19 @@ function setViewSort(view, patch) {
   const key = viewSortKey(view);
   if (!key) return;
   const current = effectiveSort(view);
-  state.sortOverrides[key] = {
+  const choice = {
     field: patch.field || current.field,
     dir: patch.dir || current.dir,
   };
+  state.sortOverrides[key] = choice;
   saveSortOverrides();
+  // Send only the dimension(s) that actually changed; the server merges
+  // them, so this tab cannot reset a newer choice made on another device.
+  const body = { view: key };
+  const dims = {};
+  if (patch.field) { body.field = choice.field; dims.field = choice.field; }
+  if (patch.dir) { body.dir = choice.dir; dims.dir = choice.dir; }
+  pushSortWrite(body, { views: { [key]: dims } });
 }
 
 function compareReminders(a, b, sort) {
@@ -3436,6 +3577,7 @@ $('#sort-apply-all').addEventListener('click', () => {
   localStorage.setItem('todo.sortDir', dir);
   state.sortOverrides = {};
   saveSortOverrides();
+  pushSortWrite({ apply_all: true, field, dir }, { applyAll: { field, dir } });
   const msg = $('#sort-apply-msg');
   msg.textContent = 'Applied. Every list and view now uses this sorting; any list can still pick its own afterwards.';
   msg.hidden = false;

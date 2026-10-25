@@ -93,6 +93,13 @@ const SETTING_DEFAULTS = {
   repush_max: '3',
   quiet_start: '23:00',
   quiet_end: '07:00',
+  // Per-view sorting, synced across devices. JSON string:
+  // { default: {field, dir} | null, overrides: { "list:5": {field, dir},
+  // "today": {...}, ... } }. Empty means no device has seeded it yet; the
+  // web app then falls back to its own local sorting and offers it as the
+  // seed. Written only through /api/settings/sort, never the generic
+  // settings endpoint.
+  sort: '',
 };
 
 const TIME_MODELS = ['fixed', 'floating', 'anchored'];
@@ -996,6 +1003,110 @@ async function main() {
       await db.setSetting('device_zone_updated_at', new Date().toISOString());
     }
     res.json({ ok: true, settings: await getSettings(), floatingMoved: moved, moved: movedItems });
+  });
+
+  const SORT_FIELDS = ['due', 'created', 'name'];
+  const SORT_DIRS = ['asc', 'desc'];
+  const SORT_VIEW_KEY = /^(today|scheduled|all|flagged|completed|list:\d{1,10})$/;
+  const SORT_MAX_OVERRIDES = 200;
+
+  function parseSortSetting(raw) {
+    if (!raw) return null;
+    try {
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+      const out = { default: null, overrides: {} };
+      if (parsed.default && typeof parsed.default === 'object'
+        && SORT_FIELDS.includes(parsed.default.field) && SORT_DIRS.includes(parsed.default.dir)) {
+        out.default = { field: parsed.default.field, dir: parsed.default.dir };
+      }
+      if (parsed.overrides && typeof parsed.overrides === 'object' && !Array.isArray(parsed.overrides)) {
+        for (const [key, choice] of Object.entries(parsed.overrides)) {
+          if (!SORT_VIEW_KEY.test(key)) continue;
+          if (!choice || typeof choice !== 'object') continue;
+          if (!SORT_FIELDS.includes(choice.field) || !SORT_DIRS.includes(choice.dir)) continue;
+          out.overrides[key] = { field: choice.field, dir: choice.dir };
+        }
+      }
+      return out;
+    } catch {
+      return null;
+    }
+  }
+
+  // Sorting syncs across devices through the settings table. Every write is
+  // a single intent (one view, one apply-all, or a first-device seed) merged
+  // into the stored map inside one transaction, so a tab holding stale state
+  // can only change the view its user just touched - it can never wipe newer
+  // choices made on another device.
+  app.post('/api/settings/sort', async (req, res) => {
+    if (req.token) return denyToken(res);
+    const body = req.body;
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      return res.status(400).json({ error: 'Send a JSON object' });
+    }
+    const isApplyAll = body.apply_all === true;
+    const isSeed = body.seed && typeof body.seed === 'object' && !Array.isArray(body.seed);
+    if (!isApplyAll && !isSeed && !SORT_VIEW_KEY.test(String(body.view || ''))) {
+      return res.status(400).json({ error: 'view: Unknown view' });
+    }
+    if (isApplyAll
+      && (!SORT_FIELDS.includes(body.field) || !SORT_DIRS.includes(body.dir))) {
+      return res.status(400).json({ error: 'field/dir: Unknown sorting' });
+    }
+    // A single-view write carries only the dimension(s) the user changed;
+    // the server merges them into the stored choice, so a stale tab changing
+    // the direction cannot reset a newer field choice from another device.
+    if (!isApplyAll && !isSeed) {
+      const hasField = body.field !== undefined;
+      const hasDir = body.dir !== undefined;
+      if ((!hasField && !hasDir)
+        || (hasField && !SORT_FIELDS.includes(body.field))
+        || (hasDir && !SORT_DIRS.includes(body.dir))) {
+        return res.status(400).json({ error: 'field/dir: Unknown sorting' });
+      }
+    }
+    try {
+      const result = await db.transaction(async () => {
+        const raw = await db.getSetting('sort');
+        const current = parseSortSetting(raw) || { default: null, overrides: {} };
+        if (isSeed) {
+          // First device to run the new version offers its local choices as
+          // the seed. Only an empty server value takes it, so two devices
+          // racing to seed cannot clobber each other - the first one wins.
+          if (raw) return { sort: current };
+          const seed = parseSortSetting(JSON.stringify(body.seed));
+          if (!seed || (!seed.default && !Object.keys(seed.overrides).length)) {
+            const err = new Error('seed: No valid sorting choices');
+            err.status = 400;
+            throw err;
+          }
+          await db.setSetting('sort', JSON.stringify(seed));
+          return { sort: seed };
+        }
+        if (isApplyAll) {
+          current.default = { field: body.field, dir: body.dir };
+          current.overrides = {};
+        } else {
+          if (!current.overrides[body.view]
+            && Object.keys(current.overrides).length >= SORT_MAX_OVERRIDES) {
+            const err = new Error('Too many saved sortings');
+            err.status = 400;
+            throw err;
+          }
+          const existing = current.overrides[body.view] || current.default || { field: 'due', dir: 'asc' };
+          current.overrides[body.view] = {
+            field: body.field !== undefined ? body.field : existing.field,
+            dir: body.dir !== undefined ? body.dir : existing.dir,
+          };
+        }
+        await db.setSetting('sort', JSON.stringify(current));
+        return { sort: current };
+      });
+      res.json({ ok: true, sort: result.sort });
+    } catch (err) {
+      res.status(err.status || 500).json({ error: err.message || 'Could not save sorting' });
+    }
   });
 
   app.get('/api/tokens', async (req, res) => {
