@@ -129,7 +129,7 @@
       <div class="sidebar-head">
         <h1 class="wordmark">Your TODOs</h1>
         <div class="head-actions">
-          <button id="refresh-btn-side" class="icon-btn refresh-btn" title="Refresh to-dos" aria-label="Refresh to-dos">
+          <button id="refresh-btn-side" class="icon-btn refresh-btn" title="Refresh items" aria-label="Refresh items">
             <svg class="ic"><use href="#i-refresh"/></svg>
           </button>
           <button id="sidebar-menu-btn" class="icon-btn" title="Menu" aria-label="Menu">
@@ -140,7 +140,7 @@
 
       <form id="search-form" class="search" role="search">
         <svg class="ic search-ic"><use href="#i-search"/></svg>
-        <input id="search" type="search" placeholder="Search" autocomplete="off" aria-label="Search to-dos">
+        <input id="search" type="search" placeholder="Search" autocomplete="off" aria-label="Search items">
       </form>
       </div>
 
@@ -205,7 +205,7 @@
         </div>
         <div class="head-actions">
           <button id="view-menu" class="icon-btn" aria-label="List options" hidden>&#8943;</button>
-          <button id="refresh-btn" class="icon-btn refresh-btn" title="Refresh to-dos" aria-label="Refresh to-dos">
+          <button id="refresh-btn" class="icon-btn refresh-btn" title="Refresh items" aria-label="Refresh items">
             <svg class="ic"><use href="#i-refresh"/></svg>
           </button>
           <button id="menu-btn" class="icon-btn" aria-label="Toggle sidebar" aria-expanded="true" title="Sidebar">
@@ -216,13 +216,13 @@
 
       <form id="main-search-form" class="main-search" role="search">
         <svg class="ic search-ic"><use href="#i-search"/></svg>
-        <input id="main-search" type="search" placeholder="Search" autocomplete="off" aria-label="Search to-dos">
+        <input id="main-search" type="search" placeholder="Search" autocomplete="off" aria-label="Search items">
       </form>
 
       <div id="sort-bar" class="sort-bar" hidden>
         <label class="sort-control">
           <span>Sort</span>
-          <select id="sort-field" aria-label="Sort to-dos by">
+          <select id="sort-field" aria-label="Sort items by">
             <option value="due">Due date</option>
             <option value="created" selected>Date added</option>
             <option value="name">Name</option>
@@ -329,7 +329,7 @@
               <button type="button" id="e-snooze-btn" class="mini-btn">Snooze 1h</button>
             </div>
           </div>
-          <p class="ed-hint">Urgent to-dos are marked in red.</p>
+          <p class="ed-hint">Urgent items are marked in red.</p>
         </div>
 
         <div class="ed-section" id="series-section" hidden>
@@ -449,7 +449,7 @@
       </header>
       <div class="sheet-body">
         <p id="zone-prompt-text" class="notify-hint"></p>
-        <button type="button" id="zone-move" class="primary-btn">Move to-dos</button>
+        <button type="button" id="zone-move" class="primary-btn">Move items</button>
       </div>
     </div>
   </div>
@@ -494,10 +494,10 @@
               <option value="30d">Last 30 days</option>
             </select>
           </label>
-          <p class="notify-hint">Bar and ring compare each list's open to-dos with its completed ones — all time, or the last 30 days. Previews instantly — Save to sync these choices to your other devices, Cancel to undo.</p>
+          <p class="notify-hint">Bar and ring compare each list's open items with its completed ones — all time, or the last 30 days. Previews instantly — Save to sync these choices to your other devices, Cancel to undo.</p>
         </div>
         <div class="settings-group">
-          <h3>New to-dos</h3>
+          <h3>New items</h3>
           <label class="settings-row" for="set-default-model">
             <span>Default time model</span>
             <select id="set-default-model">
@@ -516,7 +516,7 @@
             <span>Date-only time</span>
             <input id="set-default-time" type="time">
           </label>
-          <p class="settings-note"><strong>Applies to new to-dos only.</strong> Existing to-dos keep their current time model and zone. Floating to-dos follow the last confirmed device zone.</p>
+          <p class="settings-note"><strong>Applies to new items only.</strong> Existing items keep their current time model and zone. Floating items follow the last confirmed device zone.</p>
           <p class="notify-hint">Floating follows the last confirmed device zone; Fixed keeps an absolute instant; Anchored pins a named zone.</p>
         </div>
         <div class="settings-group">
@@ -536,12 +536,12 @@
               <option value="desc" selected>Newest on top</option>
             </select>
           </label>
-          <p class="notify-hint">Saving applies this sorting to every list and smart view except Today and Scheduled, which default to Due date / Soonest on top because only dated to-dos appear there. Change those views from their own sort controls. Each list can still choose its own sorting afterwards; sorting syncs across your devices.</p>
+          <p class="notify-hint">Saving applies this sorting to every list and smart view except Today and Scheduled, which default to Due date / Soonest on top because only dated items appear there. Change those views from their own sort controls. Each list can still choose its own sorting afterwards; sorting syncs across your devices.</p>
         </div>
         <div class="settings-group">
           <h3>Notifications</h3>
           <label class="settings-row" for="set-repush">
-            <span>Re-push missed to-dos</span>
+            <span>Re-push missed items</span>
             <input id="set-repush" type="checkbox">
           </label>
           <label class="settings-row" for="set-repush-cadence">
@@ -573,11 +573,11 @@
           <button type="button" id="import-btn" class="secondary-btn">Import backup…</button>
           <input id="import-file" type="file" accept="application/json,.json" hidden>
           <p id="import-msg" class="form-msg" hidden></p>
-          <p class="notify-hint">Import adds missing lists and to-dos; it never overwrites or deletes anything.</p>
+          <p class="notify-hint">Import adds missing lists and items; it never overwrites or deletes anything.</p>
         </div>
         <div class="settings-group">
           <h3>API tokens</h3>
-          <p class="notify-hint">Tokens let your other agents work with to-dos — no browser needed. A token can never delete, manage lists, or change the password.</p>
+          <p class="notify-hint">Tokens let your other agents work with items — no browser needed. A token can never delete, manage lists, or change the password.</p>
           <label class="settings-row" for="token-name">
             <span>Name</span>
             <input id="token-name" type="text" placeholder="e.g. friday-agent" maxlength="80" autocomplete="off">
@@ -589,7 +589,7 @@
               <option value="write">Read + write</option>
             </select>
           </label>
-          <p class="notify-hint">Read + write tokens can add, edit, complete, and snooze to-dos. Choose it deliberately.</p>
+          <p class="notify-hint">Read + write tokens can add, edit, complete, and snooze items. Choose it deliberately.</p>
           <button type="button" id="token-generate" class="primary-btn">Generate token</button>
           <div id="token-once" class="token-once" hidden>
             <p class="notify-hint"><strong>Copy it now — it will never be shown again.</strong></p>
@@ -605,7 +605,7 @@ export HOST=https://your-domain.example
 # lists
 curl -H "Authorization: Bearer $TOKEN" $HOST/api/lists
 
-# add a to-do (idempotent with a client key)
+# add an item (idempotent with a client key)
 curl -X POST -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -H "Idempotency-Key: friday-001" \

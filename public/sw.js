@@ -1,6 +1,6 @@
 'use strict';
 
-const CACHE = 'todo-v2.7.1';
+const CACHE = 'todo-v2.7.2';
 const ASSETS = [
   '/',
   '/index.html',
@@ -85,7 +85,7 @@ self.addEventListener('push', (event) => {
 
   const tag = data.tag || 'todo';
   const options = {
-    body: data.body || 'You have a to-do due.',
+    body: data.body || 'You have an item due.',
     icon: '/icons/icon-192.png',
     badge: '/icons/icon-192.png',
     tag,

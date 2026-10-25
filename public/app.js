@@ -218,7 +218,7 @@ function updateBadge() {
 // The device zone is reported to the server on open/resume so floating
 // reminders ("6pm wherever I am") fire in the last confirmed zone. Because a
 // second device in another zone would otherwise silently move everything, a
-// change that would move to-dos asks first and offers Undo.
+// change that would move items asks first and offers Undo.
 const ZONE_PROMPT_KEY = 'todo.zone-prompt-dismissed';
 let pendingZone = null;
 
@@ -259,7 +259,7 @@ async function applyDeviceZone(zone, fromZone) {
   if (result.floatingMoved) {
     const count = result.floatingMoved;
     toast(
-      `Time zone is now ${zone}; moved ${count} floating to-do${count === 1 ? '' : 's'}`,
+      `Time zone is now ${zone}; moved ${count} floating item${count === 1 ? '' : 's'}`,
       'Undo',
       () => undoDeviceZone(fromZone, result.moved || [])
     );
@@ -291,8 +291,8 @@ function openZonePrompt(preview) {
   pendingZone = preview;
   const count = preview.count;
   $('#zone-prompt-text').textContent =
-    `This device is now in ${preview.to}. Move ${count} floating to-do${count === 1 ? '' : 's'} from ${preview.from} so they keep the same clock time?`;
-  $('#zone-move').textContent = `Move ${count} to-do${count === 1 ? '' : 's'}`;
+    `This device is now in ${preview.to}. Move ${count} floating item${count === 1 ? '' : 's'} from ${preview.from} so they keep the same clock time?`;
+  $('#zone-move').textContent = `Move ${count} item${count === 1 ? '' : 's'}`;
   openSheet('#zone-sheet');
 }
 
@@ -522,7 +522,7 @@ function showAuth() {
   $('#shell').hidden = true;
   $('#auth-confirm').hidden = !state.needsSetup;
   $('#auth-sub').textContent = state.needsSetup
-    ? 'Create a password to protect your to-dos'
+    ? 'Create a password to protect your items'
     : 'Enter your password to continue';
   $('#auth-submit').textContent = state.needsSetup ? 'Create Password' : 'Unlock';
   $('#auth-password').setAttribute('autocomplete', state.needsSetup ? 'new-password' : 'current-password');
@@ -1351,7 +1351,7 @@ function renderSearchResults(content) {
     return;
   }
   if (state.searchOffline) {
-    content.append(el('p', { class: 'search-status', text: 'Offline — showing recent to-dos only.' }));
+    content.append(el('p', { class: 'search-status', text: 'Offline — showing recent items only.' }));
   }
   if (state.searchTruncated) {
     content.append(el('p', { class: 'search-status', text: 'Showing the first results — refine the search to see the rest.' }));
@@ -1374,7 +1374,7 @@ function emptySearchState() {
   return el('div', { class: 'empty' }, [
     el('span', { html: ICON('search') }),
     el('h3', { class: 'empty-heading', text: 'No matches' }),
-    el('p', { text: `No to-dos match “${state.search}” in any list.` }),
+    el('p', { text: `No items match “${state.search}” in any list.` }),
     el('button', {
       type: 'button',
       class: 'primary-btn',
@@ -1483,15 +1483,15 @@ function emptyState(view) {
   // Warmer empty states with a primary action where one makes sense.
   const copy = {
     today: { icon: 'calendar', heading: 'All clear', message: 'Nothing is due today. Enjoy the quiet — or get ahead.' },
-    scheduled: { icon: 'clock', heading: 'Nothing scheduled', message: 'Give a to-do a date and it will show up here, grouped by when it is due.' },
-    all: { icon: 'all', heading: 'A fresh start', message: 'No to-dos yet. Capture the first thing on your mind.' },
-    flagged: { icon: 'flag', heading: 'Nothing flagged', message: 'Mark a to-do urgent and it will wait for you here.' },
-    completed: { icon: 'done', heading: 'No history yet', message: 'Finished to-dos land here for the next 30 days.' },
-  }[view] || { icon: 'all', heading: 'Nothing here', message: 'No to-dos in this list yet.' };
+    scheduled: { icon: 'clock', heading: 'Nothing scheduled', message: 'Give an item a date and it will show up here, grouped by when it is due.' },
+    all: { icon: 'all', heading: 'A fresh start', message: 'No items yet. Capture the first thing on your mind.' },
+    flagged: { icon: 'flag', heading: 'Nothing flagged', message: 'Mark an item urgent and it will wait for you here.' },
+    completed: { icon: 'done', heading: 'No history yet', message: 'Finished items land here for the next 30 days.' },
+  }[view] || { icon: 'all', heading: 'Nothing here', message: 'No items in this list yet.' };
   const children = [
     el('span', { html: ICON(copy.icon) }),
     el('h3', { class: 'empty-heading', text: copy.heading }),
-    el('p', { text: state.search ? 'No matching to-dos' : copy.message }),
+    el('p', { text: state.search ? 'No matching items' : copy.message }),
   ];
   if (state.search) {
     children.push(el('button', {
@@ -1924,12 +1924,12 @@ function resetRowDelete(button) {
   button.dataset.confirm = '';
   button.classList.remove('confirming');
   button.innerHTML = ICON('x', 'ic');
-  button.setAttribute('aria-label', button.dataset.origLabel || 'Delete to-do');
+  button.setAttribute('aria-label', button.dataset.origLabel || 'Delete item');
 }
 
 function handleRowDelete(reminder, button) {
   if (button.dataset.confirm !== '1') {
-    if (!button.dataset.origLabel) button.dataset.origLabel = button.getAttribute('aria-label') || 'Delete to-do';
+    if (!button.dataset.origLabel) button.dataset.origLabel = button.getAttribute('aria-label') || 'Delete item';
     button.dataset.confirm = '1';
     button.classList.add('confirming');
     button.textContent = 'Confirm?';
@@ -1970,7 +1970,7 @@ function deleteReminderInline(reminder, row) {
       await api('/api/reminders/' + reminder.id, { method: 'DELETE' });
       await loadState();
       render();
-      toast('To-do deleted');
+      toast('Item deleted');
     } catch (err) {
       toast(err.message);
       await loadState();
@@ -2232,7 +2232,7 @@ async function loadHistory(id) {
 
 // Removing the skip record entirely: if the occurrence sits before the
 // series' current date the server moves the series back to it, so refresh
-// the editor's date fields too when that to-do is open.
+// the editor's date fields too when that item is open.
 async function undoSkip(id, occurrenceAt) {
   try {
     const result = await api('/api/reminders/' + id + '/unskip', {
@@ -2257,9 +2257,9 @@ async function undoSkip(id, occurrenceAt) {
   }
 }
 
-// A new to-do asks for a name and nothing else: notes, date, time, repeat
+// A new item asks for a name and nothing else: notes, date, time, repeat
 // and list options stay behind More options until asked for. Editing an
-// existing to-do always shows everything.
+// existing item always shows everything.
 let editorSnapshot = null;
 
 // Only compare values that the save actually sends: inactive date/time, the
@@ -2337,7 +2337,7 @@ function setEditorMode(editing) {
   clearTimeout(more._hideTimer);
   const submit = $('#editor-submit');
   submit.textContent = editing ? 'Save' : 'Add';
-  submit.setAttribute('aria-label', editing ? 'Save to-do' : 'Add to-do');
+  submit.setAttribute('aria-label', editing ? 'Save item' : 'Add item');
   if (editing) {
     quick.hidden = true;
     more.hidden = false;
@@ -2484,7 +2484,7 @@ async function saveEditor(event) {
   const repeatValue = $('#e-repeat').value;
   let repeatRule = 'none';
   if (repeatValue !== 'none') {
-    if (!dateOn) return toast('Repeating to-dos need a date');
+    if (!dateOn) return toast('Repeating items need a date');
     if (repeatValue === 'custom') {
       const interval = Math.max(1, Math.min(366, Number($('#e-repeat-interval').value) || 1));
       repeatRule = { type: 'custom', interval, unit: $('#e-repeat-unit').value };
@@ -2646,7 +2646,7 @@ function clearParse() {
 
 async function deleteReminder() {
   if (!state.editingId) return;
-  if (!window.confirm('Delete this to-do?')) return;
+  if (!window.confirm('Delete this item?')) return;
   try {
     await api('/api/reminders/' + state.editingId, { method: 'DELETE' });
     closeSheet('#editor');
@@ -2770,7 +2770,7 @@ async function saveList(event) {
 
 async function deleteList() {
   if (!state.editingListId) return;
-  if (!window.confirm('Delete this list and all of its to-dos?')) return;
+  if (!window.confirm('Delete this list and all of its items?')) return;
   const id = state.editingListId;
   try {
     await api('/api/lists/' + id, { method: 'DELETE' });
@@ -2816,8 +2816,8 @@ async function syncPushState() {
 function updateNotifyUI() {
   const enabled = Boolean(state.subscription);
   $('#notify-status').textContent = enabled
-    ? 'Notifications are on for this device. You will be notified when a to-do is due.'
-    : 'Allow ToDo to send a notification when a to-do is due.';
+    ? 'Notifications are on for this device. You will be notified when an item is due.'
+    : 'Allow ToDo to send a notification when an item is due.';
   $('#notify-enable').hidden = enabled;
   $('#notify-test').hidden = !enabled;
   $('#notify-disable').hidden = !enabled;
@@ -2991,7 +2991,7 @@ function resetSwipe(row) {
     action.dataset.confirm = '';
     const label = action.querySelector('.del-label');
     if (label) label.textContent = 'Delete';
-    action.setAttribute('aria-label', 'Delete to-do');
+    action.setAttribute('aria-label', 'Delete item');
   }
 }
 
@@ -3008,7 +3008,7 @@ function snapSwipeOpen(row) {
     action.dataset.confirm = '';
     const label = action.querySelector('.del-label');
     if (label) label.textContent = 'Delete';
-    action.setAttribute('aria-label', 'Delete to-do');
+    action.setAttribute('aria-label', 'Delete item');
   }
 }
 
@@ -3148,7 +3148,7 @@ function renderDeviceZoneRow() {
   const s = state.settings;
   const serverZone = s.device_zone || '';
   $('#device-zone-label').textContent = serverZone
-    ? `Floating to-dos follow ${serverZone} — the last zone a device confirmed${s.device_zone_updated_at ? ` (${new Date(s.device_zone_updated_at).toLocaleString()})` : ''}.`
+    ? `Floating items follow ${serverZone} — the last zone a device confirmed${s.device_zone_updated_at ? ` (${new Date(s.device_zone_updated_at).toLocaleString()})` : ''}.`
     : 'No device has confirmed its time zone yet — open the app once online.';
   const device = deviceZone();
   const useDevice = $('#zone-use-device');
@@ -3318,11 +3318,11 @@ async function saveAppSettings() {
         cacheListProgress();
         renderSidebar();
         if (defaultsChanged && notifyChanged) {
-          message = 'Saved. New-to-do defaults apply to new to-dos only; notification changes apply to all to-dos from now on.';
+          message = 'Saved. New item defaults apply to new items only; notification changes apply to all items from now on.';
         } else if (notifyChanged) {
-          message = 'Saved — applies to how all to-dos notify from now on.';
+          message = 'Saved — applies to how all items notify from now on.';
         } else if (defaultsChanged) {
-          message = 'Saved. Applies to new to-dos only — existing to-dos were not changed.';
+          message = 'Saved. Applies to new items only — existing items were not changed.';
         } else {
           message = 'Saved — list progress now follows you on all devices.';
         }
@@ -3489,7 +3489,7 @@ async function importBackupFile(file) {
     const data = JSON.parse(await file.text());
     const result = await api('/api/import', { method: 'POST', body: { data } });
     importMessage(
-      `Imported ${result.listsAdded} lists and ${result.remindersAdded} to-dos ` +
+      `Imported ${result.listsAdded} lists and ${result.remindersAdded} items ` +
       `(${result.listsSkipped + result.remindersSkipped + result.occurrencesSkipped} skipped as already present).`,
       true
     );
@@ -3634,7 +3634,7 @@ function scheduleSearch() {
   }, 220);
 }
 
-// Open to-dos are all in /api/state, but completed history is not (30-day
+// Open items are all in /api/state, but completed history is not (30-day
 // cutoff), so the server searches the database. On a network failure fall
 // back to the loaded reminders and say the history is incomplete.
 async function runSearch(query) {

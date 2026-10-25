@@ -2255,7 +2255,7 @@ body.sheet-open .sidebar {
     max-height: 94dvh;
   }
 
-  /* New to-do: compact content-height card docked at the bottom instead of
+  /* New item: compact content-height card docked at the bottom instead of
      a mostly empty full-height sheet. Expanding grows within the viewport
      and scrolls as needed. Editing keeps the full-height sheet above. */
   #editor.is-new .editor-card {

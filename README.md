@@ -2,6 +2,10 @@
 
 A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due dates, urgent flags, recurring reminders, natural-language quick add, smart lists, floating time zones, a token API for external agents, completed history, dark mode, and web push. No frontend framework and no build step.
 
+## What's New in v2.7.2
+
+- **Item wording everywhere** — the rest of the interface now says **item** / **items** to match the **New Item / Edit Item / Delete Item** controls: hints, empty states, confirmations, toasts, accessibility labels, token and import copy, the notification fallback, and API error messages. The app name **ToDo** and the **Your TODOs** home heading are unchanged. Service worker cache bumped to `todo-v2.7.2`.
+
 ## What's New in v2.7.1
 
 - **List progress syncs across devices** — the **List progress** and **Progress counts** choices now live in your server settings instead of this device's localStorage, so the phone and desktop show the same thing. Settings still previews instantly; **Save** applies the choice everywhere, **Cancel** leaves it untouched. Existing device-local choices migrate on first load. Theme and density stay per-device. Service worker cache bumped to `todo-v2.7.1`.

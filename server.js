@@ -377,7 +377,7 @@ function parseRuleColumn(value) {
 async function completeReminder(id) {
   const reminder = await loadReminder(id);
   if (!reminder) {
-    const err = new Error('To-do not found');
+    const err = new Error('Item not found');
     err.status = 404;
     throw err;
   }
@@ -394,7 +394,7 @@ async function completeReminder(id) {
   // Recurring: completing records this occurrence and advances the series.
   // The series itself is never marked completed.
   if (!reminder.due_at) {
-    const err = new Error('Repeating to-dos need a date');
+    const err = new Error('Repeating items need a date');
     err.status = 400;
     throw err;
   }
@@ -432,13 +432,13 @@ async function completeReminder(id) {
 async function skipOccurrence(id) {
   const reminder = await loadReminder(id);
   if (!reminder) {
-    const err = new Error('To-do not found');
+    const err = new Error('Item not found');
     err.status = 404;
     throw err;
   }
   const rule = parseRuleColumn(reminder.repeat_rule);
   if (!recurrence.isRecurringRule(rule) || !reminder.due_at) {
-    const err = new Error('Only dated repeating to-dos can skip an occurrence');
+    const err = new Error('Only dated repeating items can skip an occurrence');
     err.status = 400;
     throw err;
   }
@@ -467,13 +467,13 @@ async function skipOccurrence(id) {
 async function unskipOccurrence(id, occurrenceAt) {
   const reminder = await loadReminder(id);
   if (!reminder) {
-    const err = new Error('To-do not found');
+    const err = new Error('Item not found');
     err.status = 404;
     throw err;
   }
   const rule = parseRuleColumn(reminder.repeat_rule);
   if (!recurrence.isRecurringRule(rule) || !reminder.due_at) {
-    const err = new Error('Only dated repeating to-dos can undo a skip');
+    const err = new Error('Only dated repeating items can undo a skip');
     err.status = 400;
     throw err;
   }
@@ -531,7 +531,7 @@ async function unskipOccurrence(id, occurrenceAt) {
 async function snoozeReminder(id, untilISO) {
   const reminder = await loadReminder(id);
   if (!reminder) {
-    const err = new Error('To-do not found');
+    const err = new Error('Item not found');
     err.status = 404;
     throw err;
   }
@@ -550,7 +550,7 @@ async function snoozeReminder(id, untilISO) {
 async function clearSnooze(id) {
   const reminder = await loadReminder(id);
   if (!reminder) {
-    const err = new Error('To-do not found');
+    const err = new Error('Item not found');
     err.status = 404;
     throw err;
   }
@@ -566,7 +566,7 @@ async function clearSnooze(id) {
 async function rescheduleReminder(id, target) {
   const reminder = await loadReminder(id);
   if (!reminder) {
-    const err = new Error('To-do not found');
+    const err = new Error('Item not found');
     err.status = 404;
     throw err;
   }
@@ -778,7 +778,7 @@ async function main() {
       return res.status(400).json({ error: 'Invalid action' });
     }
     const reminder = await loadReminder(id);
-    if (!reminder) return res.status(404).json({ error: 'To-do not found' });
+    if (!reminder) return res.status(404).json({ error: 'Item not found' });
     if (!occurrence || reminder.due_at !== occurrence) {
       return res.status(409).json({ error: 'That notification is for an old occurrence' });
     }
@@ -912,7 +912,7 @@ async function main() {
   }
 
   // Lets the PWA ask "what would this zone change do?" before committing it,
-  // so a second device in another zone cannot silently move floating to-dos.
+  // so a second device in another zone cannot silently move floating items.
   app.post('/api/settings/zone-preview', async (req, res) => {
     if (req.token) return denyToken(res);
     const zone = typeof req.body.zone === 'string' ? req.body.zone : '';
@@ -933,7 +933,7 @@ async function main() {
       return res.status(400).json({ error: 'Unknown timezone' });
     }
     const restore = Array.isArray(req.body.restore) ? req.body.restore : [];
-    if (restore.length > 500) return res.status(400).json({ error: 'Too many to-dos to restore' });
+    if (restore.length > 500) return res.status(400).json({ error: 'Too many items to restore' });
     let restored = 0;
     for (const item of restore) {
       if (!item || typeof item !== 'object') continue;
@@ -1308,7 +1308,7 @@ async function main() {
   // Per-occurrence history for one recurring reminder (newest first).
   app.get('/api/reminders/:id/occurrences', async (req, res) => {
     const id = parseId(req.params.id);
-    if (!id) return res.status(400).json({ error: 'Invalid to-do' });
+    if (!id) return res.status(400).json({ error: 'Invalid item' });
     const rows = await db.all(
       `SELECT occurrence_at, status, title, notes, completed_at, created_at
        FROM reminder_occurrences WHERE reminder_id = ? ORDER BY occurrence_at DESC LIMIT 25`,
@@ -1344,7 +1344,7 @@ async function main() {
       route, key, fingerprint: payloadFingerprint(body),
       execute: async () => {
         const current = await loadReminder(id);
-        if (!current) return { status: 404, body: { error: 'To-do not found' } };
+        if (!current) return { status: 404, body: { error: 'Item not found' } };
         const epochGuard = await guardEpoch(body.base_epoch);
         if (epochGuard) return epochGuard;
         const occGuard = await guardOccurrence(id, current, body.occurrence_at, 'skip');
@@ -1390,7 +1390,7 @@ async function main() {
       route, key, fingerprint: payloadFingerprint(body),
       execute: async () => {
         const current = await loadReminder(id);
-        if (!current) return { status: 404, body: { error: 'To-do not found' } };
+        if (!current) return { status: 404, body: { error: 'Item not found' } };
         const epochGuard = await guardEpoch(body.base_epoch);
         if (epochGuard) return epochGuard;
         const revGuard = await guardRevision(current, body.base_revision);
@@ -1439,13 +1439,13 @@ async function main() {
       route, key, fingerprint: payloadFingerprint(body),
       execute: async () => {
         const current = await loadReminder(id);
-        if (!current) return { status: 404, body: { error: 'To-do not found' } };
+        if (!current) return { status: 404, body: { error: 'Item not found' } };
         const epochGuard = await guardEpoch(body.base_epoch);
         if (epochGuard) return epochGuard;
         const revGuard = await guardRevision(current, body.base_revision);
         if (revGuard) return revGuard;
         if (!current.due_at) {
-          return { status: 400, body: { error: 'Only dated to-dos can be rescheduled' } };
+          return { status: 400, body: { error: 'Only dated items can be rescheduled' } };
         }
         try {
           const result = await rescheduleReminder(id, body.date);
@@ -1463,7 +1463,7 @@ async function main() {
       return writeSkip(req, res, id);
     }
     if (req.token) return denyToken(res);
-    if (!id) return res.status(400).json({ error: 'Invalid to-do' });
+    if (!id) return res.status(400).json({ error: 'Invalid item' });
     try {
       const result = await skipOccurrence(id);
       res.json({ ok: true, nextDue: result.nextDue });
@@ -1475,7 +1475,7 @@ async function main() {
   app.post('/api/reminders/:id/unskip', async (req, res) => {
     const id = parseId(req.params.id);
     if (req.token) return denyToken(res);
-    if (!id) return res.status(400).json({ error: 'Invalid to-do' });
+    if (!id) return res.status(400).json({ error: 'Invalid item' });
     try {
       const result = await unskipOccurrence(id, req.body ? req.body.occurrence_at : undefined);
       res.json({ ok: true, dueAt: result.dueAt });
@@ -1490,7 +1490,7 @@ async function main() {
       return writeSnooze(req, res, id);
     }
     if (req.token) return denyToken(res);
-    if (!id) return res.status(400).json({ error: 'Invalid to-do' });
+    if (!id) return res.status(400).json({ error: 'Invalid item' });
     try {
       if (req.body.clear) {
         await clearSnooze(id);
@@ -1513,10 +1513,10 @@ async function main() {
       return writeReschedule(req, res, id);
     }
     if (req.token) return denyToken(res);
-    if (!id) return res.status(400).json({ error: 'Invalid to-do' });
+    if (!id) return res.status(400).json({ error: 'Invalid item' });
     const reminder = await loadReminder(id);
-    if (!reminder) return res.status(404).json({ error: 'To-do not found' });
-    if (!reminder.due_at) return res.status(400).json({ error: 'Only dated to-dos can be rescheduled' });
+    if (!reminder) return res.status(404).json({ error: 'Item not found' });
+    if (!reminder.due_at) return res.status(400).json({ error: 'Only dated items can be rescheduled' });
     try {
       const result = await rescheduleReminder(id, req.body.date);
       res.json({ ok: true, dueAt: result.dueAt });
@@ -1665,9 +1665,9 @@ async function main() {
   });
 
   // Full-history search for the UI: /api/state only carries 30 days of
-  // completed to-dos, so older matches have to come from the database.
+  // completed items, so older matches have to come from the database.
   // Open matches are returned first; each group is capped independently so a
-  // long completed history cannot crowd out active to-dos.
+  // long completed history cannot crowd out active items.
   app.get('/api/search', async (req, res) => {
     if (req.token) return denyToken(res);
     const query = text(req.query.q, 200);
@@ -1779,11 +1779,11 @@ async function main() {
 
   app.get('/api/reminders/:id', async (req, res) => {
     const id = parseId(req.params.id);
-    if (!id) return res.status(400).json({ error: 'Invalid to-do' });
+    if (!id) return res.status(400).json({ error: 'Invalid item' });
     const reminder = await db.get(
       `SELECT ${REMINDER_COLUMNS} FROM reminders WHERE id = ?`, [id]
     );
-    if (!reminder) return res.status(404).json({ error: 'To-do not found' });
+    if (!reminder) return res.status(404).json({ error: 'Item not found' });
     res.json({ reminder });
   });
 
@@ -1920,7 +1920,7 @@ async function main() {
       failWith(err.status || 500, err.message || 'Server error');
     }
     if (recurrence.isRecurringRule(rule) && !dueAtRaw) {
-      failWith(400, 'Repeating to-dos need a date');
+      failWith(400, 'Repeating items need a date');
     }
 
     const settings = await getSettings();
@@ -1945,7 +1945,7 @@ async function main() {
         timeZone = recurrence.isValidTimeZone(settings.default_time_zone)
           ? settings.default_time_zone : null;
       }
-      if (!timeZone) failWith(400, 'Zone-anchored to-dos need a time_zone');
+      if (!timeZone) failWith(400, 'Zone-anchored items need a time_zone');
     }
     if (timeModel === 'floating' && !timeZone) {
       const deviceZone = typeof body.device_zone === 'string' ? body.device_zone : '';
@@ -2085,7 +2085,7 @@ async function main() {
   async function guardRevision(current, baseRevision) {
     if (current.revision === baseRevision) return null;
     const fresh = await loadReminder(current.id);
-    return { status: 409, body: { error: 'To-do changed since your read', reminder: fresh } };
+    return { status: 409, body: { error: 'Item changed since your read', reminder: fresh } };
   }
   // Occurrence precondition for write-profile complete/skip on recurring
   // series (closes the double-advance retry hazard). Returns a finished
@@ -2095,11 +2095,11 @@ async function main() {
     const rule = parseRuleColumn(current.repeat_rule);
     if (!recurrence.isRecurringRule(rule) || !current.due_at) {
       return action === 'skip'
-        ? { status: 400, body: { error: 'Only dated repeating to-dos can skip an occurrence' } }
+        ? { status: 400, body: { error: 'Only dated repeating items can skip an occurrence' } }
         : null;
     }
     if (occurrenceAt === undefined) {
-      throw tokenWriteError(400, 'occurrence_at is required for this operation on a recurring to-do');
+      throw tokenWriteError(400, 'occurrence_at is required for this operation on a recurring item');
     }
     if (occurrenceAt === current.due_at) return null;
     const row = await db.get(
@@ -2130,7 +2130,7 @@ async function main() {
       route, key, fingerprint: payloadFingerprint(body),
       execute: async () => {
         const current = await loadReminder(id);
-        if (!current) return { status: 404, body: { error: 'To-do not found' } };
+        if (!current) return { status: 404, body: { error: 'Item not found' } };
         const epochGuard = await guardEpoch(body.base_epoch);
         if (epochGuard) return epochGuard;
 
@@ -2164,7 +2164,7 @@ async function main() {
 
         if (scope === 'occurrence') {
           if (!recurring || !current.due_at) {
-            return { status: 400, body: { error: 'Only dated repeating to-dos have occurrences to edit' } };
+            return { status: 400, body: { error: 'Only dated repeating items have occurrences to edit' } };
           }
           const allowed = ['title', 'notes', 'list_id', 'urgent'];
           const provided = Object.keys(body).filter((k) => !['scope', 'base_revision', 'base_epoch'].includes(k));
@@ -2257,7 +2257,7 @@ async function main() {
             ? normalizeDate(body.due_at)
             : current.due_at;
           if (recurrence.isRecurringRule(rule)) {
-            if (!dueForAnchor) return { status: 400, body: { error: 'Repeating to-dos need a date' } };
+            if (!dueForAnchor) return { status: 400, body: { error: 'Repeating items need a date' } };
             rule = recurrence.anchorRule(rule, dueForAnchor, zone);
           }
           fields.push('repeat_rule = ?');
@@ -2270,7 +2270,7 @@ async function main() {
           }
           const zone = body.time_zone !== undefined ? body.time_zone : current.time_zone;
           if (model === 'anchored' && !(typeof zone === 'string' && recurrence.isValidTimeZone(zone))) {
-            return { status: 400, body: { error: 'Zone-anchored to-dos need a valid time_zone' } };
+            return { status: 400, body: { error: 'Zone-anchored items need a valid time_zone' } };
           }
           fields.push('time_model = ?');
           params.push(model);
@@ -2286,7 +2286,7 @@ async function main() {
         if (body.completed !== undefined) {
           const completed = body.completed ? 1 : 0;
           if (recurring && !completed) {
-            return { status: 400, body: { error: 'Recurring to-dos stay open — use Skip for an occurrence' } };
+            return { status: 400, body: { error: 'Recurring items stay open — use Skip for an occurrence' } };
           }
           fields.push('completed = ?');
           params.push(completed);
@@ -2319,8 +2319,8 @@ async function main() {
           `UPDATE reminders SET ${fields.join(', ')} WHERE id = ? AND revision = ?`, params);
         if (!updated.changes) {
           const fresh = await loadReminder(id);
-          if (!fresh) return { status: 404, body: { error: 'To-do not found' } };
-          return { status: 409, body: { error: 'To-do changed since your read', reminder: fresh } };
+          if (!fresh) return { status: 404, body: { error: 'Item not found' } };
+          return { status: 409, body: { error: 'Item changed since your read', reminder: fresh } };
         }
         const reminder = await loadReminder(id);
         return { status: 200, body: { ok: true, dueChanged, reminder }, reminderId: id };
@@ -2330,12 +2330,12 @@ async function main() {
 
   app.patch('/api/reminders/:id', async (req, res) => {
     const id = parseId(req.params.id);
-    if (!id) return res.status(400).json({ error: 'Invalid to-do' });
+    if (!id) return res.status(400).json({ error: 'Invalid item' });
     if (req.token && (req.token.profile || 'legacy') === 'write') {
       return writeReminderPatch(req, res, id);
     }
     const current = await loadReminder(id);
-    if (!current) return res.status(404).json({ error: 'To-do not found' });
+    if (!current) return res.status(404).json({ error: 'Item not found' });
 
     // Legacy token scope: agents may only complete reminders through this endpoint.
     if (req.token) {
@@ -2369,7 +2369,7 @@ async function main() {
       // occurrence. The series itself is untouched and keeps its rhythm.
       // Date changes always apply to the whole series (see hint in the UI).
       if (!recurring || !current.due_at) {
-        return res.status(400).json({ error: 'Only dated repeating to-dos have occurrences to edit' });
+        return res.status(400).json({ error: 'Only dated repeating items have occurrences to edit' });
       }
       const allowed = ['title', 'notes', 'list_id', 'urgent'];
       const provided = Object.keys(req.body).filter((key) => key !== 'scope');
@@ -2465,7 +2465,7 @@ async function main() {
         ? normalizeDate(req.body.due_at)
         : current.due_at;
       if (recurrence.isRecurringRule(rule)) {
-        if (!dueForAnchor) return res.status(400).json({ error: 'Repeating to-dos need a date' });
+        if (!dueForAnchor) return res.status(400).json({ error: 'Repeating items need a date' });
         rule = recurrence.anchorRule(rule, dueForAnchor, zone);
       }
       fields.push('repeat_rule = ?');
@@ -2477,7 +2477,7 @@ async function main() {
       if (!TIME_MODELS.includes(model)) return res.status(400).json({ error: 'time_model must be fixed, floating, or anchored' });
       const zone = req.body.time_zone !== undefined ? req.body.time_zone : current.time_zone;
       if (model === 'anchored' && !(typeof zone === 'string' && recurrence.isValidTimeZone(zone))) {
-        return res.status(400).json({ error: 'Zone-anchored to-dos need a valid time_zone' });
+        return res.status(400).json({ error: 'Zone-anchored items need a valid time_zone' });
       }
       fields.push('time_model = ?');
       params.push(model);
@@ -2495,7 +2495,7 @@ async function main() {
     if (req.body.completed !== undefined) {
       const completed = req.body.completed ? 1 : 0;
       if (recurring && !completed) {
-        return res.status(400).json({ error: 'Recurring to-dos stay open — use Skip for an occurrence' });
+        return res.status(400).json({ error: 'Recurring items stay open — use Skip for an occurrence' });
       }
       fields.push('completed = ?');
       params.push(completed);
@@ -2531,9 +2531,9 @@ async function main() {
 
   app.delete('/api/reminders/:id', async (req, res) => {
     const id = parseId(req.params.id);
-    if (!id) return res.status(400).json({ error: 'Invalid to-do' });
+    if (!id) return res.status(400).json({ error: 'Invalid item' });
     const result = await db.run('DELETE FROM reminders WHERE id = ?', [id]);
-    if (!result.changes) return res.status(404).json({ error: 'To-do not found' });
+    if (!result.changes) return res.status(404).json({ error: 'Item not found' });
     res.json({ ok: true });
   });
 
