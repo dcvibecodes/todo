@@ -1669,6 +1669,9 @@ function autoGrowNotes() {
 }
 
 function timeModelLabel(reminder) {
+  // The model only changes behavior once a date exists; on an undated item
+  // the label is noise.
+  if (!reminder.due_at) return null;
   // Floating already means "this device's time"; showing a specific zone
   // there is noise (the editor discloses the last synced zone). Anchored is
   // different: its zone IS the rule, so keep it on the card.
