@@ -93,6 +93,10 @@ const SETTING_DEFAULTS = {
   repush_max: '3',
   quiet_start: '23:00',
   quiet_end: '07:00',
+  // Per-list progress display, synced across devices (like sorting).
+  // 'bar' | 'ring' | 'off', and 'all' | '30d' for what the counts cover.
+  list_progress: 'bar',
+  list_progress_range: 'all',
   // Per-view sorting, synced across devices. JSON string:
   // { default: {field, dir} | null, overrides: { "list:5": {field, dir},
   // "today": {...}, ... } }. Empty means no device has seeded it yet; the
@@ -152,6 +156,12 @@ function validateSetting(key, value) {
       if (!Number.isInteger(n) || n < 1 || n > 10) return 'Must be 1 to 10';
       return null;
     }
+    case 'list_progress':
+      if (!['bar', 'ring', 'off'].includes(value)) return 'Must be bar, ring, or off';
+      return null;
+    case 'list_progress_range':
+      if (!['all', '30d'].includes(value)) return 'Must be all or 30d';
+      return null;
     default:
       return 'Unknown setting';
   }

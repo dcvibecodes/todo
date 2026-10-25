@@ -2,6 +2,10 @@
 
 A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due dates, urgent flags, recurring reminders, natural-language quick add, smart lists, floating time zones, a token API for external agents, completed history, dark mode, and web push. No frontend framework and no build step.
 
+## What's New in v2.7.1
+
+- **List progress syncs across devices** — the **List progress** and **Progress counts** choices now live in your server settings instead of this device's localStorage, so the phone and desktop show the same thing. Settings still previews instantly; **Save** applies the choice everywhere, **Cancel** leaves it untouched. Existing device-local choices migrate on first load. Theme and density stay per-device. Service worker cache bumped to `todo-v2.7.1`.
+
 ## What's New in v2.7.0
 
 - **List progress in the sidebar** — each list can now show its open to-dos against its completed ones. The default **Bar with counts** draws a thin bar under the list name (the coloured part is what's done) with an "N open · M done" line; **Ring on the dot** puts the same ratio as a ring around the list's coloured dot; **Off** keeps the previous look. A second choice picks what the counts cover: **All completed** (default) or **Last 30 days**. Completed means finished items still in the list; a repeating to-do counts as open while its next occurrence is pending. Both choices live in Settings under Appearance and are device-specific, like theme and density. The Completed view is unchanged. Service worker cache bumped to `todo-v2.7.0`.

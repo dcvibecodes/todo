@@ -108,30 +108,91 @@ function announce(message) {
 
 const DENSITY_KEY = 'todo-density';
 const LIST_PROGRESS_KEY = 'todo.listProgress';
+const LIST_PROGRESS_RANGE_KEY = 'todo.listProgressRange';
+const LIST_PROGRESS_SYNCED_KEY = 'todo.listProgressSynced';
+const LIST_PROGRESS_MODES = ['bar', 'ring', 'off'];
+const LIST_PROGRESS_RANGES = ['all', '30d'];
+const SETTINGS_PROGRESS_KEYS = ['list_progress', 'list_progress_range'];
 
 // Sidebar list progress display: 'bar' (bar with counts), 'ring' (ring on
-// the dot) or 'off'. Device-local like theme and density.
+// the dot) or 'off'. Synced through settings; localStorage is only an
+// offline/last-known cache so a server value always wins.
 function getListProgress() {
-  const value = localStorage.getItem(LIST_PROGRESS_KEY);
-  return ['bar', 'ring', 'off'].includes(value) ? value : 'bar';
+  const value = state.settings.list_progress;
+  if (LIST_PROGRESS_MODES.includes(value)) return value;
+  const cached = localStorage.getItem(LIST_PROGRESS_KEY);
+  return LIST_PROGRESS_MODES.includes(cached) ? cached : 'bar';
 }
-
-function applyListProgress(value) {
-  localStorage.setItem(LIST_PROGRESS_KEY, ['bar', 'ring', 'off'].includes(value) ? value : 'bar');
-  renderSidebar();
-}
-
-const LIST_PROGRESS_RANGE_KEY = 'todo.listProgressRange';
 
 // Which completions the bar/ring counts: 'all' (every completed item kept in
-// the list) or '30d' (completed in the last 30 days). Device-local too.
+// the list) or '30d' (completed in the last 30 days). Synced too.
 function getListProgressRange() {
+  const value = state.settings.list_progress_range;
+  if (LIST_PROGRESS_RANGES.includes(value)) return value;
   return localStorage.getItem(LIST_PROGRESS_RANGE_KEY) === '30d' ? '30d' : 'all';
 }
 
-function applyListProgressRange(value) {
-  localStorage.setItem(LIST_PROGRESS_RANGE_KEY, value === '30d' ? '30d' : 'all');
+// Settings-sheet preview: mutate the in-memory value and re-render; Save
+// commits it to the server, Cancel restores the snapshot.
+function previewListProgress(value) {
+  state.settings.list_progress = LIST_PROGRESS_MODES.includes(value) ? value : 'bar';
   renderSidebar();
+}
+
+function previewListProgressRange(value) {
+  state.settings.list_progress_range = LIST_PROGRESS_RANGES.includes(value) ? value : 'all';
+  renderSidebar();
+}
+
+function cacheListProgress() {
+  if (LIST_PROGRESS_MODES.includes(state.settings.list_progress)) {
+    localStorage.setItem(LIST_PROGRESS_KEY, state.settings.list_progress);
+  }
+  if (LIST_PROGRESS_RANGES.includes(state.settings.list_progress_range)) {
+    localStorage.setItem(LIST_PROGRESS_RANGE_KEY, state.settings.list_progress_range);
+  }
+}
+
+// One-time bridge from the device-local v2.7.0 preference: if this browser
+// still has a choice that differs from the server default, seed it on the
+// server so an upgrade does not silently reset the display. Skipped when the
+// server already holds a v2.7.1 choice (a different device won that race).
+async function syncListProgressWithServer() {
+  const localProgress = localStorage.getItem(LIST_PROGRESS_KEY);
+  const localRange = localStorage.getItem(LIST_PROGRESS_RANGE_KEY);
+  const seed = {};
+  if (LIST_PROGRESS_MODES.includes(localProgress) && localProgress !== state.settings.list_progress) {
+    seed.list_progress = localProgress;
+  }
+  if (LIST_PROGRESS_RANGES.includes(localRange) && localRange !== state.settings.list_progress_range) {
+    seed.list_progress_range = localRange;
+  }
+  const finish = () => {
+    cacheListProgress();
+    localStorage.setItem(LIST_PROGRESS_SYNCED_KEY, '1');
+  };
+  if (localStorage.getItem(LIST_PROGRESS_SYNCED_KEY)) {
+    cacheListProgress();
+    return;
+  }
+  const serverAtDefaults = state.settings.list_progress === 'bar'
+    && state.settings.list_progress_range === 'all';
+  if (!serverAtDefaults) {
+    finish();
+    return;
+  }
+  if (!Object.keys(seed).length) {
+    finish();
+    return;
+  }
+  try {
+    const result = await api('/api/settings', { method: 'POST', body: { settings: seed } });
+    state.settings = result.settings || state.settings;
+    finish();
+  } catch {
+    // Offline or a rejected value: keep this device's cached choice and
+    // migrate on a later load.
+  }
 }
 
 function applyDensity() {
@@ -569,6 +630,7 @@ async function loadState() {
   state.lists = data.lists || [];
   state.reminders = data.reminders || [];
   state.settings = data.settings || {};
+  await syncListProgressWithServer();
   await syncSortWithServer();
   if (state.lastListId && !listById(state.lastListId)) {
     state.lastListId = state.lists[0] ? state.lists[0].id : null;
@@ -2871,7 +2933,7 @@ function closeTopSheet() {
   const open = $$('.sheet').filter((sheet) => !sheet.hidden);
   if (open.length) {
     const sheet = open[open.length - 1];
-    if (sheet.id === 'settings-sheet') revertSettingsAppearance();
+    if (sheet.id === 'settings-sheet') revertSettingsPreview();
     sheet.hidden = true;
   }
   syncSheetState();
@@ -3105,8 +3167,6 @@ function appearanceValues() {
   return {
     theme: themePreference,
     density: localStorage.getItem(DENSITY_KEY) === 'compact' ? 'compact' : 'comfortable',
-    progress: getListProgress(),
-    progressRange: getListProgressRange(),
   };
 }
 
@@ -3114,9 +3174,7 @@ function appearanceIsDirty() {
   if (!appearanceSnapshot) return false;
   const current = appearanceValues();
   return current.theme !== appearanceSnapshot.theme
-    || current.density !== appearanceSnapshot.density
-    || current.progress !== appearanceSnapshot.progress
-    || current.progressRange !== appearanceSnapshot.progressRange;
+    || current.density !== appearanceSnapshot.density;
 }
 
 function revertSettingsAppearance() {
@@ -3127,15 +3185,22 @@ function revertSettingsAppearance() {
     localStorage.setItem(DENSITY_KEY, appearanceSnapshot.density);
     applyDensity();
   }
-  if (current.progress !== appearanceSnapshot.progress) {
-    applyListProgress(appearanceSnapshot.progress);
-    $('#set-list-progress').value = appearanceSnapshot.progress;
-  }
-  if (current.progressRange !== appearanceSnapshot.progressRange) {
-    applyListProgressRange(appearanceSnapshot.progressRange);
-    $('#set-list-progress-range').value = appearanceSnapshot.progressRange;
-  }
   appearanceSnapshot = null;
+}
+
+// Cancel/backdrop/Escape: undo the live previews that are not committed by
+// Save — device appearance (theme/density) and the server-backed list
+// progress choices.
+function revertSettingsPreview() {
+  revertSettingsAppearance();
+  if (settingsSnapshot) {
+    for (const key of SETTINGS_PROGRESS_KEYS) {
+      if (key in settingsSnapshot) state.settings[key] = settingsSnapshot[key];
+    }
+    $('#set-list-progress').value = getListProgress();
+    $('#set-list-progress-range').value = getListProgressRange();
+    renderSidebar();
+  }
 }
 
 function settingsValues() {
@@ -3148,6 +3213,8 @@ function settingsValues() {
     repush_max: $('#set-repush-max').value,
     quiet_start: $('#set-quiet-start').value,
     quiet_end: $('#set-quiet-end').value,
+    list_progress: $('#set-list-progress').value,
+    list_progress_range: $('#set-list-progress-range').value,
   };
 }
 
@@ -3227,9 +3294,10 @@ async function saveAppSettings() {
   const changed = (keys) => keys.some((key) => current[key] !== previous[key]);
   const defaultsChanged = changed(SETTINGS_DEFAULT_KEYS);
   const notifyChanged = changed(SETTINGS_NOTIFY_KEYS);
+  const progressChanged = changed(SETTINGS_PROGRESS_KEYS);
   const appearanceDirty = appearanceIsDirty();
   const sortChanged = sortIsDirty();
-  if (!defaultsChanged && !notifyChanged && !appearanceDirty && !sortChanged) return;
+  if (!defaultsChanged && !notifyChanged && !progressChanged && !appearanceDirty && !sortChanged) return;
 
   const saveBtn = $('#settings-save');
   const startedAt = Date.now();
@@ -3239,7 +3307,7 @@ async function saveAppSettings() {
   $('#settings-sheet').setAttribute('aria-busy', 'true');
   try {
     let message = '';
-    if (defaultsChanged || notifyChanged) {
+    if (defaultsChanged || notifyChanged || progressChanged) {
       try {
         const result = await api('/api/settings', {
           method: 'POST',
@@ -3247,12 +3315,16 @@ async function saveAppSettings() {
         });
         state.settings = result.settings || state.settings;
         settingsSnapshot = current;
+        cacheListProgress();
+        renderSidebar();
         if (defaultsChanged && notifyChanged) {
           message = 'Saved. New-to-do defaults apply to new to-dos only; notification changes apply to all to-dos from now on.';
         } else if (notifyChanged) {
           message = 'Saved — applies to how all to-dos notify from now on.';
-        } else {
+        } else if (defaultsChanged) {
           message = 'Saved. Applies to new to-dos only — existing to-dos were not changed.';
+        } else {
+          message = 'Saved — list progress now follows you on all devices.';
         }
         $('#settings-msg').hidden = true;
       } catch (err) {
@@ -3274,7 +3346,12 @@ async function saveAppSettings() {
         ? `${message} Sorting applied to all lists.`
         : 'Saved — sorting applied to all lists.';
     }
-    if (!message) message = 'Saved — appearance applies to this device.';
+    if (appearanceDirty) {
+      message = message
+        ? `${message} Appearance applies to this device.`
+        : 'Saved — appearance applies to this device.';
+    }
+    if (!message) message = 'Saved.';
     toast(message);
     appearanceSnapshot = null;
     saveBtn.disabled = true;
@@ -3493,10 +3570,10 @@ $('#set-density').addEventListener('change', () => {
   applyDensity();
 });
 $('#set-list-progress').addEventListener('change', () => {
-  applyListProgress($('#set-list-progress').value);
+  previewListProgress($('#set-list-progress').value);
 });
 $('#set-list-progress-range').addEventListener('change', () => {
-  applyListProgressRange($('#set-list-progress-range').value);
+  previewListProgressRange($('#set-list-progress-range').value);
 });
 $('#zone-use-device').addEventListener('click', useThisDeviceZone);
 $('#zone-keep').addEventListener('click', keepDeviceZone);
@@ -3705,7 +3782,7 @@ document.addEventListener('click', (event) => {
   if (closer) {
     const sheet = closer.closest('.sheet');
     if (sheet) {
-      if (sheet.id === 'settings-sheet') revertSettingsAppearance();
+      if (sheet.id === 'settings-sheet') revertSettingsPreview();
       sheet.hidden = true;
       syncSheetState();
     }
