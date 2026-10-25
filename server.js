@@ -93,7 +93,7 @@ const SETTING_DEFAULTS = {
   repush_max: '3',
   quiet_start: '23:00',
   quiet_end: '07:00',
-  // Per-view sorting, synced across devices. JSON string: JSON string:
+  // Per-view sorting, synced across devices. JSON string:
   // { default: {field, dir} | null, overrides: { "list:5": {field, dir},
   // "today": {...}, ... } }. Empty means no device has seeded it yet; the
   // web app then falls back to its own local sorting and offers it as the
