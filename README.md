@@ -2,6 +2,10 @@
 
 A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due dates, urgent flags, recurring reminders, natural-language quick add, smart lists, floating time zones, a token API for external agents, completed history, dark mode, and web push. No frontend framework and no build step.
 
+## What's New in v2.5.0
+
+- **Each list remembers its own sorting** — the Sort controls in a list or smart view now save the field (due date, date added, name) and direction for that view only, and the choice survives reloads. Views without their own choice fall back to the app default, which starts from the previous global sorting so nothing jumps on upgrade. Settings gains a **Sorting** group with a one-time "Apply to all lists" action that sets every list and view to the chosen sorting (lists are not linked afterwards — each can still pick its own). On the Scheduled view the same controls save a Scheduled-only choice that orders rows within each bucket; the chronological buckets themselves (and the pinned Overdue section) never change. The Home view is unchanged. Service worker cache bumped to `todo-v2.5.0`.
+
 ## What's New in v2.4.0
 
 - **Scheduled groups by time bucket, not by date** — after the pinned Overdue section, upcoming to-dos now land in **Today**, **Tomorrow**, **This Week**, **Next Week**, **Later This Month** and **Later** headings instead of one heading per date. Each to-do appears once, in the first bucket it fits, and its row still shows the exact due date and time. Weeks run Monday to Sunday; buckets with nothing in them are hidden. The Today and Home views are unchanged. Service worker cache bumped to `todo-v2.4.0`.

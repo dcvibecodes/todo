@@ -33,8 +33,11 @@ const state = {
   csrfToken: null,
   subscription: null,
   editScope: 'series',
-  sortField: localStorage.getItem('todo.sortField') || 'due',
-  sortDir: localStorage.getItem('todo.sortDir') || 'asc',
+  sortDefault: {
+    field: localStorage.getItem('todo.sortField') || 'due',
+    dir: localStorage.getItem('todo.sortDir') || 'asc',
+  },
+  sortOverrides: readSortOverrides(),
   lastListId: Number(localStorage.getItem('todo.lastList')) || null,
 };
 
@@ -671,14 +674,56 @@ function matchesSearch(reminder) {
     || (reminder.notes || '').toLowerCase().includes(needle);
 }
 
-function compareReminders(a, b) {
-  const direction = state.sortDir === 'desc' ? -1 : 1;
+function readSortOverrides() {
+  try {
+    const raw = JSON.parse(localStorage.getItem('todo.sort.v2') || '{}');
+    return raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveSortOverrides() {
+  localStorage.setItem('todo.sort.v2', JSON.stringify(state.sortOverrides));
+}
+
+// Sorting is remembered per view: each list (and each smart view, including
+// Scheduled) keeps its own field + direction. Views without their own choice
+// fall back to the app default, which starts from the pre-2.5.0 global
+// setting so nothing jumps.
+function viewSortKey(view) {
+  if (typeof view === 'number') return `list:${view}`;
+  return String(view);
+}
+
+function effectiveSort(view) {
+  const key = viewSortKey(view);
+  const override = key ? state.sortOverrides[key] : null;
+  return {
+    field: override && override.field ? override.field : state.sortDefault.field,
+    dir: override && override.dir ? override.dir : state.sortDefault.dir,
+  };
+}
+
+function setViewSort(view, patch) {
+  const key = viewSortKey(view);
+  if (!key) return;
+  const current = effectiveSort(view);
+  state.sortOverrides[key] = {
+    field: patch.field || current.field,
+    dir: patch.dir || current.dir,
+  };
+  saveSortOverrides();
+}
+
+function compareReminders(a, b, sort) {
+  const direction = sort.dir === 'desc' ? -1 : 1;
   const fallback = (a.sort_order - b.sort_order) || (a.id - b.id);
-  if (state.sortField === 'name') {
+  if (sort.field === 'name') {
     const cmp = a.title.localeCompare(b.title, undefined, { sensitivity: 'base', numeric: true });
     return cmp ? direction * cmp : fallback;
   }
-  if (state.sortField === 'created') {
+  if (sort.field === 'created') {
     const av = new Date(a.created_at || 0).getTime();
     const bv = new Date(b.created_at || 0).getTime();
     return av === bv ? fallback : direction * (av - bv);
@@ -693,8 +738,8 @@ function compareReminders(a, b) {
   return av === bv ? fallback : direction * (av - bv);
 }
 
-function sortItems(items) {
-  return [...items].sort(compareReminders);
+function sortItems(items, sort) {
+  return [...items].sort((a, b) => compareReminders(a, b, sort));
 }
 
 function viewItems() {
@@ -706,8 +751,12 @@ function viewItems() {
     items = incompleteReminders()
       .filter((reminder) => reminder.due_at && new Date(reminder.due_at) <= limit);
   } else if (view === 'scheduled') {
-    items = incompleteReminders()
-      .filter((reminder) => reminder.due_at);
+    // Buckets are assigned chronologically below; this sort only orders rows
+    // within each bucket (and the pinned Overdue section).
+    return sortItems(
+      incompleteReminders().filter((reminder) => reminder.due_at),
+      effectiveSort('scheduled'),
+    );
   } else if (view === 'flagged') {
     items = incompleteReminders()
       .filter((reminder) => reminder.urgent);
@@ -723,12 +772,13 @@ function viewItems() {
     items = [];
   }
 
-  return sortItems(items);
+  return sortItems(items, effectiveSort(view));
 }
 
 function completedInList(listId) {
   return sortItems(state.reminders
-    .filter((reminder) => reminder.list_id === listId && reminder.completed));
+    .filter((reminder) => reminder.list_id === listId && reminder.completed),
+    effectiveSort(listId));
 }
 
 // A search result can be older than the 30-day completed window that
@@ -1016,7 +1066,7 @@ function renderSearchResults(content) {
   $('#view-count').textContent = total ? String(total) : '';
   $('#view-menu').hidden = true;
 
-  const open = sortItems(state.searchOpen || []);
+  const open = sortItems(state.searchOpen || [], effectiveSort(state.view));
   const completed = [...(state.searchCompleted || [])].sort((a, b) => {
     const av = new Date(a.completed_at || 0).getTime();
     const bv = new Date(b.completed_at || 0).getTime();
@@ -1072,9 +1122,10 @@ function renderMain() {
   $('#view-menu').hidden = true;
   const sortBar = $('#sort-bar');
   sortBar.hidden = view === 'home';
-  if (view !== 'home') {
-    $('#sort-field').value = state.sortField;
-    $('#sort-dir').value = state.sortDir;
+  if (!sortBar.hidden) {
+    const sort = effectiveSort(view);
+    $('#sort-field').value = sort.field;
+    $('#sort-dir').value = sort.dir;
   }
 
   if (state.search) {
@@ -2915,6 +2966,9 @@ async function openSettings() {
   $('#set-repush-max').value = s.repush_max || '3';
   $('#set-quiet-start').value = s.quiet_start || '23:00';
   $('#set-quiet-end').value = s.quiet_end || '07:00';
+  $('#set-sort-field').value = state.sortDefault.field;
+  $('#set-sort-dir').value = state.sortDefault.dir;
+  $('#sort-apply-msg').hidden = true;
   renderDeviceZoneRow();
   $('#token-once').hidden = true;
   $('#token-name').value = '';
@@ -3367,13 +3421,24 @@ $('#e-notes').addEventListener('input', () => {
   renderEditorLinks();
 });
 $('#sort-field').addEventListener('change', (event) => {
-  state.sortField = event.target.value;
-  localStorage.setItem('todo.sortField', state.sortField);
+  setViewSort(state.view, { field: event.target.value });
   render();
 });
 $('#sort-dir').addEventListener('change', (event) => {
-  state.sortDir = event.target.value;
-  localStorage.setItem('todo.sortDir', state.sortDir);
+  setViewSort(state.view, { dir: event.target.value });
+  render();
+});
+$('#sort-apply-all').addEventListener('click', () => {
+  const field = $('#set-sort-field').value;
+  const dir = $('#set-sort-dir').value;
+  state.sortDefault = { field, dir };
+  localStorage.setItem('todo.sortField', field);
+  localStorage.setItem('todo.sortDir', dir);
+  state.sortOverrides = {};
+  saveSortOverrides();
+  const msg = $('#sort-apply-msg');
+  msg.textContent = 'Applied. Every list and view now uses this sorting; any list can still pick its own afterwards.';
+  msg.hidden = false;
   render();
 });
 $('#list-form').addEventListener('submit', saveList);

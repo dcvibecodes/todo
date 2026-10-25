@@ -504,6 +504,27 @@
           <p class="notify-hint">Floating follows the last confirmed device zone; Fixed keeps an absolute instant; Anchored pins a named zone.</p>
         </div>
         <div class="settings-group">
+          <h3>Sorting</h3>
+          <label class="settings-row" for="set-sort-field">
+            <span>Sort by</span>
+            <select id="set-sort-field">
+              <option value="due">Due date</option>
+              <option value="created">Date added</option>
+              <option value="name">Name</option>
+            </select>
+          </label>
+          <label class="settings-row" for="set-sort-dir">
+            <span>Order</span>
+            <select id="set-sort-dir">
+              <option value="asc">Ascending</option>
+              <option value="desc">Descending</option>
+            </select>
+          </label>
+          <button type="button" id="sort-apply-all" class="secondary-btn">Apply this sorting to all lists</button>
+          <p id="sort-apply-msg" class="form-msg" hidden></p>
+          <p class="notify-hint">Each list and view remembers its own sorting. This one-time action applies the "Sort by" and "Order" chosen above to every list and smart view (including Scheduled) and to lists created later; they are not linked afterwards.</p>
+        </div>
+        <div class="settings-group">
           <h3>Notifications</h3>
           <label class="settings-row" for="set-repush">
             <span>Re-push missed to-dos</span>
