@@ -1194,7 +1194,7 @@ body.sheet-open .fab {
 }
 
 /* With any sheet open the page behind is fully locked: fixed body (the
-   iOS-proof part â overflow:hidden alone doesn't stop touch scrolling),
+   iOS-proof part — overflow:hidden alone doesn't stop touch scrolling),
    hidden background scrollers, and no scroll chaining out of the sheet. */
 body.sheet-open {
   position: fixed;
