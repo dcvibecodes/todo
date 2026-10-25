@@ -1365,7 +1365,7 @@ function renderMain() {
   if (!state.lists.length) {
     content.append(el('button', {
       class: 'toggle-completed',
-      text: 'Create a list to start adding to-dos',
+      text: 'Create a list to start adding items',
       onclick: () => openListSheet(null),
     }));
   }
@@ -1374,12 +1374,12 @@ function renderMain() {
 function emptyState(view) {
   // Warmer empty states with a primary action where one makes sense.
   const copy = {
-    today: { icon: 'calendar', heading: 'All clear', message: 'Nothing is due today. Enjoy the quiet — or get ahead.', action: 'New To-Do' },
-    scheduled: { icon: 'clock', heading: 'Nothing scheduled', message: 'Give a to-do a date and it will show up here, grouped by when it is due.', action: 'New To-Do' },
-    all: { icon: 'all', heading: 'A fresh start', message: 'No to-dos yet. Capture the first thing on your mind.', action: 'New To-Do' },
-    flagged: { icon: 'flag', heading: 'Nothing flagged', message: 'Mark a to-do urgent and it will wait for you here.', action: null },
-    completed: { icon: 'done', heading: 'No history yet', message: 'Finished to-dos land here for the next 30 days.', action: null },
-  }[view] || { icon: 'all', heading: 'Nothing here', message: 'No to-dos in this list yet.', action: 'New To-Do' };
+    today: { icon: 'calendar', heading: 'All clear', message: 'Nothing is due today. Enjoy the quiet — or get ahead.' },
+    scheduled: { icon: 'clock', heading: 'Nothing scheduled', message: 'Give a to-do a date and it will show up here, grouped by when it is due.' },
+    all: { icon: 'all', heading: 'A fresh start', message: 'No to-dos yet. Capture the first thing on your mind.' },
+    flagged: { icon: 'flag', heading: 'Nothing flagged', message: 'Mark a to-do urgent and it will wait for you here.' },
+    completed: { icon: 'done', heading: 'No history yet', message: 'Finished to-dos land here for the next 30 days.' },
+  }[view] || { icon: 'all', heading: 'Nothing here', message: 'No to-dos in this list yet.' };
   const children = [
     el('span', { html: ICON(copy.icon) }),
     el('h3', { class: 'empty-heading', text: copy.heading }),
@@ -1391,13 +1391,6 @@ function emptyState(view) {
       class: 'primary-btn',
       text: 'Clear search',
       onclick: () => setSearch('', 'both'),
-    }));
-  } else if (copy.action) {
-    children.push(el('button', {
-      type: 'button',
-      class: 'primary-btn',
-      text: copy.action,
-      onclick: () => openEditor(null),
     }));
   }
   return el('div', { class: 'empty' }, children);
@@ -2288,7 +2281,7 @@ function openEditor(id) {
   hideParseChip();
 
   state.editingId = reminder ? reminder.id : null;
-  $('#editor-heading').textContent = reminder ? 'Edit To-Do' : 'New To-Do';
+  $('#editor-heading').textContent = reminder ? 'Edit To-Do' : 'New Item';
   $('#e-title').value = reminder ? reminder.title : '';
   clearFieldError($('#e-title'), $('#e-title-error'));
   $('#e-notes').value = reminder ? reminder.notes : '';
