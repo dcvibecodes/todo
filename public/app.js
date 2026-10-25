@@ -2281,7 +2281,7 @@ function openEditor(id) {
   hideParseChip();
 
   state.editingId = reminder ? reminder.id : null;
-  $('#editor-heading').textContent = reminder ? 'Edit To-Do' : 'New Item';
+  $('#editor-heading').textContent = reminder ? 'Edit Item' : 'New Item';
   $('#e-title').value = reminder ? reminder.title : '';
   clearFieldError($('#e-title'), $('#e-title-error'));
   $('#e-notes').value = reminder ? reminder.notes : '';
