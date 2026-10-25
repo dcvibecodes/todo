@@ -2,6 +2,11 @@
 
 A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due dates, urgent flags, recurring reminders, natural-language quick add, smart lists, floating time zones, a token API for external agents, completed history, dark mode, and web push. No frontend framework and no build step.
 
+## What's New in v2.6.1
+
+- **Sorting now waits for Save** — the Settings Sorting group follows the same Save/Cancel rules as the rest of the sheet: change Sort by or Order and Save enables; Save applies the choice to every list and smart view, then closes. Cancel discards it. The instant "Apply this sorting to all lists" button is gone.
+- **Clearer direction labels** — Ascending/Descending are replaced with field-aware wording: Soonest on top / Latest on top for due date, Oldest on top / Newest on top for date added, and A–Z / Z–A for name. Service worker cache bumped to `todo-v2.6.1`.
+
 ## What's New in v2.6.0
 
 - **Sorting syncs across devices** — per-view sorting (each list and smart view's field + direction) now lives on the server in the settings store instead of only in browser storage, so every signed-in device shares the same choices. The first device to open after the upgrade offers its existing local choices as the seed; other devices adopt the shared sorting. A local copy still renders instantly and covers offline use: changes made offline are queued and pushed on the next successful load, ahead of anything from the server. Every write is a single-view intent merged into the stored sorting on the server inside one transaction, so a stale tab can only change the view you just touched and cannot wipe newer choices from another device. A second device picks up changes on its next refresh, not instantly. Theme and density stay device-specific. New session-only endpoint `POST /api/settings/sort` (one intent per call: a single view, an apply-all, or a first-device seed); the sorting data rides along in `GET /api/settings` and `GET /api/state`, so the load path gains no extra request. Service worker cache bumped to `todo-v2.6.0`.
@@ -276,7 +281,7 @@ Sessions are stored in SQLite, so refreshing the page or restarting the process 
 
 ## Version
 
-2.6.0
+2.6.1
 
 ## License
 

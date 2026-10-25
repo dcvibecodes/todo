@@ -820,6 +820,19 @@ async function syncSortWithServer() {
   }
 }
 
+const SORT_DIR_LABELS = {
+  due: { asc: 'Soonest on top', desc: 'Latest on top' },
+  created: { asc: 'Oldest on top', desc: 'Newest on top' },
+  name: { asc: 'A–Z', desc: 'Z–A' },
+};
+
+function syncSortDirLabels(fieldSelect, dirSelect) {
+  const labels = SORT_DIR_LABELS[fieldSelect.value] || SORT_DIR_LABELS.due;
+  for (const option of dirSelect.options) {
+    if (labels[option.value]) option.textContent = labels[option.value];
+  }
+}
+
 // Sorting is remembered per view: each list (and each smart view, including
 // Scheduled) keeps its own field + direction. Views without their own choice
 // fall back to the app default, which starts from the pre-2.5.0 global
@@ -1267,6 +1280,7 @@ function renderMain() {
     const sort = effectiveSort(view);
     $('#sort-field').value = sort.field;
     $('#sort-dir').value = sort.dir;
+    syncSortDirLabels($('#sort-field'), $('#sort-dir'));
   }
 
   if (state.search) {
@@ -3037,6 +3051,7 @@ function renderDeviceZoneRow() {
 const SETTINGS_DEFAULT_KEYS = ['default_time_model', 'default_time_zone', 'default_time'];
 const SETTINGS_NOTIFY_KEYS = ['repush_enabled', 'repush_cadence_min', 'repush_max', 'quiet_start', 'quiet_end'];
 let settingsSnapshot = null;
+let sortSnapshot = null;
 let appearanceSnapshot = null;
 let settingsSaving = false;
 
@@ -3077,10 +3092,24 @@ function settingsValues() {
   };
 }
 
+function sortValues() {
+  return {
+    field: $('#set-sort-field').value,
+    dir: $('#set-sort-dir').value,
+  };
+}
+
+function sortIsDirty() {
+  if (!sortSnapshot) return false;
+  const current = sortValues();
+  return current.field !== sortSnapshot.field || current.dir !== sortSnapshot.dir;
+}
+
 function updateSettingsDirty(preserveMessage = false) {
   if (!settingsSnapshot) return;
   const current = settingsValues();
   const dirty = appearanceIsDirty()
+    || sortIsDirty()
     || Object.keys(current).some((key) => current[key] !== settingsSnapshot[key]);
   $('#settings-save').disabled = settingsSaving || !dirty;
   if (dirty && !preserveMessage) $('#settings-msg').hidden = true;
@@ -3109,7 +3138,7 @@ async function openSettings() {
   $('#set-quiet-end').value = s.quiet_end || '07:00';
   $('#set-sort-field').value = state.sortDefault.field;
   $('#set-sort-dir').value = state.sortDefault.dir;
-  $('#sort-apply-msg').hidden = true;
+  syncSortDirLabels($('#set-sort-field'), $('#set-sort-dir'));
   renderDeviceZoneRow();
   $('#token-once').hidden = true;
   $('#token-name').value = '';
@@ -3118,6 +3147,7 @@ async function openSettings() {
   $('#settings-sheet').removeAttribute('aria-busy');
   appearanceSnapshot = appearanceValues();
   settingsSnapshot = settingsValues();
+  sortSnapshot = sortValues();
   updateSettingsDirty();
   openSheet('#settings-sheet');
 }
@@ -3137,7 +3167,8 @@ async function saveAppSettings() {
   const defaultsChanged = changed(SETTINGS_DEFAULT_KEYS);
   const notifyChanged = changed(SETTINGS_NOTIFY_KEYS);
   const appearanceDirty = appearanceIsDirty();
-  if (!defaultsChanged && !notifyChanged && !appearanceDirty) return;
+  const sortChanged = sortIsDirty();
+  if (!defaultsChanged && !notifyChanged && !appearanceDirty && !sortChanged) return;
 
   const saveBtn = $('#settings-save');
   const startedAt = Date.now();
@@ -3146,6 +3177,7 @@ async function saveAppSettings() {
   saveBtn.disabled = true;
   $('#settings-sheet').setAttribute('aria-busy', 'true');
   try {
+    let message = '';
     if (defaultsChanged || notifyChanged) {
       try {
         const result = await api('/api/settings', {
@@ -3154,21 +3186,35 @@ async function saveAppSettings() {
         });
         state.settings = result.settings || state.settings;
         settingsSnapshot = current;
-        let message = 'Saved. Applies to new to-dos only — existing to-dos were not changed.';
         if (defaultsChanged && notifyChanged) {
           message = 'Saved. New-to-do defaults apply to new to-dos only; notification changes apply to all to-dos from now on.';
         } else if (notifyChanged) {
           message = 'Saved — applies to how all to-dos notify from now on.';
+        } else {
+          message = 'Saved. Applies to new to-dos only — existing to-dos were not changed.';
         }
         $('#settings-msg').hidden = true;
-        toast(message);
       } catch (err) {
         settingsMessage(err.message);
         return;
       }
-    } else {
-      toast('Saved — appearance applies to this device.');
     }
+    if (sortChanged) {
+      const sort = sortValues();
+      state.sortDefault = sort;
+      state.sortOverrides = {};
+      localStorage.setItem('todo.sortField', sort.field);
+      localStorage.setItem('todo.sortDir', sort.dir);
+      saveSortOverrides();
+      await pushSortWrite({ apply_all: true, field: sort.field, dir: sort.dir }, { applyAll: sort });
+      sortSnapshot = sort;
+      render();
+      message = message
+        ? `${message} Sorting applied to all lists.`
+        : 'Saved — sorting applied to all lists.';
+    }
+    if (!message) message = 'Saved — appearance applies to this device.';
+    toast(message);
     appearanceSnapshot = null;
     saveBtn.disabled = true;
     await settleSubmit(startedAt);
@@ -3569,19 +3615,8 @@ $('#sort-dir').addEventListener('change', (event) => {
   setViewSort(state.view, { dir: event.target.value });
   render();
 });
-$('#sort-apply-all').addEventListener('click', () => {
-  const field = $('#set-sort-field').value;
-  const dir = $('#set-sort-dir').value;
-  state.sortDefault = { field, dir };
-  localStorage.setItem('todo.sortField', field);
-  localStorage.setItem('todo.sortDir', dir);
-  state.sortOverrides = {};
-  saveSortOverrides();
-  pushSortWrite({ apply_all: true, field, dir }, { applyAll: { field, dir } });
-  const msg = $('#sort-apply-msg');
-  msg.textContent = 'Applied. Every list and view now uses this sorting; any list can still pick its own afterwards.';
-  msg.hidden = false;
-  render();
+$('#set-sort-field').addEventListener('change', () => {
+  syncSortDirLabels($('#set-sort-field'), $('#set-sort-dir'));
 });
 $('#list-form').addEventListener('submit', saveList);
 $('#l-name').addEventListener('input', () => {

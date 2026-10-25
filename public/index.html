@@ -231,8 +231,8 @@
         <label class="sort-control">
           <span>Order</span>
           <select id="sort-dir" aria-label="Sort order">
-            <option value="asc">Ascending</option>
-            <option value="desc">Descending</option>
+            <option value="asc">Soonest on top</option>
+            <option value="desc">Latest on top</option>
           </select>
         </label>
       </div>
@@ -516,13 +516,11 @@
           <label class="settings-row" for="set-sort-dir">
             <span>Order</span>
             <select id="set-sort-dir">
-              <option value="asc">Ascending</option>
-              <option value="desc">Descending</option>
+              <option value="asc">Soonest on top</option>
+              <option value="desc">Latest on top</option>
             </select>
           </label>
-          <button type="button" id="sort-apply-all" class="secondary-btn">Apply this sorting to all lists</button>
-          <p id="sort-apply-msg" class="form-msg" hidden></p>
-          <p class="notify-hint">Sorting syncs across your devices. Each list and view remembers its own sorting. This one-time action applies the "Sort by" and "Order" chosen above to every list and smart view (including Scheduled) and to lists created later; they are not linked afterwards.</p>
+          <p class="notify-hint">Saving applies the sorting above to every list and smart view (including Scheduled) and to lists created later. Each list can still choose its own afterwards. Sorting syncs across your devices.</p>
         </div>
         <div class="settings-group">
           <h3>Notifications</h3>
