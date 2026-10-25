@@ -842,12 +842,24 @@ function viewSortKey(view) {
   return String(view);
 }
 
+const DATED_VIEW_SORT = { field: 'due', dir: 'asc' };
+
+const DATED_VIEW_HINTS = {
+  today: 'Today only shows dated to-dos (due today and overdue), so it defaults to Due date / Soonest on top. Changes here apply to Today only.',
+  scheduled: 'Scheduled only shows dated to-dos, so it defaults to Due date / Soonest on top. Changes here apply to Scheduled only.',
+};
+
+function defaultSortFor(view) {
+  return view === 'today' || view === 'scheduled' ? DATED_VIEW_SORT : state.sortDefault;
+}
+
 function effectiveSort(view) {
   const key = viewSortKey(view);
   const override = key ? state.sortOverrides[key] : null;
+  const fallback = defaultSortFor(view);
   return {
-    field: override && override.field ? override.field : state.sortDefault.field,
-    dir: override && override.dir ? override.dir : state.sortDefault.dir,
+    field: override && override.field ? override.field : fallback.field,
+    dir: override && override.dir ? override.dir : fallback.dir,
   };
 }
 
@@ -1282,6 +1294,10 @@ function renderMain() {
     $('#sort-dir').value = sort.dir;
     syncSortDirLabels($('#sort-field'), $('#sort-dir'));
   }
+  const sortHint = $('#sort-hint');
+  const hintText = DATED_VIEW_HINTS[view];
+  sortHint.hidden = !hintText;
+  if (hintText) sortHint.textContent = hintText;
 
   if (state.search) {
     renderSearchResults(content);
@@ -3608,7 +3624,10 @@ $('#e-notes').addEventListener('input', () => {
   renderEditorLinks();
 });
 $('#sort-field').addEventListener('change', (event) => {
-  setViewSort(state.view, { field: event.target.value });
+  const field = event.target.value;
+  const patch = { field };
+  if (field === 'due') patch.dir = 'asc';
+  setViewSort(state.view, patch);
   render();
 });
 $('#sort-dir').addEventListener('change', (event) => {
@@ -3616,6 +3635,7 @@ $('#sort-dir').addEventListener('change', (event) => {
   render();
 });
 $('#set-sort-field').addEventListener('change', () => {
+  if ($('#set-sort-field').value === 'due') $('#set-sort-dir').value = 'asc';
   syncSortDirLabels($('#set-sort-field'), $('#set-sort-dir'));
 });
 $('#list-form').addEventListener('submit', saveList);

@@ -705,6 +705,14 @@ body.list-dragging .list-grip { cursor: grabbing; }
 
 .sort-control select:focus { outline: none; color: var(--text); }
 
+.sort-hint {
+  margin: 2px 24px 0;
+  max-width: 680px;
+  font-size: 0.72rem;
+  line-height: 1.45;
+  color: var(--text-3);
+}
+
 .content {
   flex: 1;
   width: 100%;
@@ -2164,6 +2172,10 @@ body.sheet-open .sidebar {
 
   .sort-bar {
     margin: 12px 18px 0;
+  }
+
+  .sort-hint {
+    margin: 2px 18px 0;
   }
 
   .sort-control select {

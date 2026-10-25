@@ -2,6 +2,11 @@
 
 A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due dates, urgent flags, recurring reminders, natural-language quick add, smart lists, floating time zones, a token API for external agents, completed history, dark mode, and web push. No frontend framework and no build step.
 
+## What's New in v2.6.3
+
+- **Dated views default to due date** — Today and Scheduled only show to-dos with a date, so they now fall back to **Due date / Soonest on top** regardless of the app-wide default. A short hint under the sort controls explains why, and any sorting you choose in those views still overrides the default.
+- **Picking Due date selects Soonest on top** — changing Sort by to Due date in the sort bar or Settings automatically switches the order to Soonest on top. The order stays editable, so you can choose Latest on top afterwards. Service worker cache bumped to `todo-v2.6.3`.
+
 ## What's New in v2.6.2
 
 - **Date added / Newest on top is the new default** — fresh installs and views without a saved sorting now start with the most recently added to-dos first. Due-date sorting is still available per list and view, and existing saved choices are unchanged. Service worker cache bumped to `todo-v2.6.2`.
@@ -285,7 +290,7 @@ Sessions are stored in SQLite, so refreshing the page or restarting the process 
 
 ## Version
 
-2.6.2
+2.6.3
 
 ## License
 
