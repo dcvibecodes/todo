@@ -219,7 +219,7 @@ function touchToken(id) {
 
 // Canonical JSON (object keys sorted, recursive) for idempotency payload
 // fingerprints. Fingerprints cover the RAW client-supplied body fields,
-// excluding idempotency_key itself â never resolved defaults or
+// excluding idempotency_key itself — never resolved defaults or
 // server-computed targets.
 function canonicalJson(value) {
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
@@ -623,7 +623,7 @@ async function resolveList(ref) {
   if (!name) return null;
   const rows = await db.all('SELECT id, name FROM lists WHERE LOWER(name) = LOWER(?)', [name]);
   if (rows.length > 1) {
-    const err = new Error(`Multiple lists match "${name}" â use the list id instead`);
+    const err = new Error(`Multiple lists match "${name}" — use the list id instead`);
     err.status = 400;
     throw err;
   }
@@ -1127,7 +1127,7 @@ async function main() {
       return res.status(400).json({ error: 'profile must be read or write' });
     }
     // 48 random bytes, base64url: unguessable, URL-safe. Only the SHA-256
-    // hash is stored â the raw value below is shown exactly once.
+    // hash is stored — the raw value below is shown exactly once.
     const raw = crypto.randomBytes(48).toString('base64url');
     const now = new Date().toISOString();
     const result = await db.run(
@@ -2159,7 +2159,7 @@ async function main() {
           const allowed = ['title', 'notes', 'list_id', 'urgent'];
           const provided = Object.keys(body).filter((k) => !['scope', 'base_revision', 'base_epoch'].includes(k));
           if (provided.some((k) => !allowed.includes(k))) {
-            return { status: 400, body: { error: 'Date changes apply to the whole series â edit those with scope "series"' } };
+            return { status: 400, body: { error: 'Date changes apply to the whole series — edit those with scope "series"' } };
           }
           if (!provided.length) return { status: 400, body: { error: 'Nothing to update' } };
           const revGuard = await guardRevision(current, body.base_revision);
@@ -2276,7 +2276,7 @@ async function main() {
         if (body.completed !== undefined) {
           const completed = body.completed ? 1 : 0;
           if (recurring && !completed) {
-            return { status: 400, body: { error: 'Recurring to-dos stay open â use Skip for an occurrence' } };
+            return { status: 400, body: { error: 'Recurring to-dos stay open — use Skip for an occurrence' } };
           }
           fields.push('completed = ?');
           params.push(completed);
@@ -2364,7 +2364,7 @@ async function main() {
       const allowed = ['title', 'notes', 'list_id', 'urgent'];
       const provided = Object.keys(req.body).filter((key) => key !== 'scope');
       if (provided.some((key) => !allowed.includes(key))) {
-        return res.status(400).json({ error: 'Date changes apply to the whole series â edit those with scope "series"' });
+        return res.status(400).json({ error: 'Date changes apply to the whole series — edit those with scope "series"' });
       }
       if (!provided.length) return res.status(400).json({ error: 'Nothing to update' });
       const overrides = { title: null, notes: null, list_id: null, urgent: null };
@@ -2485,7 +2485,7 @@ async function main() {
     if (req.body.completed !== undefined) {
       const completed = req.body.completed ? 1 : 0;
       if (recurring && !completed) {
-        return res.status(400).json({ error: 'Recurring to-dos stay open â use Skip for an occurrence' });
+        return res.status(400).json({ error: 'Recurring to-dos stay open — use Skip for an occurrence' });
       }
       fields.push('completed = ?');
       params.push(completed);
