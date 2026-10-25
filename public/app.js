@@ -844,11 +844,6 @@ function viewSortKey(view) {
 
 const DATED_VIEW_SORT = { field: 'due', dir: 'asc' };
 
-const DATED_VIEW_HINTS = {
-  today: 'Today only shows dated to-dos (due today and overdue), so it defaults to Due date / Soonest on top. Changes here apply to Today only.',
-  scheduled: 'Scheduled only shows dated to-dos, so it defaults to Due date / Soonest on top. Changes here apply to Scheduled only.',
-};
-
 function defaultSortFor(view) {
   return view === 'today' || view === 'scheduled' ? DATED_VIEW_SORT : state.sortDefault;
 }
@@ -1294,10 +1289,6 @@ function renderMain() {
     $('#sort-dir').value = sort.dir;
     syncSortDirLabels($('#sort-field'), $('#sort-dir'));
   }
-  const sortHint = $('#sort-hint');
-  const hintText = DATED_VIEW_HINTS[view];
-  sortHint.hidden = !hintText;
-  if (hintText) sortHint.textContent = hintText;
 
   if (state.search) {
     renderSearchResults(content);
