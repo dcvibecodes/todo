@@ -494,6 +494,48 @@ button, a, input, select, textarea, [tabindex] { touch-action: manipulation; }
 
 .list-row .badge { font-size: 0.8125rem; }
 
+/* Sidebar list progress (bar with counts / ring on the dot). */
+.list-row { flex-wrap: wrap; }
+
+.list-progress {
+  flex-basis: 100%;
+  height: 3px;
+  margin: 5px 4px 0 24px;
+  border-radius: 2px;
+  background: var(--fill);
+  overflow: hidden;
+}
+
+.list-progress-fill {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--c);
+}
+
+.list-progress-counts {
+  flex-basis: 100%;
+  margin: 4px 4px 0 24px;
+  font-size: 0.72rem;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.list-ring {
+  flex: none;
+  display: inline-flex;
+  padding: 3px;
+  margin: 0 10px 0 0;
+  border-radius: 50%;
+  background: conic-gradient(var(--c) calc(var(--p) * 1%), var(--fill) 0);
+}
+
+.list-ring .list-dot {
+  width: 8px;
+  height: 8px;
+  margin: 0;
+}
+
 .list-grip {
   position: relative;
   width: 22px;
@@ -1152,7 +1194,7 @@ body.sheet-open .fab {
 }
 
 /* With any sheet open the page behind is fully locked: fixed body (the
-   iOS-proof part — overflow:hidden alone doesn't stop touch scrolling),
+   iOS-proof part â overflow:hidden alone doesn't stop touch scrolling),
    hidden background scrollers, and no scroll chaining out of the sheet. */
 body.sheet-open {
   position: fixed;
