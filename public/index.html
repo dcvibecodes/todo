@@ -224,15 +224,15 @@
           <span>Sort</span>
           <select id="sort-field" aria-label="Sort to-dos by">
             <option value="due">Due date</option>
-            <option value="created">Date added</option>
+            <option value="created" selected>Date added</option>
             <option value="name">Name</option>
           </select>
         </label>
         <label class="sort-control">
           <span>Order</span>
           <select id="sort-dir" aria-label="Sort order">
-            <option value="asc">Soonest on top</option>
-            <option value="desc">Latest on top</option>
+            <option value="asc">Oldest on top</option>
+            <option value="desc" selected>Newest on top</option>
           </select>
         </label>
       </div>
@@ -509,15 +509,15 @@
             <span>Sort by</span>
             <select id="set-sort-field">
               <option value="due">Due date</option>
-              <option value="created">Date added</option>
+              <option value="created" selected>Date added</option>
               <option value="name">Name</option>
             </select>
           </label>
           <label class="settings-row" for="set-sort-dir">
             <span>Order</span>
             <select id="set-sort-dir">
-              <option value="asc">Soonest on top</option>
-              <option value="desc">Latest on top</option>
+              <option value="asc">Oldest on top</option>
+              <option value="desc" selected>Newest on top</option>
             </select>
           </label>
           <p class="notify-hint">Saving applies the sorting above to every list and smart view (including Scheduled) and to lists created later. Each list can still choose its own afterwards. Sorting syncs across your devices.</p>

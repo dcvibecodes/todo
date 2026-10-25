@@ -34,8 +34,8 @@ const state = {
   subscription: null,
   editScope: 'series',
   sortDefault: {
-    field: localStorage.getItem('todo.sortField') || 'due',
-    dir: localStorage.getItem('todo.sortDir') || 'asc',
+    field: localStorage.getItem('todo.sortField') || 'created',
+    dir: localStorage.getItem('todo.sortDir') || 'desc',
   },
   sortOverrides: readSortOverrides(),
   lastListId: Number(localStorage.getItem('todo.lastList')) || null,
