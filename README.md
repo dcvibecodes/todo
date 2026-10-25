@@ -2,6 +2,10 @@
 
 A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due dates, urgent flags, recurring reminders, natural-language quick add, smart lists, floating time zones, a token API for external agents, completed history, dark mode, and web push. No frontend framework and no build step.
 
+## What's New in v2.7.3
+
+- **No time-model label on undated items** — the **Floating** / **Anchored** tag now appears only on items that actually have a date, since the time model has no effect until one exists. Previously every item created with the Floating default showed a "Floating" tag even without a date. Service worker cache bumped to `todo-v2.7.3`.
+
 ## What's New in v2.7.2
 
 - **Item wording everywhere** — the rest of the interface now says **item** / **items** to match the **New Item / Edit Item / Delete Item** controls: hints, empty states, confirmations, toasts, accessibility labels, token and import copy, the notification fallback, and API error messages. The app name **ToDo** and the **Your TODOs** home heading are unchanged. Service worker cache bumped to `todo-v2.7.2`.
