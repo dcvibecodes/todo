@@ -2038,6 +2038,7 @@ function syncDateTimeRows() {
   }
   $('#e-date-row').hidden = !$('#e-date-on').checked;
   $('#e-time-row').hidden = !$('#e-time-on').checked;
+  syncModelRows();
 }
 
 function updateEditorListVisual() {
@@ -2117,11 +2118,19 @@ function updateZoneVisual() {
 
 function syncModelRows() {
   const model = $('#e-model').value;
-  $('#e-model-value').textContent = model === 'fixed' ? 'Fixed time'
-    : model === 'floating' ? 'Floating' : 'Anchored';
+  $('#e-model-value').textContent = model === 'floating'
+    ? 'My local time (Floating)' : 'A specific time zone (Anchored)';
   updateZoneVisual();
-  $('#e-zone-row').hidden = model !== 'anchored';
+  // The time model only matters once a clock time exists; a date-only item
+  // just asks for a date, so the choice stays out of the way.
+  const timeOn = $('#e-time-on').checked;
+  $('#e-model-row').hidden = !timeOn;
+  $('#e-zone-row').hidden = !timeOn || model !== 'anchored';
   const hint = $('#e-model-hint');
+  if (!timeOn) {
+    hint.hidden = true;
+    return;
+  }
   if (model === 'floating') {
     const synced = (state.settings && state.settings.device_zone) || '';
     hint.hidden = false;
@@ -2146,13 +2155,6 @@ function markScheduleManual() {
 function onRepeatChange(manual = true) {
   syncRepeatRows();
   if (manual) markScheduleManual();
-  if ($('#e-repeat').value !== 'none' && $('#e-model').value === 'fixed') {
-    // Recurring reminders default to zone-anchored on the creation zone.
-    $('#e-model').value = 'anchored';
-    const zone = deviceZone();
-    if (zone) $('#e-zone').value = zone;
-    syncModelRows();
-  }
   if ($('#e-repeat').value !== 'none' && !$('#e-date-on').checked) {
     $('#e-date-on').checked = true;
     syncDateTimeRows();
@@ -2435,9 +2437,13 @@ function openEditor(id) {
   } else {
     $('#e-repeat').value = rule.type;
   }
-  $('#e-model').value = reminder
-    ? (reminder.time_model || 'fixed')
-    : ((state.settings && state.settings.default_time_model) || 'floating');
+  // The editor offers Floating and Anchored only; anything older (a Fixed
+  // item from an old backup) opens as Floating.
+  $('#e-model').value = reminder && reminder.time_model === 'anchored'
+    ? 'anchored'
+    : (!reminder && state.settings && state.settings.default_time_model === 'anchored')
+      ? 'anchored'
+      : 'floating';
   buildZoneOptions(reminder
     ? reminder.time_zone
     : ((state.settings && state.settings.default_time_zone) || deviceZone()));
@@ -3309,7 +3315,7 @@ async function openSettings() {
   }
   const s = state.settings;
   $('#set-density').value = localStorage.getItem(DENSITY_KEY) === 'compact' ? 'compact' : 'comfortable';
-  $('#set-default-model').value = ['fixed', 'floating', 'anchored'].includes(s.default_time_model)
+  $('#set-default-model').value = ['floating', 'anchored'].includes(s.default_time_model)
     ? s.default_time_model : 'floating';
   renderSettingsZones(s.default_time_zone || '');
   $('#set-default-time').value = s.default_time || '09:00';
