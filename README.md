@@ -2,9 +2,13 @@
 
 A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due dates, urgent flags, recurring reminders, natural-language quick add, smart lists, floating time zones, a token API for external agents, completed history, dark mode, and web push. No frontend framework and no build step.
 
+## What's New in v2.7.8
+
+- **Shorter Anchored label in the editor** - the Time model choice now reads "Specific timezone" instead of "A specific time zone (Anchored)", so it fits on phone-width screens without truncating; the helper text under the row still explains what it does. Service worker cache bumped to `todo-v2.7.8`.
+
 ## What's New in v2.7.7
 
-- **Two time models: Floating and Anchored** — the editor's Time model row now offers **My local time (Floating)** (the default) or **A specific time zone (Anchored)**. Fixed is gone as an everyday choice: everything it covered is expressed by the other two, and every existing Fixed item was converted to Floating (their stored dates and instants were untouched, so nothing fires at a different moment). The Settings default-model choice matches, and Floating remains the default everywhere, including when no setting exists yet. A legacy Fixed item arriving through an old backup still works; it opens in the editor as Floating.
+- **Two time models: Floating and Anchored** — the editor's Time model row now offers **My local time (Floating)** (the default) or **Specific timezone** (Anchored). Fixed is gone as an everyday choice: everything it covered is expressed by the other two, and every existing Fixed item was converted to Floating (their stored dates and instants were untouched, so nothing fires at a different moment). The Settings default-model choice matches, and Floating remains the default everywhere, including when no setting exists yet. A legacy Fixed item arriving through an old backup still works; it opens in the editor as Floating.
 - **Date-only items skip the time model** — the Time model row and its hint now appear only when an item has a clock time. A date-only item just asks for a date, since the model has no effect until a time exists. Service worker cache bumped to `todo-v2.7.7`.
 
 ## What's New in v2.7.6
