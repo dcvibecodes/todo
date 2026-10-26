@@ -371,34 +371,15 @@ async function api(path, options = {}) {
       state.authenticated = false;
       showAuth();
     }
-    const error = new Error(data.error || 'Something went wrong');
-    error.status = res.status;
-    throw error;
+    throw new Error(data.error || 'Something went wrong');
   }
   return data;
 }
 
 let toastTimer = null;
-const UNDO_STORAGE_KEY = 'todo.pendingUndo';
-let pendingUndo = null;
-
-function rememberUndo(entry) {
-  pendingUndo = entry;
-  try {
-    sessionStorage.setItem(UNDO_STORAGE_KEY, JSON.stringify(entry));
-  } catch { /* private mode: keep it in memory only */ }
-}
-
-function forgetUndo() {
-  pendingUndo = null;
-  try { sessionStorage.removeItem(UNDO_STORAGE_KEY); } catch { /* ignore */ }
-}
-
-function toast(message, actionLabel, action, options = {}) {
+function toast(message, actionLabel, action) {
   const node = $('#toast');
   node.replaceChildren(el('span', { text: message }));
-  if (options.undoEntry) rememberUndo(options.undoEntry);
-  else forgetUndo();
   if (actionLabel && action) {
     const button = el('button', { type: 'button', class: 'toast-action', text: actionLabel });
     button.addEventListener('click', () => {
@@ -410,118 +391,7 @@ function toast(message, actionLabel, action, options = {}) {
   }
   node.hidden = false;
   clearTimeout(toastTimer);
-  const duration = Number.isFinite(options.duration)
-    ? Math.max(0, options.duration)
-    : (action ? 10000 : 3200);
-  toastTimer = setTimeout(() => {
-    node.hidden = true;
-    if (options.undoEntry) forgetUndo();
-  }, duration);
-}
-
-function offerUndo(message, undo) {
-  const expiresAt = Date.parse(undo && undo.expires_at);
-  if (!undo || !undo.token || !Number.isFinite(expiresAt)) return;
-  const remaining = expiresAt - Date.now();
-  if (remaining <= 0) return;
-  const entry = {
-    token: undo.token,
-    expiresAt,
-    kind: undo.kind,
-    reminderId: undo.reminder_id,
-    completedAt: undo.completed_at || null,
-    occurrenceAt: undo.occurrence_at || null,
-    nextDue: undo.next_due || null,
-    message,
-  };
-  toast(message, 'Undo', () => performUndo(entry), {
-    duration: remaining,
-    undoEntry: entry,
-  });
-}
-
-function restorePendingUndo() {
-  if (pendingUndo && !$('#toast').hidden && Date.now() < pendingUndo.expiresAt) return;
-  let entry = null;
-  try {
-    entry = JSON.parse(sessionStorage.getItem(UNDO_STORAGE_KEY) || 'null');
-  } catch { entry = null; }
-  if (!entry || !entry.token || !Number.isFinite(entry.expiresAt) || Date.now() >= entry.expiresAt) {
-    forgetUndo();
-    // A suspended app can resume after the timer should have fired, leaving
-    // a stale Undo button on screen. Remove it rather than let it be tapped.
-    const node = $('#toast');
-    if (node && node.querySelector('.toast-action')) node.hidden = true;
-    return;
-  }
-  pendingUndo = entry;
-  toast(entry.message || 'Item updated', 'Undo', () => performUndo(entry), {
-    duration: entry.expiresAt - Date.now(),
-    undoEntry: entry,
-  });
-}
-
-async function performUndo(entry) {
-  // Only the operation behind the visible toast can be undone. Clicking a
-  // stale toast after a newer action is rejected before any request is sent.
-  if (!pendingUndo || pendingUndo.token !== entry.token) {
-    forgetUndo();
-    toast('Undo is only available for the latest action');
-    return;
-  }
-  forgetUndo();
-  if (Date.now() >= entry.expiresAt) {
-    toast('Undo expired — nothing was changed');
-    return;
-  }
-  try {
-    await api('/api/undo/' + encodeURIComponent(entry.token), { method: 'POST' });
-    await loadState();
-    render();
-    toast(entry.kind === 'delete' ? 'Item restored' : 'Completion undone');
-  } catch (err) {
-    try { await loadState(); render(); } catch { /* offline */ }
-    let reminder = state.reminders.find((item) => item.id === entry.reminderId);
-    if (!reminder) {
-      try {
-        const fresh = await api('/api/reminders/' + entry.reminderId);
-        reminder = fresh.reminder || null;
-      } catch { /* truly gone */ }
-    }
-    // A lost response looks like a failure even though the server applied
-    // the undo. Reloading state tells us which one happened; never report a
-    // failure for work that actually happened. Only 404/5xx/network are
-    // ambiguous — a 409 conflict definitely left the state alone.
-    const ambiguous = !err.status || err.status === 404 || err.status >= 500;
-    const applied = ambiguous && Boolean(reminder) && (
-      entry.kind === 'delete'
-        ? true
-        : entry.kind === 'complete' && entry.occurrenceAt
-          ? reminder.due_at === entry.occurrenceAt
-          : !reminder.completed
-    );
-    if (applied) {
-      toast(entry.kind === 'delete' ? 'Item restored' : 'Completion undone');
-    } else if (err.status === 410) {
-      toast('Undo expired — nothing was changed');
-    } else if (err.status === 404) {
-      toast('That Undo is no longer available');
-    } else if (err.status === 409 || err.status === 403) {
-      toast(err.message);
-    } else if (Date.now() < entry.expiresAt) {
-      offerUndo('Undo failed — try again', {
-        token: entry.token,
-        expires_at: new Date(entry.expiresAt).toISOString(),
-        kind: entry.kind,
-        reminder_id: entry.reminderId,
-        completed_at: entry.completedAt,
-        occurrence_at: entry.occurrenceAt,
-        next_due: entry.nextDue,
-      });
-    } else {
-      toast(err.message || 'Undo failed');
-    }
-  }
+  toastTimer = setTimeout(() => { node.hidden = true; }, action ? 10000 : 3200);
 }
 
 function showFieldError(input, messageNode, message) {
@@ -642,7 +512,6 @@ async function boot() {
     showApp();
     syncPushState();
     syncDeviceZone();
-    restorePendingUndo();
   } catch (err) {
     // Replace skeletons with real (empty) views so the screen never hangs on them.
     if (state.authenticated) render();
@@ -695,7 +564,6 @@ async function submitAuth(event) {
     showApp();
     syncPushState();
     syncDeviceZone();
-    restorePendingUndo();
   } catch (err) {
     authError(err.message);
   }
@@ -1179,7 +1047,6 @@ function findReminder(id) {
 function render() {
   renderSidebar();
   renderMain();
-  syncNoteToggles();
   updateBadge();
   state.justAddedId = null;
 }
@@ -1746,18 +1613,6 @@ function linkChip(url) {
   ]);
 }
 
-// Keep the author's line breaks (video/reel briefs are often written line by
-// line) while collapsing runs of spaces and blank lines. This text is only
-// ever inserted as a text node, never parsed as HTML.
-function tidyProse(value) {
-  return String(value || '')
-    .replace(/\r\n?/g, '\n')
-    .replace(/[ \t]+/g, ' ')
-    .replace(/ *\n */g, '\n')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
-}
-
 // Split notes into prose and links. Punctuation that merely joined a link
 // (commas/semicolons around it) is removed from the prose, so the card never
 // shows stray commas between chips.
@@ -1785,59 +1640,12 @@ function noteParts(value) {
     let value = segment.value;
     const previous = segments[index - 1];
     const next = segments[index + 1];
-    // Strip only spaces and joining punctuation, not the line break itself.
-    if (previous && previous.type === 'link') value = value.replace(/^[ \t,;:!?.]+/, '');
-    if (next && next.type === 'link') value = value.replace(/[ \t,;:!?.]+$/, '');
+    if (previous && previous.type === 'link') value = value.replace(/^[\s,;:!?.]+/, '');
+    if (next && next.type === 'link') value = value.replace(/[\s,;:!?.]+$/, '');
+    value = value.replace(/\s+/g, ' ').trim();
     if (value) prose.push(value);
   });
-  return { text: tidyProse(prose.join('')), links };
-}
-
-// Notes expansion is temporary UI state: no server field and no reminder
-// edit. Keeping the set in memory means a refresh or re-render does not snap
-// a long note shut while it is being read.
-const expandedNotes = new Set();
-
-function toggleNotes(reminderId, notesNode, button) {
-  const expanded = !expandedNotes.has(reminderId);
-  if (expanded) expandedNotes.add(reminderId);
-  else expandedNotes.delete(reminderId);
-  notesNode.classList.toggle('expanded', expanded);
-  button.textContent = expanded ? 'Collapse' : 'Read more';
-  button.setAttribute('aria-expanded', expanded ? 'true' : 'false');
-}
-
-// Decide from the rendered layout whether the 2-line preview actually clips
-// anything. Short prose and link-only notes never get a control.
-function syncNoteToggles() {
-  for (const notesNode of $$('#content .reminder-notes[data-note-id]')) {
-    const toggle = notesNode._noteToggle;
-    if (!toggle) continue;
-    const id = Number(notesNode.dataset.noteId);
-    const wasExpanded = expandedNotes.has(id);
-    if (wasExpanded) notesNode.classList.remove('expanded');
-    const truncated = notesNode.scrollHeight > notesNode.clientHeight + 1;
-    if (wasExpanded && !truncated) expandedNotes.delete(id);
-    const expanded = expandedNotes.has(id) && truncated;
-    notesNode.classList.toggle('expanded', expanded);
-    toggle.hidden = !truncated;
-    toggle.textContent = expanded ? 'Collapse' : 'Read more';
-    toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
-  }
-}
-
-let noteSyncFrame = null;
-function scheduleNoteSync() {
-  if (noteSyncFrame) return;
-  noteSyncFrame = requestAnimationFrame(() => {
-    noteSyncFrame = null;
-    syncNoteToggles();
-  });
-}
-
-window.addEventListener('resize', scheduleNoteSync, { passive: true });
-if (document.fonts && document.fonts.ready) {
-  document.fonts.ready.then(scheduleNoteSync).catch(() => {});
+  return { text: prose.join(' ').replace(/\s{2,}/g, ' ').trim(), links };
 }
 
 function renderEditorLinks() {
@@ -1982,26 +1790,7 @@ function reminderRow(reminder, options = {}) {
   if (reminder.notes) {
     const parts = noteParts(reminder.notes);
     if (parts.text) {
-      const notesNode = el('div', {
-        class: 'reminder-notes',
-        text: parts.text,
-        id: 'note-' + reminder.id,
-        'data-note-id': reminder.id,
-      });
-      const noteToggle = el('button', {
-        type: 'button',
-        class: 'note-toggle',
-        hidden: true,
-        'aria-controls': 'note-' + reminder.id,
-        'aria-expanded': 'false',
-        text: 'Read more',
-        onclick: (event) => {
-          event.stopPropagation();
-          toggleNotes(reminder.id, notesNode, noteToggle);
-        },
-      });
-      notesNode._noteToggle = noteToggle;
-      body.append(notesNode, noteToggle);
+      body.append(el('div', { class: 'reminder-notes', text: parts.text }));
     }
     if (parts.links.length) {
       const links = el('div', { class: 'reminder-links' });
@@ -2186,11 +1975,10 @@ function deleteReminderInline(reminder, row) {
   });
   setTimeout(async () => {
     try {
-      const result = await api('/api/reminders/' + reminder.id, { method: 'DELETE' });
+      await api('/api/reminders/' + reminder.id, { method: 'DELETE' });
       await loadState();
       render();
-      if (result && result.undo) offerUndo('Item deleted', result.undo);
-      else toast('Item deleted');
+      toast('Item deleted');
     } catch (err) {
       toast(err.message);
       await loadState();
@@ -2229,11 +2017,7 @@ async function toggleCompleted(reminder, row) {
     render();
     if (result && result.advanced && result.nextDue) {
       const next = new Date(result.nextDue);
-      const message = `Done — next: ${next.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}`;
-      if (result.undo) offerUndo(message, result.undo);
-      else toast(message);
-    } else if (result && result.undo) {
-      offerUndo('Item completed', result.undo);
+      toast(`Done — next: ${next.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}`);
     }
   } catch (err) {
     if (row) row.classList.remove('completing');
@@ -2765,10 +2549,9 @@ async function saveEditor(event) {
 
   const startedAt = Date.now();
   setEditorSubmitting(true);
-  let saved = null;
   try {
     if (state.editingId) {
-      saved = await api('/api/reminders/' + state.editingId, { method: 'PATCH', body });
+      await api('/api/reminders/' + state.editingId, { method: 'PATCH', body });
     } else {
       const created = await api('/api/reminders', { method: 'POST', body });
       state.justAddedId = created && created.id ? created.id : null;
@@ -2778,7 +2561,6 @@ async function saveEditor(event) {
     closeSheet('#editor');
     await loadState();
     render();
-    if (saved && saved.undo) offerUndo('Item completed', saved.undo);
   } catch (err) {
     // Sheet stays open with the fields intact, so nothing typed is lost.
     toast(err.message);
@@ -2893,12 +2675,10 @@ async function deleteReminder() {
   if (!state.editingId) return;
   if (!window.confirm('Delete this item?')) return;
   try {
-    const result = await api('/api/reminders/' + state.editingId, { method: 'DELETE' });
+    await api('/api/reminders/' + state.editingId, { method: 'DELETE' });
     closeSheet('#editor');
     await loadState();
     render();
-    if (result && result.undo) offerUndo('Item deleted', result.undo);
-    else toast('Item deleted');
   } catch (err) {
     toast(err.message);
   }
@@ -4121,7 +3901,6 @@ async function refreshOnResume() {
     render();
   } catch { /* offline — keep showing cached state */ }
   syncDeviceZone();
-  restorePendingUndo();
 }
 
 window.addEventListener('hashchange', route);

@@ -1,11 +1,10 @@
 {
   "name": "todo",
-  "version": "2.8.0",
+  "version": "2.7.6",
   "description": "A self-hosted, Apple Reminders-style task app",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node --test",
     "icons": "python3 generate-icons.py"
   },
   "license": "UNLICENSED",

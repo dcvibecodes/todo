@@ -22,10 +22,6 @@ const SESSION_SECRET_KEY = 'session_secret';
 const DEFAULT_LIST_COLOR = 'blue';
 const LIST_COLORS = new Set(['red', 'rose', 'orange', 'yellow', 'lime', 'green', 'teal', 'cyan', 'blue', 'indigo', 'purple', 'pink', 'brown', 'slate', 'gray']);
 const NOTES_MAX = 50000;
-// The visible Undo button lives for 10 seconds. The server keeps the
-// operation journal for exactly the same window so the UI can never offer an
-// action the server has already forgotten.
-const UNDO_TTL_MS = Number(process.env.UNDO_TTL_MS) || 10000;
 
 const app = express();
 app.set('trust proxy', 1);
@@ -423,20 +419,7 @@ async function completeReminder(id) {
       'UPDATE reminders SET completed = 1, completed_at = ?, snoozed_until = NULL, updated_at = ?, revision = revision + 1 WHERE id = ?',
       [now, now, id]
     );
-    return {
-      advanced: false,
-      kind: 'nonrecurring',
-      reminderId: id,
-      completedAt: now,
-      prior: {
-        snoozed_until: reminder.snoozed_until,
-        repeat_rule: reminder.repeat_rule,
-        due_at: reminder.due_at,
-        has_time: reminder.has_time,
-        time_model: reminder.time_model,
-        time_zone: reminder.time_zone,
-      },
-    };
+    return { advanced: false };
   }
   // Recurring: completing records this occurrence and advances the series.
   // The series itself is never marked completed.
@@ -462,8 +445,7 @@ async function completeReminder(id) {
   if (prior) return { advanced: false, alreadyDone: true, reminder };
   const next = recurrence.firstFutureOccurrence(rule, reminder.due_at, zone, now);
   const exception = await db.get(
-    `SELECT id, occurrence_at, status, title, notes, list_id, urgent, completed_at, created_at
-     FROM reminder_occurrences
+    `SELECT title, notes, list_id, urgent FROM reminder_occurrences
      WHERE reminder_id = ? AND occurrence_at = ? AND status = 'exception'`,
     [id, reminder.due_at]
   );
@@ -491,208 +473,7 @@ async function completeReminder(id) {
      WHERE id = ? AND due_at = ?`,
     [next, now, id, reminder.due_at]
   );
-  return {
-    advanced: updated.changes > 0,
-    nextDue: updated.changes ? next : null,
-    kind: 'recurring',
-    reminderId: id,
-    occurrenceAt: reminder.due_at,
-    completedAt: now,
-    priorOccurrence: exception || null,
-    prior: {
-      notified_at: reminder.notified_at,
-      last_push_at: reminder.last_push_at,
-      push_count: reminder.push_count,
-      snoozed_until: reminder.snoozed_until,
-      repeat_rule: reminder.repeat_rule,
-      due_at: reminder.due_at,
-      has_time: reminder.has_time,
-      time_model: reminder.time_model,
-      time_zone: reminder.time_zone,
-    },
-  };
-}
-
-/* ---------------- Immediate Undo journal ---------------- */
-
-// Every new undoable operation replaces the previous one for that session, so
-// there is always exactly one Undo the UI can offer and an older toast can
-// never point at a newer operation.
-async function writeUndoEntry(req, kind, reminderId, payload) {
-  if (req.token || !req.session || !req.session.userId || !req.sessionID) return null;
-  const owner = `session:${req.sessionID}`;
-  const token = crypto.randomBytes(24).toString('base64url');
-  const nowMs = Date.now();
-  const createdAt = new Date(nowMs).toISOString();
-  const expiresAt = new Date(nowMs + UNDO_TTL_MS).toISOString();
-  await db.run('DELETE FROM undo_actions WHERE owner = ? OR expires_at <= ?', [owner, createdAt]);
-  await db.run(
-    `INSERT INTO undo_actions (token, owner, kind, reminder_id, payload, created_at, expires_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    [token, owner, kind, reminderId, JSON.stringify(payload), createdAt, expiresAt]
-  );
-  return { token, expires_at: expiresAt, kind, reminder_id: reminderId };
-}
-
-async function insertUndoEntry(req, kind, reminderId, payload) {
-  return db.transaction(() => writeUndoEntry(req, kind, reminderId, payload));
-}
-
-async function recordCompletionUndo(req, result) {
-  if (!result || !result.kind || !result.completedAt) return null;
-  if (result.kind === 'recurring') {
-    if (!result.advanced || !result.occurrenceAt || !result.nextDue) return null;
-  }
-  const undo = await insertUndoEntry(req, 'complete', result.reminderId, {
-    version: 1,
-    kind: result.kind,
-    reminderId: result.reminderId,
-    completedAt: result.completedAt,
-    occurrenceAt: result.occurrenceAt || null,
-    nextDue: result.nextDue || null,
-    priorOccurrence: result.priorOccurrence || null,
-    prior: result.prior || null,
-  });
-  if (!undo) return null;
-  return {
-    ...undo,
-    completed_at: result.completedAt,
-    occurrence_at: result.occurrenceAt || null,
-    next_due: result.nextDue || null,
-  };
-}
-
-function undoConflict(message) {
-  return Object.assign(new Error(message), { status: 409 });
-}
-
-function sameSchedule(reminder, prior) {
-  return reminder.repeat_rule === prior.repeat_rule
-    && reminder.time_model === prior.time_model
-    && reminder.time_zone === prior.time_zone
-    && Boolean(reminder.has_time) === Boolean(prior.has_time);
-}
-
-async function undoCompletion(payload) {
-  const reminder = await loadReminder(payload.reminderId);
-  if (!reminder) {
-    const err = new Error('That item no longer exists');
-    err.status = 409;
-    throw err;
-  }
-  if (!payload.prior) throw undoConflict('That Undo record is incomplete');
-  const now = new Date().toISOString();
-  if (payload.kind === 'nonrecurring') {
-    if (!reminder.completed || reminder.completed_at !== payload.completedAt) {
-      throw undoConflict('That item changed after it was completed');
-    }
-    if (recurrence.isRecurringRule(parseRuleColumn(reminder.repeat_rule))) {
-      throw undoConflict('That item is now a repeating series');
-    }
-    if (reminder.repeat_rule !== payload.prior.repeat_rule) {
-      throw undoConflict('That item\'s scheduling changed after it was completed');
-    }
-    // Restore the completion flag and the pre-completion snooze. If a newer
-    // snooze was set after completion, leave that newer value alone.
-    const snoozed = reminder.snoozed_until === null
-      ? payload.prior.snoozed_until
-      : reminder.snoozed_until;
-    const updated = await db.run(
-      `UPDATE reminders SET completed = 0, completed_at = NULL, snoozed_until = ?,
-         updated_at = ?, revision = revision + 1
-       WHERE id = ? AND completed = 1 AND completed_at = ?`,
-      [snoozed, now, reminder.id, payload.completedAt]
-    );
-    if (!updated.changes) throw undoConflict('That item changed after it was completed');
-    return { reminderId: reminder.id };
-  }
-
-  const previous = payload.prior;
-  if (reminder.due_at !== payload.nextDue) {
-    throw undoConflict('The repeating series has moved on since that completion');
-  }
-  if (!sameSchedule(reminder, previous)) {
-    throw undoConflict('The series schedule changed after that completion');
-  }
-  if (reminder.notified_at !== null || reminder.last_push_at !== null
-    || reminder.snoozed_until !== null || Number(reminder.push_count || 0) !== 0) {
-    throw undoConflict('The series notification state changed after that completion');
-  }
-  const occurrence = await db.get(
-    `SELECT id, status, completed_at FROM reminder_occurrences
-     WHERE reminder_id = ? AND occurrence_at = ?`,
-    [reminder.id, payload.occurrenceAt]
-  );
-  if (!occurrence || occurrence.status !== 'completed'
-    || occurrence.completed_at !== payload.completedAt) {
-    throw undoConflict('That occurrence changed after it was completed');
-  }
-  // Put the occurrence back exactly as it was before completion: a pending
-  // occurrence edit becomes an 'exception' again, otherwise the completed
-  // history row is removed.
-  if (payload.priorOccurrence) {
-    const prior = payload.priorOccurrence;
-    await db.run(
-      `UPDATE reminder_occurrences SET status = 'exception', title = ?, notes = ?,
-         list_id = ?, urgent = ?, completed_at = NULL
-       WHERE reminder_id = ? AND occurrence_at = ? AND status = 'completed' AND completed_at = ?`,
-      [prior.title, prior.notes, prior.list_id, prior.urgent,
-        reminder.id, payload.occurrenceAt, payload.completedAt]
-    );
-  } else {
-    await db.run(
-      `DELETE FROM reminder_occurrences
-       WHERE reminder_id = ? AND occurrence_at = ? AND status = 'completed' AND completed_at = ?`,
-      [reminder.id, payload.occurrenceAt, payload.completedAt]
-    );
-  }
-  const updated = await db.run(
-    `UPDATE reminders SET due_at = ?, notified_at = ?, last_push_at = ?,
-       push_count = ?, snoozed_until = ?, updated_at = ?, revision = revision + 1
-     WHERE id = ? AND due_at = ?`,
-    [payload.occurrenceAt, previous.notified_at, previous.last_push_at,
-      previous.push_count || 0, previous.snoozed_until, now, reminder.id, payload.nextDue]
-  );
-  if (!updated.changes) throw undoConflict('The repeating series has moved on since that completion');
-  return { reminderId: reminder.id };
-}
-
-async function restoreDeleted(payload) {
-  const snapshot = payload.reminder;
-  if (!snapshot || !Number.isInteger(snapshot.id)) {
-    throw undoConflict('That deletion cannot be restored');
-  }
-  if (await loadReminder(snapshot.id)) {
-    throw undoConflict('That item already exists again');
-  }
-  const list = await db.get('SELECT id FROM lists WHERE id = ?', [snapshot.list_id]);
-  if (!list) throw undoConflict('The item\'s list was deleted, so it cannot be restored');
-  await db.run(`
-    INSERT INTO reminders
-      (id, list_id, title, notes, due_at, has_time, completed, completed_at, urgent,
-       repeat_rule, time_model, time_zone, snoozed_until, notified_at, last_push_at,
-       push_count, sort_order, created_at, updated_at, revision)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `, [
-    snapshot.id, snapshot.list_id, snapshot.title, snapshot.notes, snapshot.due_at,
-    snapshot.has_time, snapshot.completed, snapshot.completed_at, snapshot.urgent,
-    snapshot.repeat_rule, snapshot.time_model, snapshot.time_zone, snapshot.snoozed_until,
-    snapshot.notified_at, snapshot.last_push_at, snapshot.push_count, snapshot.sort_order,
-    snapshot.created_at, snapshot.updated_at, snapshot.revision,
-  ]);
-  for (const occurrence of Array.isArray(payload.occurrences) ? payload.occurrences : []) {
-    await db.run(`
-      INSERT INTO reminder_occurrences
-        (id, reminder_id, occurrence_at, status, title, notes, list_id, urgent,
-         completed_at, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [
-      occurrence.id, snapshot.id, occurrence.occurrence_at, occurrence.status,
-      occurrence.title, occurrence.notes, occurrence.list_id, occurrence.urgent,
-      occurrence.completed_at, occurrence.created_at,
-    ]);
-  }
-  return { reminderId: snapshot.id };
+  return { advanced: updated.changes > 0, nextDue: updated.changes ? next : null };
 }
 
 async function skipOccurrence(id) {
@@ -2645,17 +2426,7 @@ async function main() {
     if (req.body.completed === true && !current.completed) {
       try {
         const result = await completeReminder(id);
-        let undo = null;
-        if (!req.token) {
-          // The completion already succeeded. A journal failure must not turn
-          // a real success into an error response; it only means no Undo
-          // button this time.
-          try { undo = await recordCompletionUndo(req, result); }
-          catch (journalErr) { console.error('Undo record failed:', journalErr.message); }
-        }
-        const body = { ok: true, advanced: result.advanced || false, nextDue: result.nextDue || null };
-        if (undo) body.undo = undo;
-        return res.json(body);
+        return res.json({ ok: true, advanced: result.advanced || false, nextDue: result.nextDue || null });
       } catch (err) {
         return res.status(err.status || 500).json({ error: err.message || 'Server error' });
       }
@@ -2845,75 +2616,9 @@ async function main() {
   app.delete('/api/reminders/:id', async (req, res) => {
     const id = parseId(req.params.id);
     if (!id) return res.status(400).json({ error: 'Invalid item' });
-    const outcome = await db.transaction(async () => {
-      const reminder = await loadReminder(id);
-      if (!reminder) return { missing: true };
-      const occurrences = await db.all(
-        'SELECT * FROM reminder_occurrences WHERE reminder_id = ? ORDER BY id',
-        [id]
-      );
-      const undo = await writeUndoEntry(req, 'delete', id, {
-        version: 1,
-        reminder,
-        occurrences,
-      });
-      await db.run('DELETE FROM reminders WHERE id = ?', [id]);
-      return { undo };
-    });
-    if (outcome.missing) return res.status(404).json({ error: 'Item not found' });
-    const body = { ok: true };
-    if (outcome.undo) body.undo = outcome.undo;
-    res.json(body);
-  });
-
-  app.post('/api/undo/:token', async (req, res) => {
-    if (req.token) return denyToken(res);
-    const token = String(req.params.token || '');
-    if (!/^[A-Za-z0-9_-]{16,128}$/.test(token)) {
-      return res.status(400).json({ error: 'Invalid Undo token' });
-    }
-    const owner = `session:${req.sessionID}`;
-    try {
-      const result = await db.transaction(async () => {
-        const entry = await db.get('SELECT * FROM undo_actions WHERE token = ?', [token]);
-        if (!entry) {
-          const err = new Error('That Undo is no longer available');
-          err.status = 404;
-          throw err;
-        }
-        if (entry.owner !== owner) {
-          const err = new Error('That Undo belongs to another session');
-          err.status = 403;
-          throw err;
-        }
-        if (Date.parse(entry.expires_at) <= Date.now()) {
-          const err = new Error('That Undo has expired');
-          err.status = 410;
-          throw err;
-        }
-        let payload;
-        try {
-          payload = JSON.parse(entry.payload);
-        } catch {
-          const err = new Error('That Undo record is unreadable');
-          err.status = 500;
-          throw err;
-        }
-        let applied;
-        if (entry.kind === 'complete') applied = await undoCompletion(payload);
-        else if (entry.kind === 'delete') applied = await restoreDeleted(payload);
-        else {
-          const err = new Error('That Undo record is unreadable');
-          err.status = 500;
-          throw err;
-        }
-        await db.run('DELETE FROM undo_actions WHERE token = ?', [token]);
-        return { kind: entry.kind, reminderId: applied.reminderId };
-      });
-      res.json({ ok: true, kind: result.kind, reminder_id: result.reminderId });
-    } catch (err) {
-      res.status(err.status || 500).json({ error: err.message || 'Could not undo' });
-    }
+    const result = await db.run('DELETE FROM reminders WHERE id = ?', [id]);
+    if (!result.changes) return res.status(404).json({ error: 'Item not found' });
+    res.json({ ok: true });
   });
 
   app.post('/api/push/subscribe', async (req, res) => {
