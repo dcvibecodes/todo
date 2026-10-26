@@ -496,6 +496,11 @@ function setLastList(id) {
 
 async function boot() {
   registerServiceWorker();
+  // A refresh closes every sheet but its history marker can survive the
+  // reload; drop it so Back navigates instead of closing nothing.
+  if (history.state && history.state.todoSheet) {
+    try { history.replaceState(null, ''); } catch { /* ignore */ }
+  }
   try {
     const session = await api('/api/session');
     state.needsSetup = session.needsSetup;
@@ -2938,20 +2943,43 @@ function syncSheetState() {
   }
 }
 
+// Sheets are anchored to browser History so Back closes them like Escape:
+// each open pushes one same-URL marker entry (no hashchange, so the background
+// never re-renders); one Back press pops one marker and closes the topmost
+// sheet with the same cancel semantics as Escape.
+let sheetPopGuard = false;
+
 function openSheet(selector) {
   if (!$$('.sheet').some((sheet) => !sheet.hidden)) {
     lastFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   }
   $(selector).hidden = false;
+  try {
+    const depth = (history.state && history.state.todoSheet || 0) + 1;
+    history.pushState({ todoSheet: depth }, '', location.href);
+  } catch { /* history unavailable (sandboxed frame): sheets still work */ }
   syncSheetState();
+}
+
+// App-initiated close of one sheet: consume exactly one marker entry so the
+// user's next Back navigates the background as usual.
+function consumeSheetMarker() {
+  if (history.state && history.state.todoSheet) {
+    sheetPopGuard = true;
+    history.back();
+  }
 }
 
 function closeSheet(selector) {
   $(selector).hidden = true;
   syncSheetState();
+  consumeSheetMarker();
 }
 
-function closeTopSheet() {
+// Close the topmost sheet without touching History — composed by the
+// user-facing paths below and used directly by the popstate handler (the
+// traversal has already consumed that map's entry).
+function closeTopSheetInPlace() {
   const open = $$('.sheet').filter((sheet) => !sheet.hidden);
   if (open.length) {
     const sheet = open[open.length - 1];
@@ -2960,6 +2988,12 @@ function closeTopSheet() {
   }
   syncSheetState();
   return open.length > 0;
+}
+
+function closeTopSheet() {
+  const closed = closeTopSheetInPlace();
+  if (closed) consumeSheetMarker();
+  return closed;
 }
 
 function focusableIn(sheet) {
@@ -3807,7 +3841,26 @@ document.addEventListener('click', (event) => {
       if (sheet.id === 'settings-sheet') revertSettingsPreview();
       sheet.hidden = true;
       syncSheetState();
+      consumeSheetMarker();
     }
+  }
+});
+
+// Browser/hardware Back: one pop = one sheet closed (cancel semantics), or —
+// once every sheet marker is popped — leave app-initiated sheets untouched
+// (already closed). History-anchored sheets, see openSheet.
+window.addEventListener('popstate', (event) => {
+  if (sheetPopGuard) {
+    sheetPopGuard = false;
+    return;
+  }
+  const depth = event.state && event.state.todoSheet ? event.state.todoSheet : 0;
+  if (!depth) {
+    while (closeTopSheetInPlace()) { /* back past all sheet markers */ }
+    return;
+  }
+  while ($$('.sheet').filter((sheet) => !sheet.hidden).length > depth) {
+    if (!closeTopSheetInPlace()) break;
   }
 });
 
