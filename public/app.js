@@ -2119,7 +2119,7 @@ function updateZoneVisual() {
 function syncModelRows() {
   const model = $('#e-model').value;
   $('#e-model-value').textContent = model === 'floating'
-    ? 'My local time (Floating)' : 'A specific time zone (Anchored)';
+    ? 'My local time (Floating)' : 'Specific timezone';
   updateZoneVisual();
   // The time model only matters once a clock time exists; a date-only item
   // just asks for a date, so the choice stays out of the way.
