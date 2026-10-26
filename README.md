@@ -2,6 +2,11 @@
 
 A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due dates, urgent flags, recurring reminders, natural-language quick add, smart lists, floating time zones, a token API for external agents, completed history, dark mode, and web push. No frontend framework and no build step.
 
+## What's New in v2.7.7
+
+- **Two time models: Floating and Anchored** — the editor's Time model row now offers **My local time (Floating)** (the default) or **A specific time zone (Anchored)**. Fixed is gone as an everyday choice: everything it covered is expressed by the other two, and every existing Fixed item was converted to Floating (their stored dates and instants were untouched, so nothing fires at a different moment). The Settings default-model choice matches, and Floating remains the default everywhere, including when no setting exists yet. A legacy Fixed item arriving through an old backup still works; it opens in the editor as Floating.
+- **Date-only items skip the time model** — the Time model row and its hint now appear only when an item has a clock time. A date-only item just asks for a date, since the model has no effect until a time exists. Service worker cache bumped to `todo-v2.7.7`.
+
 ## What's New in v2.7.6
 
 A correctness release from an external assessment — four reproduced bugs fixed.
@@ -218,7 +223,7 @@ A correctness release — no new screens, several bugs no longer possible.
 - Recurring reminders (daily/weekly/monthly/yearly/custom) with per-occurrence completion history, skip with undo, a **Next occurrence** row action for due series, and this-occurrence-vs-series editing.
 - Natural-language quick add: "call mom tomorrow 6pm" pre-fills the editor with a removable preview.
 - Smart lists: Today (overdue pinned), Scheduled (overdue pinned, then Today / Tomorrow / This Week / Next Week / Later This Month / Later buckets, Monday-start weeks, exact due date on every row), All, Flagged (urgent), Completed.
-- Time models: fixed instant, floating wall-clock (default; follows the device's last-synced zone), or zone-anchored (with a styled Time zone picker in the editor). Settings has a default model and default zone; changing them affects new reminders only, never existing ones.
+- Time models: floating wall-clock (default; follows the device's last-synced zone) or zone-anchored (with a styled Time zone picker in the editor). The choice appears once an item has a clock time; date-only items just take a date. Settings has a default model and default zone; changing them affects new reminders only, never existing ones.
 - Snooze (in-app button + notification actions where supported). Due rows group their actions under a clear **Snooze until** label: 1 hour, Today/Tomorrow, or Next occurrence for repeating reminders. Opt-in re-push with quiet hours.
 - Token API so external agents can list, add, and complete reminders without a browser.
 - Completed reminders remain visible for 30 days in the UI and `GET /api/state`; older records stay in SQLite and are still returned by `GET /api/reminders` (including the complete-snapshot mode). Per-list Show/Hide-completed choice is remembered.
@@ -236,11 +241,10 @@ Urgent is a visual flag only: it marks the reminder in red but does not change n
 
 ### Time model differences
 
-- **Fixed** — stores one absolute instant. It fires at the same moment everywhere; the clock time shown changes with the device zone.
 - **Floating** — stores a wall-clock time in the device's last-synced zone (“6pm wherever I am”). It re-syncs when the app opens in a new zone; the server cannot detect travel while the app is closed.
 - **Anchored** — stores a wall-clock time in a named zone (“6pm Asia/Kolkata”) and keeps that zone's schedule regardless of the device.
 
-The card shows “Floating” without a zone (the editor discloses the last synced zone) and “Anchored · zone” when a specific zone is the rule. Changing the default model/zone in Settings only affects new reminders; the Settings sheet states this in a prominent notice and confirms it again after saving. Existing reminders are never migrated.
+The card shows “Floating” without a zone (the editor discloses the last synced zone) and “Anchored · zone” when a specific zone is the rule, and only once an item has a date. Changing the default model/zone in Settings only affects new reminders; the Settings sheet states this in a prominent notice and confirms it again after saving. Existing reminders are never migrated. Older backups may still contain Fixed items (one absolute instant, shown in the device zone); they fire as stored and open in the editor as Floating.
 
 ## Stack
 
