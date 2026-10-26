@@ -2,6 +2,16 @@
 
 A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due dates, urgent flags, recurring reminders, natural-language quick add, smart lists, floating time zones, a token API for external agents, completed history, dark mode, and web push. No frontend framework and no build step.
 
+## What's New in v2.8.0
+
+Two small UX improvements, both designed around the existing data and layout.
+
+- **Immediate Undo after completing or deleting** — completing an item or deleting one from the row/editor now offers **Undo** for 10 seconds. Completion undo puts an ordinary item back exactly as it was (including a prior snooze) and removes the recorded occurrence for a repeating series without moving the series twice. Delete undo restores the same item id, notes, metadata, and occurrence history. Only the latest undoable action is offered, so a rapid second action replaces the first Undo; older tokens are rejected. Undo survives a page refresh in the same tab (the visible toast is restored from session storage), expires cleanly, and returns a conflict instead of overwriting edits or schedule changes made after the action. Closing the tab/app inside the 10-second window commits the completed/deleted state; the Undo offer is not resurrected in a new tab. Backed by a short-lived server-side journal (new `undo_actions` table) and session-only `POST /api/undo/:token`; nothing is deferred or silently deleted later.
+- **Read more / Collapse for long notes** — notes still show a two-line preview, but a real **Read more** control now appears only when the preview is actually clipped. Expanding shows the full note without opening the editor; **Collapse** puts it back. Line breaks are preserved verbatim, and URL chips stay separate from the prose (the URL is no longer duplicated in the note text).
+- The Undo toast is announced politely to screen readers, and its action plus the note toggle use full tap targets on touch devices.
+
+Service worker cache bumped to `todo-v2.8.0`.
+
 ## What's New in v2.7.6
 
 A correctness release from an external assessment — four reproduced bugs fixed.
@@ -302,6 +312,7 @@ Authenticated routes require the `todo.sid` session cookie. State-changing reque
 - `PUT /api/lists/order`
 - `POST /api/reminders`, `PATCH` / `DELETE /api/reminders/:id`
 - `POST /api/reminders/:id/skip|unskip|snooze|reschedule`, `GET /api/reminders/:id/occurrences`
+- `POST /api/undo/:token` — session-only, consumes a 10-second token returned as `undo` by a completion or delete; `410` when expired and `409` when the item/series changed after the action
 - `POST /api/parse` (natural-language title parsing)
 - `GET /api/lists`, `GET /api/reminders` (also usable with a token)
 - `GET /api/tokens`, `POST /api/tokens`, `POST /api/tokens/:id/revoke`
@@ -344,7 +355,7 @@ Sessions are stored in SQLite, so refreshing the page or restarting the process 
 
 ## Version
 
-2.6.6
+2.8.0
 
 ## License
 

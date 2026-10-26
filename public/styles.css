@@ -991,8 +991,46 @@ body.list-dragging .list-grip { cursor: grabbing; }
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  white-space: normal;
+  white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+.reminder-notes.expanded {
+  display: block;
+  -webkit-line-clamp: unset;
+  overflow: visible;
+}
+
+.note-toggle {
+  align-self: flex-start;
+  margin-top: 1px;
+  padding: 2px 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-2);
+  font-family: inherit;
+  font-size: 0.72rem;
+  font-weight: 650;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.note-toggle:hover { color: var(--text); }
+
+.note-toggle:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
+}
+
+@media (pointer: coarse) {
+  /* Text button, but still a comfortable 44px tap target on a phone. */
+  .note-toggle {
+    min-height: 44px;
+    margin: -8px 0;
+    padding: 8px 0;
+  }
 }
 
 .reminder-links {
@@ -1056,6 +1094,7 @@ body.list-dragging .list-grip { cursor: grabbing; }
   .reminder-body > .reminder-title,
   .reminder-body > .reminder-meta,
   .reminder-body > .reminder-notes,
+  .reminder-body > .note-toggle,
   .reminder-body > .reminder-links { grid-column: 1; }
   /* One block holds Snooze and Reschedule: its top lines up with the
      title and its groups sit 8px apart, the same as the chip gap. */
@@ -1967,14 +2006,30 @@ body.sheet-open .sidebar {
 
 .toast-action {
   border: 0;
+  border-radius: 4px;
   background: transparent;
-  padding: 0;
+  padding: 4px 2px;
+  margin: -4px -2px;
   color: inherit;
   font: inherit;
   font-weight: 600;
   text-decoration: underline;
+  text-underline-offset: 2px;
   cursor: pointer;
   flex: none;
+}
+
+.toast-action:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+@media (pointer: coarse) {
+  .toast-action {
+    min-height: 44px;
+    padding: 10px 6px;
+    margin: -10px -6px;
+  }
 }
 
 @keyframes toast-in {

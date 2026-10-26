@@ -257,6 +257,21 @@ async function init() {
     WHERE color LIKE '#%'`);
   await run('CREATE INDEX IF NOT EXISTS idx_reminders_list ON reminders(list_id)');
   await run('CREATE INDEX IF NOT EXISTS idx_reminders_due ON reminders(completed, due_at)');
+  // Short-lived server-side undo journal. Delete has to happen immediately
+  // (a delayed DELETE would vanish on reload), so the exact row and its
+  // occurrence history are snapshotted here for a few seconds. Entries are
+  // never exported or imported; they expire on their own.
+  await run(`CREATE TABLE IF NOT EXISTS undo_actions (
+    token TEXT PRIMARY KEY,
+    owner TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('complete','delete')),
+    reminder_id INTEGER NOT NULL,
+    payload TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL
+  )`);
+  await run('CREATE INDEX IF NOT EXISTS idx_undo_actions_expires ON undo_actions(expires_at)');
+  await run('DELETE FROM undo_actions WHERE expires_at <= ?', [new Date().toISOString()]);
   await run(`CREATE TABLE IF NOT EXISTS push_subscriptions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     endpoint TEXT UNIQUE NOT NULL,
