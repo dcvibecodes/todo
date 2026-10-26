@@ -2,6 +2,10 @@
 
 A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due dates, urgent flags, recurring reminders, natural-language quick add, smart lists, floating time zones, a token API for external agents, completed history, dark mode, and web push. No frontend framework and no build step.
 
+## What's New in v2.7.5
+
+- **Browser Back closes popovers** — when the Add/Edit item editor, Settings, the list sheet, the notification sheet, or the device-zone prompt is open, pressing Back (browser or Android hardware) now closes the topmost popover instead of navigating the screen behind it — the same result as **Escape** or Cancel (Settings restores its preview, editor edits are discarded). Nested popovers close one per Back press. After you close one normally with **Save**/**Cancel**, Back keeps navigating as before. Service worker cache bumped to `todo-v2.7.5`.
+
 ## What's New in v2.7.4
 
 A correctness release — no new screens, several bugs no longer possible.
