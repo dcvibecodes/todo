@@ -7,7 +7,9 @@
 //     interval: N,                 // default 1; custom requires >= 1
 //     unit: 'days'|'weeks'|'months', // custom only
 //     anchorDay: 1-31,             // monthly/yearly/custom-months: day-of-month to aim for
-//     anchorMonth: 1-12 }          // yearly only
+//     anchorMonth: 1-12,           // yearly only
+//     anchorHour: 0-23,            // zone series: intended wall-clock time
+//     anchorMinute: 0-59 }         // zone series: intended wall-clock time
 //
 // MONTH-EDGE POLICY (acceptance requirement): a monthly series anchored on the
 // 31st clamps to the last day of short months (Feb 28/29, Apr 30, ...) and then
@@ -174,6 +176,16 @@ function parseRepeatRule(value) {
     if (!Number.isInteger(anchorMonth) || anchorMonth < 1 || anchorMonth > 12) return bad('Invalid repeat anchor month');
     rule.anchorMonth = anchorMonth;
   }
+  if (value.anchorHour !== undefined) {
+    const anchorHour = Number(value.anchorHour);
+    if (!Number.isInteger(anchorHour) || anchorHour < 0 || anchorHour > 23) return bad('Invalid repeat anchor hour');
+    rule.anchorHour = anchorHour;
+  }
+  if (value.anchorMinute !== undefined) {
+    const anchorMinute = Number(value.anchorMinute);
+    if (!Number.isInteger(anchorMinute) || anchorMinute < 0 || anchorMinute > 59) return bad('Invalid repeat anchor minute');
+    rule.anchorMinute = anchorMinute;
+  }
   return rule;
 }
 
@@ -210,21 +222,25 @@ function isRecurringRule(rule) {
   return Boolean(rule && rule.type && rule.type !== 'none');
 }
 
-// Fill anchorDay/anchorMonth from the series start date, in the effective zone.
+// Fill anchorDay/anchorMonth/anchorHour/anchorMinute from the series start
+// date, in the effective zone. anchorHour/anchorMinute pin the wall-clock time
+// so a DST gap on one occurrence (2:30am does not exist on spring-forward day)
+// is rolled forward for that day only instead of shifting the whole series.
 function anchorRule(rule, dueISO, zone) {
   const out = { ...rule };
+  const dueMs = new Date(dueISO).getTime();
+  const wall = zone ? instantToWall(dueMs, zone) : null;
+  const d = new Date(dueMs);
   const needsDay = rule.type === 'monthly' || rule.type === 'yearly'
     || (rule.type === 'custom' && rule.unit === 'months');
   if (needsDay && out.anchorDay === undefined) {
-    const w = zone ? instantToWall(new Date(dueISO).getTime(), zone) : null;
-    const d = new Date(dueISO);
-    out.anchorDay = zone ? w.d : d.getUTCDate();
+    out.anchorDay = wall ? wall.d : d.getUTCDate();
   }
   if (rule.type === 'yearly' && out.anchorMonth === undefined) {
-    const w = zone ? instantToWall(new Date(dueISO).getTime(), zone) : null;
-    const d = new Date(dueISO);
-    out.anchorMonth = zone ? w.mo : d.getUTCMonth() + 1;
+    out.anchorMonth = wall ? wall.mo : d.getUTCMonth() + 1;
   }
+  if (out.anchorHour === undefined) out.anchorHour = wall ? wall.h : d.getUTCHours();
+  if (out.anchorMinute === undefined) out.anchorMinute = wall ? wall.mi : d.getUTCMinutes();
   return out;
 }
 
@@ -277,7 +293,12 @@ function advanceOccurrence(rule, fromISO, zone) {
   }
 
   const w = instantToWall(from, zone);
-  const at = (parts) => wallToInstant(zone, { ...parts, h: w.h, mi: w.mi });
+  // Use the series' intended clock time, not whatever the previous occurrence
+  // happened to resolve to. On spring-forward day 2:30 rolls forward to 3:30;
+  // without the anchor, every later occurrence would inherit 3:30 forever.
+  const h = Number.isInteger(rule.anchorHour) ? rule.anchorHour : w.h;
+  const mi = Number.isInteger(rule.anchorMinute) ? rule.anchorMinute : w.mi;
+  const at = (parts) => wallToInstant(zone, { ...parts, h, mi });
   if (rule.type === 'daily' || (rule.type === 'custom' && rule.unit === 'days')) {
     return at({ y: w.y, mo: w.mo, d: w.d + interval });
   }

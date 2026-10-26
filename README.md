@@ -2,6 +2,15 @@
 
 A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due dates, urgent flags, recurring reminders, natural-language quick add, smart lists, floating time zones, a token API for external agents, completed history, dark mode, and web push. No frontend framework and no build step.
 
+## What's New in v2.7.6
+
+A correctness release from an external assessment — four reproduced bugs fixed.
+
+- **Failed pushes retry instead of vanishing** — a reminder used to be marked notified even when every push attempt failed (for example a transient network error), so with re-push off (the default) it was never tried again. The scheduler now stamps only after at least one device actually accepted the push; a fully failed attempt leaves the item armed for the next 15-second tick. Dead 404/410 subscriptions are still pruned.
+- **Backups keep per-occurrence list and urgent overrides** — export now includes an occurrence's list and urgency, and import restores them. Older backup files without those fields still import cleanly (absent means "inherit the series").
+- **Import counts are honest** — reimporting the same file now reports `occurrencesAdded: 0` instead of counting conflict no-ops as inserts; occurrences that already exist count as skipped.
+- **Spring-forward no longer permanently shifts an early-morning series** — a daily 2:30am reminder in a DST zone rolled forward to 3:30 on the gap day and then stayed at 3:30 forever. The intended wall-clock time is now anchored on the repeat rule (like the monthly anchor day), so only the gap-day occurrence rolls forward and the series returns to 2:30 the next day. Existing series adopt the anchor from their current occurrence when they next advance. Service worker cache bumped to `todo-v2.7.6`.
+
 ## What's New in v2.7.5
 
 - **Browser Back closes popovers** — when the Add/Edit item editor, Settings, the list sheet, the notification sheet, or the device-zone prompt is open, pressing Back (browser or Android hardware) now closes the topmost popover instead of navigating the screen behind it — the same result as **Escape** or Cancel (Settings restores its preview, editor edits are discarded). Nested popovers close one per Back press. After you close one normally with **Save**/**Cancel**, Back keeps navigating as before. Service worker cache bumped to `todo-v2.7.5`.

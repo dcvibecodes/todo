@@ -412,7 +412,7 @@ async function completeReminder(id) {
     throw err;
   }
   const now = new Date().toISOString();
-  const rule = parseRuleColumn(reminder.repeat_rule);
+  let rule = parseRuleColumn(reminder.repeat_rule);
   if (!recurrence.isRecurringRule(rule)) {
     if (reminder.completed) return { advanced: false, reminder };
     await db.run(
@@ -430,6 +430,9 @@ async function completeReminder(id) {
   }
   const settings = await getSettings();
   const zone = effectiveZoneFor(reminder, settings);
+  // Series created before anchorHour/anchorMinute existed still get the right
+  // DST behavior: derive the intended clock time from the current occurrence.
+  rule = recurrence.anchorRule(rule, reminder.due_at, zone);
   // Concurrency guard: if THIS scheduled occurrence is already recorded as
   // completed, the series already moved on (double-tap / racing retry).
   // Re-running would record the NEXT occurrence and advance the series a
@@ -480,7 +483,7 @@ async function skipOccurrence(id) {
     err.status = 404;
     throw err;
   }
-  const rule = parseRuleColumn(reminder.repeat_rule);
+  let rule = parseRuleColumn(reminder.repeat_rule);
   if (!recurrence.isRecurringRule(rule) || !reminder.due_at) {
     const err = new Error('Only dated repeating items can skip an occurrence');
     err.status = 400;
@@ -488,6 +491,7 @@ async function skipOccurrence(id) {
   }
   const settings = await getSettings();
   const zone = effectiveZoneFor(reminder, settings);
+  rule = recurrence.anchorRule(rule, reminder.due_at, zone);
   const now = new Date().toISOString();
   // Same concurrency guard as completeReminder: a recorded skip is
   // idempotent; a racing duplicate must not skip the NEXT occurrence too.
@@ -1248,7 +1252,8 @@ async function main() {
       completed_at, urgent, repeat_rule, time_model, time_zone, snoozed_until,
       sort_order, created_at, updated_at, revision FROM reminders ORDER BY id`);
     const occurrences = await db.all(
-      'SELECT reminder_id, occurrence_at, status, title, notes, completed_at, created_at FROM reminder_occurrences ORDER BY id'
+      `SELECT reminder_id, occurrence_at, status, title, notes, list_id, urgent,
+         completed_at, created_at FROM reminder_occurrences ORDER BY id`
     );
     res.json({
       app: 'todo',
@@ -1345,19 +1350,28 @@ async function main() {
         continue;
       }
       try {
-        await db.run(`
+        // Older backups have no list_id/urgent: absent stays NULL, which
+        // means "inherit the series values" just like an occurrence edit
+        // that never set that override.
+        const occurrenceList = Number.isInteger(occurrence.list_id) && knownLists.has(occurrence.list_id)
+          ? occurrence.list_id : null;
+        const occurrenceUrgent = occurrence.urgent === null || occurrence.urgent === undefined
+          ? null : (occurrence.urgent ? 1 : 0);
+        const inserted = await db.run(`
           INSERT INTO reminder_occurrences
-            (reminder_id, occurrence_at, status, title, notes, completed_at, created_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?)
+            (reminder_id, occurrence_at, status, title, notes, list_id, urgent, completed_at, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(reminder_id, occurrence_at) DO NOTHING
         `, [
           occurrence.reminder_id, isoOrNull(occurrence.occurrence_at), occurrence.status,
           typeof occurrence.title === 'string' ? occurrence.title.slice(0, 500) : null,
           typeof occurrence.notes === 'string' ? occurrence.notes.slice(0, NOTES_MAX) : null,
+          occurrenceList, occurrenceUrgent,
           isoOrNull(occurrence.completed_at),
           typeof occurrence.created_at === 'string' ? occurrence.created_at : new Date().toISOString(),
         ]);
-        counts.occurrencesAdded += 1;
+        if (inserted.changes) counts.occurrencesAdded += 1;
+        else counts.occurrencesSkipped += 1;
       } catch { counts.occurrencesSkipped += 1; }
     }
     await db.setSetting('store_epoch', crypto.randomBytes(16).toString('hex'));
@@ -2739,7 +2753,7 @@ async function main() {
           // First fire during quiet hours still notifies once (missing a
           // deadline is worse than a buzz); only re-pushes stay silent.
         }
-        await push.sendToAll({
+        const pushResult = await push.sendToAll({
           title: reminder.title,
           body: reminder.notes || reminder.list_name,
           url: '/#/list/' + reminder.list_id,
@@ -2749,6 +2763,11 @@ async function main() {
           sigComplete: await signPushAction(reminder.id, reminder.due_at, 'complete'),
           sigSnooze: await signPushAction(reminder.id, reminder.due_at, 'snooze'),
         });
+        // Nothing delivered (all devices failed, or push is not ready): leave
+        // notified_at NULL so the next tick retries. Dead 404/410 endpoints
+        // are pruned by sendToAll; once none remain the no-subscriptions
+        // guard above stops stamping, so a new device can still receive it.
+        if (!pushResult || !pushResult.sent) continue;
         // Stamp only if the reminder is still on THIS occurrence: a slow
         // push loop can race the user re-arming or completing the item, and
         // an unconditional stamp would mark the NEXT occurrence as already
