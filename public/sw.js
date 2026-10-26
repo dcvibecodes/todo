@@ -1,6 +1,6 @@
 'use strict';
 
-const CACHE = 'todo-v2.7.8';
+const CACHE = 'todo-v2.7.9';
 const ASSETS = [
   '/',
   '/index.html',
@@ -104,7 +104,17 @@ self.addEventListener('push', (event) => {
       { action: 'snooze', title: 'Snooze 1 hour' },
     ];
   }
-  event.waitUntil(self.registration.showNotification(data.title || 'ToDo', options));
+  const tasks = [self.registration.showNotification(data.title || 'ToDo', options)];
+  // Apply the server-computed badge count so the home screen icon stays
+  // current without opening the app (iOS/iPadOS 16.4+ home screen web apps;
+  // silently skipped where unsupported).
+  if (typeof data.badge === 'number' && 'setAppBadge' in self.navigator) {
+    tasks.push(
+      (data.badge > 0 ? self.navigator.setAppBadge(data.badge) : self.navigator.clearAppBadge())
+        .catch(() => {})
+    );
+  }
+  event.waitUntil(Promise.all(tasks));
 });
 
 self.addEventListener('notificationclick', (event) => {
