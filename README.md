@@ -2,6 +2,19 @@
 
 A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due dates, urgent flags, recurring reminders, natural-language quick add, smart lists, floating time zones, a token API for external agents, completed history, dark mode, and web push. No frontend framework and no build step.
 
+## What's New in v2.7.4
+
+A correctness release — no new screens, several bugs no longer possible.
+
+- **Repeating series survive month boundaries and DST** — daily, weekly, and week-unit series previously shifted +3 hours at every month boundary in a time zone (Oct 31 → Nov 1 was read as a DST gap and corrected the wrong way), and nonexistent wall times on spring-forward days landed 3–4 hours late. Occurrence math now normalizes dates before checking for a DST gap, so a 6pm series stays 6pm for good, and "2:30am on the transition day" rolls forward once instead of twice.
+- **Weekday repeats from text** — "Every monday", "each fri", and "every other week" in a title now create real repeating rules: a weekly rule that always targets the next matching weekday, rather than silently creating a non-repeating item. Server labels read "Weekly on Monday".
+- **Snooze actually snoozes again** — a snoozed item keeps its "already notified" stamp from the first fire, so with re-push off (the default) it could never notify again when the snooze ended. Snoozing now re-arms the reminder; it fires once when the snooze runs out.
+- **Server stops dying on a failed request** — Express 4 does not catch rejected promises in async route handlers, so one slow disk read or database lock could restart the whole process. Every route's async handler now funnels failures into the normal error path.
+- **Rapid double-taps can't skip a series day** — completing or skipping a repeating item twice in a row (two taps, notification button + editor, a racing retry) previously recorded the *next* occurrence too, silently skipping it. The advance is now conditional on the date the request started from, so exactly one tap wins.
+- **The scheduler can't stamp a re-armed reminder** — if a push loop was still sending when you re-armed or completed an item, the late bookkeeping marked the *new* date as already-notified and it would never fire. Stamps are now bound to the specific occurrence that was pushed.
+- **"This occurrence" edits save** — editing a single occurrence of a repeating item always failed with an error because the editor sends its device-zone echo alongside the edit; that harmless field is no longer rejected. Editing a date-only item also no longer rewrites its hidden timestamp to the current default time.
+- **Backups import silently again** — the import endpoint's insert had one mismatched bind, so *every* imported reminder was counted "skipped" by a catch that hid the error; imported timestamps (e.g. `+05:30` offsets) are also normalized to the canonical UTC form the scheduler compares. Service worker cache bumped to `todo-v2.7.4`.
+
 ## What's New in v2.7.3
 
 - **No time-model label on undated items** — the **Floating** / **Anchored** tag now appears only on items that actually have a date, since the time model has no effect until one exists. Previously every item created with the Floating default showed a "Floating" tag even without a date. Service worker cache bumped to `todo-v2.7.3`.
