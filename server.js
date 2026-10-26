@@ -2718,14 +2718,18 @@ async function main() {
       const nowMs = Date.now();
       const now = new Date(nowMs).toISOString();
       const floor = new Date(nowMs - BACKLOG_CAP_DAYS * 24 * 3600 * 1000).toISOString();
+      // Explicit snooze replaces the next alert time, not the task date.
+      // Keep its expired value after firing: notified_at prevents another
+      // first alert at the original due time; repeat pushes keep their cadence.
       const due = await db.all(`
         SELECT r.id, r.title, r.notes, r.list_id, r.due_at, r.notified_at,
-               r.last_push_at, r.push_count, l.name AS list_name
+               r.last_push_at, r.push_count, r.revision, l.name AS list_name
         FROM reminders r JOIN lists l ON l.id = r.list_id
-        WHERE r.completed = 0 AND r.due_at IS NOT NULL AND r.due_at <= ?
-          AND r.due_at >= ? AND (r.snoozed_until IS NULL OR r.snoozed_until <= ?)
-        ORDER BY r.due_at LIMIT 50
-      `, [now, floor, now]);
+        WHERE r.completed = 0 AND r.due_at IS NOT NULL
+          AND COALESCE(r.snoozed_until, r.due_at) <= ?
+          AND COALESCE(r.snoozed_until, r.due_at) >= ?
+        ORDER BY COALESCE(r.snoozed_until, r.due_at) LIMIT 50
+      `, [now, floor]);
       if (!due.length) return;
 
       const subscriptions = await db.get('SELECT COUNT(*) AS n FROM push_subscriptions');
@@ -2791,8 +2795,8 @@ async function main() {
         await db.run(
           `UPDATE reminders SET notified_at = COALESCE(notified_at, ?),
              last_push_at = ?, push_count = COALESCE(push_count, 0) + 1
-           WHERE id = ? AND due_at = ?`,
-          [now, now, reminder.id, reminder.due_at]
+           WHERE id = ? AND due_at = ? AND revision = ? AND completed = 0`,
+          [now, now, reminder.id, reminder.due_at, reminder.revision]
         );
       }
     } catch (err) {
