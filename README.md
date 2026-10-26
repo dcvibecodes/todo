@@ -2,6 +2,10 @@
 
 A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due dates, urgent flags, recurring reminders, natural-language quick add, smart lists, floating time zones, a token API for external agents, completed history, dark mode, and web push. No frontend framework and no build step.
 
+## What's New in v2.7.9
+
+- **Notifications update the app-icon badge** - every reminder push now carries the current count of unfinished items due today or overdue, and the service worker applies it to the Home Screen icon badge. Timed items badge at their scheduled time; date-only items badge when their notification fires at the configured Date-only time. The badge stays current without opening the app, and still refreshes on open as before. Needs iOS/iPadOS 16.4+ with the app on the Home Screen and notifications allowed; other platforms skip the badge silently. Service worker cache bumped to `todo-v2.7.9`.
+
 ## What's New in v2.7.8
 
 - **Shorter Anchored label in the editor** - the Time model choice now reads "Specific timezone" instead of "A specific time zone (Anchored)", so it fits on phone-width screens without truncating; the helper text under the row still explains what it does. Service worker cache bumped to `todo-v2.7.8`.
