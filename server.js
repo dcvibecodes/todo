@@ -2741,6 +2741,21 @@ async function main() {
         recurrence.isValidTimeZone(settings.device_zone) ? settings.device_zone : null,
         settings.quiet_start, settings.quiet_end);
 
+      // Badge mirrors the app's updateBadge(): unfinished items due by end of
+      // today in the last confirmed device zone (overdue included). Sent with
+      // every push so the service worker can refresh the icon badge without
+      // the app being opened.
+      const badgeZone = recurrence.isValidTimeZone(settings.device_zone) ? settings.device_zone : null;
+      const badgeWall = badgeZone ? recurrence.instantToWall(nowMs, badgeZone) : null;
+      const badgeEnd = badgeWall
+        ? new Date(new Date(recurrence.wallToInstant(badgeZone, { y: badgeWall.y, mo: badgeWall.mo, d: badgeWall.d, h: 23, mi: 59 })).getTime() + 59999).toISOString()
+        : new Date(nowMs + 24 * 3600 * 1000).toISOString();
+      const badgeRow = await db.get(
+        'SELECT COUNT(*) AS n FROM reminders WHERE completed = 0 AND due_at IS NOT NULL AND due_at <= ?',
+        [badgeEnd]
+      );
+      const badgeCount = badgeRow ? badgeRow.n : 0;
+
       for (const reminder of due) {
         const firstFire = !reminder.notified_at;
         let repush = false;
@@ -2754,6 +2769,7 @@ async function main() {
           // deadline is worse than a buzz); only re-pushes stay silent.
         }
         const pushResult = await push.sendToAll({
+          badge: badgeCount,
           title: reminder.title,
           body: reminder.notes || reminder.list_name,
           url: '/#/list/' + reminder.list_id,
