@@ -1992,9 +1992,16 @@ function escapeHtml(value) {
 
 /* ---------------- Reminder actions ---------------- */
 
+// One in-flight completion per item: a rapid double-tap must not send two
+// PATCHes (for recurring series the second tap used to advance the series
+// twice, silently skipping an occurrence).
+const completingInFlight = new Set();
+
 async function toggleCompleted(reminder, row) {
   // Optimistic feedback only: the check fills while the request is already
   // in flight. A failure re-renders the row's real state.
+  if (completingInFlight.has(reminder.id)) return;
+  completingInFlight.add(reminder.id);
   if (row && !reminder.completed) row.classList.add('completing');
   try {
     const result = await api('/api/reminders/' + reminder.id, {
@@ -2010,6 +2017,8 @@ async function toggleCompleted(reminder, row) {
   } catch (err) {
     if (row) row.classList.remove('completing');
     toast(err.message);
+  } finally {
+    completingInFlight.delete(reminder.id);
   }
 }
 
@@ -2472,6 +2481,9 @@ async function saveEditor(event) {
 
   let dueAt = null;
   let hasTime = 0;
+  const current = state.editingId
+    ? findReminder(state.editingId)
+    : null;
   if (dateValue) {
     const [year, month, day] = dateValue.split('-').map(Number);
     if (timeOn && timeValue) {
@@ -2481,6 +2493,14 @@ async function saveEditor(event) {
     } else {
       const [defHours, defMinutes] = String((state.settings && state.settings.default_time) || '09:00').split(':').map(Number);
       dueAt = new Date(year, month - 1, day, defHours, defMinutes).toISOString();
+      // Date-only items hide their stored timestamp (09:00 of the saved
+      // day). Editing the title must not silently rewrite it to the
+      // current default: keep the stored instant unless the user changed
+      // the date the editor is showing.
+      if (current && current.due_at && !current.has_time
+        && dateValue === localDateValue(new Date(current.due_at))) {
+        dueAt = current.due_at;
+      }
     }
   }
 
@@ -2497,9 +2517,6 @@ async function saveEditor(event) {
   }
 
   const model = $('#e-model').value;
-  const current = state.editingId
-    ? findReminder(state.editingId)
-    : null;
   const editingSeries = current && parseRuleClient(current.repeat_rule).type !== 'none';
   const scope = editingSeries ? state.editScope : 'series';
   const body = {
@@ -2512,6 +2529,8 @@ async function saveEditor(event) {
   if (scope === 'occurrence') {
     // Occurrence-only edits carry just the overridden fields; date changes
     // always go through the series path (the server enforces this too).
+    // device_zone is a series-mode settings echo — occurrence scope rejects it.
+    delete body.device_zone;
     body.scope = 'occurrence';
   } else {
     body.due_at = dueAt;

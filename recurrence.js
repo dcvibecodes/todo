@@ -73,26 +73,49 @@ function zoneOffsetMs(zone, ms) {
   return asUTC - Math.floor(ms / 1000) * 1000;
 }
 
-// Resolve wall-clock fields in a zone back to an instant. Handles DST gaps by
-// stepping forward (a nonexistent 2:30am becomes ~3:00am) and ambiguous times
-// by settling on the earlier offset.
+// Calendar-date fields for `k` days after (y, mo, d), normalized (day 32 is
+// the 1st of the next month) with the resulting weekday (0=Sunday).
+function wallDayOffset(y, mo, d, k) {
+  const t = new Date(Date.UTC(y, mo - 1, d + k));
+  return { y: t.getUTCFullYear(), mo: t.getUTCMonth() + 1, d: t.getUTCDate(), dow: t.getUTCDay() };
+}
+
+// Resolve wall-clock fields in a zone back to an instant. Overflowing fields
+// (day 32, month 13) are normalized FIRST so a plain month boundary is never
+// mistaken for a DST anomaly. Handles DST gaps by rolling forward (2:30am on
+// spring-forward day lands in the first valid time after the gap) and
+// ambiguous times by settling on the earlier offset.
 function wallToInstant(zone, w) {
-  const target = Date.UTC(w.y, w.mo - 1, w.d, w.h, w.mi);
-  let t = target - zoneOffsetMs(zone, target);
+  const pre = Date.UTC(w.y, w.mo - 1, w.d, w.h, w.mi);
+  const preDate = new Date(pre);
+  const wall = {
+    y: preDate.getUTCFullYear(),
+    mo: preDate.getUTCMonth() + 1,
+    d: preDate.getUTCDate(),
+    h: preDate.getUTCHours(),
+    mi: preDate.getUTCMinutes(),
+  };
+  let t = pre - zoneOffsetMs(zone, pre);
   for (let i = 0; i < 4; i += 1) {
     const off = zoneOffsetMs(zone, t);
-    const next = target - off;
+    const next = pre - off;
     if (next === t) break;
     t = next;
   }
+  const wallMatch = (c) => c.y === wall.y && c.mo === wall.mo && c.d === wall.d && c.h === wall.h && c.mi === wall.mi;
   const check = instantToWall(t, zone);
-  if (check.y !== w.y || check.mo !== w.mo || check.d !== w.d || check.h !== w.h || check.mi !== w.mi) {
-    // Fell in a DST gap: step forward until the wall clock matches again.
+  if (!wallMatch(check)) {
+    // The wall time does not exist (DST gap): 2:30am resolves to 3:30am or
+    // whatever instant the offset math already converged to, provided no
+    // existing later wall time matches. Step in 15-minute increments looking
+    // for one; if none appears, keep the converged roll-forward instant
+    // instead of blindly adding extra hours.
+    let found = null;
     for (let i = 0; i < 12; i += 1) {
-      t += 15 * 60 * 1000;
-      const c = instantToWall(t, zone);
-      if (c.y === w.y && c.mo === w.mo && c.d === w.d && c.h === w.h && c.mi === w.mi) break;
+      const probe = t + (i + 1) * 15 * 60 * 1000;
+      if (wallMatch(instantToWall(probe, zone))) { found = probe; break; }
     }
+    if (found !== null) t = found;
   }
   return new Date(t).toISOString();
 }
@@ -132,6 +155,15 @@ function parseRepeatRule(value) {
     if (!CUSTOM_UNITS.includes(unit)) return bad('Custom repeat unit must be days, weeks, or months');
     rule.unit = unit;
   }
+  if (type === 'weekly' && value.weekdays !== undefined) {
+    const weekdays = Array.isArray(value.weekdays) ? value.weekdays : null;
+    if (!weekdays || !weekdays.length || weekdays.length > 7
+      || !weekdays.every((d) => Number.isInteger(d) && d >= 0 && d <= 6)
+      || new Set(weekdays).size !== weekdays.length) {
+      return bad('Invalid repeat weekdays');
+    }
+    rule.weekdays = [...weekdays].sort((a, b) => a - b);
+  }
   if (value.anchorDay !== undefined) {
     const anchorDay = Number(value.anchorDay);
     if (!Number.isInteger(anchorDay) || anchorDay < 1 || anchorDay > 31) return bad('Invalid repeat anchor day');
@@ -150,12 +182,20 @@ function encodeRepeatRule(rule) {
   return JSON.stringify(rule);
 }
 
+const WEEKDAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
 function ruleLabel(rule) {
   if (!rule || rule.type === 'none') return 'Does not repeat';
   const n = rule.interval || 1;
   switch (rule.type) {
     case 'daily': return n === 1 ? 'Daily' : `Every ${n} days`;
-    case 'weekly': return n === 1 ? 'Weekly' : `Every ${n} weeks`;
+    case 'weekly': {
+      const base = n === 1 ? 'Weekly' : `Every ${n} weeks`;
+      if (n === 1 && Array.isArray(rule.weekdays) && rule.weekdays.length === 1) {
+        return `${base} on ${WEEKDAY_LABELS[rule.weekdays[0]]}`;
+      }
+      return base;
+    }
     case 'monthly': return n === 1 ? 'Monthly' : `Every ${n} months`;
     case 'yearly': return n === 1 ? 'Yearly' : `Every ${n} years`;
     case 'custom': {
@@ -207,7 +247,19 @@ function advanceOccurrence(rule, fromISO, zone) {
     if (rule.type === 'daily' || (rule.type === 'custom' && rule.unit === 'days')) {
       return at(y, mo, day + interval);
     }
-    if (rule.type === 'weekly' || (rule.type === 'custom' && rule.unit === 'weeks')) {
+    if (rule.type === 'weekly') {
+      // Weekday-targeted series ("every mon"): the next calendar day whose
+      // weekday is in the rule, not from+7*interval (which would pin the
+      // rhythm to whatever weekday the series started on).
+      if (interval === 1 && Array.isArray(rule.weekdays) && rule.weekdays.length) {
+        for (let k = 1; k <= 7; k += 1) {
+          const probe = new Date(Date.UTC(y, mo - 1, day + k));
+          if (rule.weekdays.includes(probe.getUTCDay())) return at(y, mo, day + k);
+        }
+      }
+      return at(y, mo, day + 7 * interval);
+    }
+    if (rule.type === 'custom' && rule.unit === 'weeks') {
       return at(y, mo, day + 7 * interval);
     }
     if (rule.type === 'monthly' || (rule.type === 'custom' && rule.unit === 'months')) {
@@ -229,7 +281,16 @@ function advanceOccurrence(rule, fromISO, zone) {
   if (rule.type === 'daily' || (rule.type === 'custom' && rule.unit === 'days')) {
     return at({ y: w.y, mo: w.mo, d: w.d + interval });
   }
-  if (rule.type === 'weekly' || (rule.type === 'custom' && rule.unit === 'weeks')) {
+  if (rule.type === 'weekly') {
+    if (interval === 1 && Array.isArray(rule.weekdays) && rule.weekdays.length) {
+      for (let k = 1; k <= 7; k += 1) {
+        const day = wallDayOffset(w.y, w.mo, w.d, k);
+        if (rule.weekdays.includes(day.dow)) return at({ y: day.y, mo: day.mo, d: day.d });
+      }
+    }
+    return at({ y: w.y, mo: w.mo, d: w.d + 7 * interval });
+  }
+  if (rule.type === 'custom' && rule.unit === 'weeks') {
     return at({ y: w.y, mo: w.mo, d: w.d + 7 * interval });
   }
   if (rule.type === 'monthly' || (rule.type === 'custom' && rule.unit === 'months')) {
@@ -273,8 +334,20 @@ function recomputeInZone(dueISO, fromZone, toZone) {
 // PWA reality check: chrono gives us the date; recurrence keywords are matched
 // here with plain regexes so the rule model stays dependency-free.
 
+const WEEKDAY_TOKENS = {
+  sunday: 0, sun: 0,
+  monday: 1, mon: 1,
+  tuesday: 2, tues: 2, tue: 2,
+  wednesday: 3, weds: 3, wed: 3,
+  thursday: 4, thurs: 4, thur: 4, thu: 4,
+  friday: 5, fri: 5,
+  saturday: 6, sat: 6,
+};
+
 const REPEAT_PATTERNS = [
   { re: /\bevery\s+(\d{1,3})\s+(days?|weeks?|months?)\b/i, custom: true },
+  { re: /\bevery\s+other\s+weeks?\b/i, rule: () => ({ type: 'weekly', interval: 2 }) },
+  { re: /\b(?:every|each)\s+(sunday|sun|monday|mon|tuesday|tues|tue|wednesday|weds|wed|thursday|thurs|thur|thu|friday|fri|saturday|sat)\b/i, weekday: true },
   { re: /\b(daily|every\s+day|each\s+day)\b/i, type: 'daily' },
   { re: /\b(weekly|every\s+week|each\s+week)\b/i, type: 'weekly' },
   { re: /\b(monthly|every\s+month|each\s+month)\b/i, type: 'monthly' },
@@ -293,6 +366,10 @@ function detectRepeat(text) {
       const unit = word.startsWith('day') ? 'days' : word.startsWith('week') ? 'weeks' : 'months';
       if (!Number.isInteger(interval) || interval < 1 || interval > 366) continue;
       rule = { type: 'custom', interval, unit };
+    } else if (pattern.weekday) {
+      rule = { type: 'weekly', interval: 1, weekdays: [WEEKDAY_TOKENS[match[1].toLowerCase()]] };
+    } else if (pattern.rule) {
+      rule = pattern.rule();
     } else {
       rule = { type: pattern.type, interval: 1 };
     }
@@ -302,6 +379,13 @@ function detectRepeat(text) {
   return { rule: { type: 'none' }, cleaned: input.trim() };
 }
 
+// Ordinal-position idioms mean rank, not a date ("3rd place", "1st annual").
+const MONTHDAY_STOPWORDS = new Set([
+  'place', 'annual', 'anniversary', 'amendment', 'century', 'edition', 'seed',
+  'inning', 'innings', 'grade', 'round', 'quarter', 'trimester', 'attempt',
+  'volume', 'episode', 'chapter',
+]);
+
 // Bare day-of-month phrases chrono won't touch ("on the 31st", "the 10th").
 // Returns the day plus the text with the phrase removed, or null.
 function detectMonthDay(text) {
@@ -310,6 +394,11 @@ function detectMonthDay(text) {
   if (!match) return null;
   const day = Number(match[1]);
   if (!Number.isInteger(day) || day < 1 || day > 31) return null;
+  // "the 3rd place win" / "the 22nd amendment": the next word marks an
+  // ordinal rank, not a day of month.
+  const after = input.slice(match.index + match[0].length);
+  const nextWord = (after.match(/^\s*([a-z]+)/i) || [])[1];
+  if (nextWord && MONTHDAY_STOPWORDS.has(nextWord.toLowerCase())) return null;
   const cleaned = input.replace(match[0], ' ').replace(/\s{2,}/g, ' ').replace(/[\s,;]+$/, '').trim();
   return { day, cleaned };
 }

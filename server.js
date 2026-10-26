@@ -29,6 +29,27 @@ app.disable('x-powered-by');
 app.use(compression());
 app.use(express.json({ limit: '2mb' }));
 
+// Express 4 does not forward rejected promises from async handlers/callbacks
+// to the error middleware; since Node 15 an unhandled rejection kills the
+// process. Wrap every verb route so a failed await becomes next(err) instead
+// of a crash. The final error middleware additionally avoids re-responding
+// after headers are already sent.
+for (const verb of ['get', 'post', 'put', 'patch', 'delete']) {
+  const original = app[verb].bind(app);
+  app[verb] = function (...layers) {
+    const wrapped = layers.map((layer) => (typeof layer !== 'function' ? layer
+      : function route(req, res, next) {
+        try {
+          const out = layer(req, res, next);
+          if (out && typeof out.catch === 'function') out.catch(next);
+        } catch (err) {
+          next(err);
+        }
+      }));
+    return original(...wrapped);
+  };
+}
+
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'same-origin');
@@ -55,6 +76,15 @@ function normalizeDate(value) {
   if (value === null || value === undefined || value === '') return null;
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
+}
+
+// For import: any parseable date string becomes the canonical `...Z` ISO form
+// (the scheduler and occurrence matching compare such strings lexically), an
+// unparseable one becomes null.
+function isoOrNull(value) {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
 function validColor(value) {
@@ -400,6 +430,16 @@ async function completeReminder(id) {
   }
   const settings = await getSettings();
   const zone = effectiveZoneFor(reminder, settings);
+  // Concurrency guard: if THIS scheduled occurrence is already recorded as
+  // completed, the series already moved on (double-tap / racing retry).
+  // Re-running would record the NEXT occurrence and advance the series a
+  // second time, silently skipping a day.
+  const prior = await db.get(
+    `SELECT status FROM reminder_occurrences
+     WHERE reminder_id = ? AND occurrence_at = ? AND status = 'completed'`,
+    [id, reminder.due_at]
+  );
+  if (prior) return { advanced: false, alreadyDone: true, reminder };
   const next = recurrence.firstFutureOccurrence(rule, reminder.due_at, zone, now);
   const exception = await db.get(
     `SELECT title, notes, list_id, urgent FROM reminder_occurrences
@@ -421,12 +461,16 @@ async function completeReminder(id) {
     exception && exception.urgent !== null && exception.urgent !== undefined ? exception.urgent : reminder.urgent,
     now, now,
   ]);
-  await db.run(
+  // The advance is conditional on due_at still being the snapshot value: if
+  // another racer advanced between our load and this write, changes = 0 and
+  // we report it instead of advancing the (already new) current occurrence.
+  const updated = await db.run(
     `UPDATE reminders SET due_at = ?, notified_at = NULL, last_push_at = NULL,
-       push_count = 0, snoozed_until = NULL, updated_at = ?, revision = revision + 1 WHERE id = ?`,
-    [next, now, id]
+       push_count = 0, snoozed_until = NULL, updated_at = ?, revision = revision + 1
+     WHERE id = ? AND due_at = ?`,
+    [next, now, id, reminder.due_at]
   );
-  return { advanced: true, nextDue: next };
+  return { advanced: updated.changes > 0, nextDue: updated.changes ? next : null };
 }
 
 async function skipOccurrence(id) {
@@ -445,18 +489,29 @@ async function skipOccurrence(id) {
   const settings = await getSettings();
   const zone = effectiveZoneFor(reminder, settings);
   const now = new Date().toISOString();
+  // Same concurrency guard as completeReminder: a recorded skip is
+  // idempotent; a racing duplicate must not skip the NEXT occurrence too.
+  const prior = await db.get(
+    `SELECT status FROM reminder_occurrences
+     WHERE reminder_id = ? AND occurrence_at = ? AND status = 'skipped'`,
+    [id, reminder.due_at]
+  );
+  if (prior) return { nextDue: reminder.due_at, alreadyDone: true };
   const next = recurrence.firstFutureOccurrence(rule, reminder.due_at, zone, now);
   await db.run(`
     INSERT INTO reminder_occurrences (reminder_id, occurrence_at, status, created_at)
     VALUES (?, ?, 'skipped', ?)
     ON CONFLICT(reminder_id, occurrence_at) DO UPDATE SET status = 'skipped', completed_at = NULL
   `, [id, reminder.due_at, now]);
-  await db.run(
+  // Same conditional advance as completeReminder: only the writer that
+  // flips due_at from the snapshot value owns this skip.
+  const updated = await db.run(
     `UPDATE reminders SET due_at = ?, notified_at = NULL, last_push_at = NULL,
-       push_count = 0, snoozed_until = NULL, updated_at = ?, revision = revision + 1 WHERE id = ?`,
-    [next, now, id]
+       push_count = 0, snoozed_until = NULL, updated_at = ?, revision = revision + 1
+     WHERE id = ? AND due_at = ?`,
+    [next, now, id, reminder.due_at]
   );
-  return { nextDue: next };
+  return { nextDue: updated.changes ? next : reminder.due_at, skipped: updated.changes > 0 };
 }
 
 // Undo a skip: remove the skip record entirely (it disappears from history)
@@ -542,7 +597,11 @@ async function snoozeReminder(id, untilISO) {
     throw err;
   }
   const now = new Date().toISOString();
-  await db.run('UPDATE reminders SET snoozed_until = ?, updated_at = ?, revision = revision + 1 WHERE id = ?',
+  // Snoozing must RE-ARM the reminder: with re-push off (the default), a
+  // fired-and-snoozed item otherwise has notified_at set and would never be
+  // picked up again once snoozed_until passes.
+  await db.run(`UPDATE reminders SET snoozed_until = ?, notified_at = NULL,
+      last_push_at = NULL, push_count = 0, updated_at = ?, revision = revision + 1 WHERE id = ?`,
     [until.toISOString(), now, id]);
   return { snoozedUntil: until.toISOString() };
 }
@@ -1262,13 +1321,13 @@ async function main() {
         `, [
           reminder.id, reminder.list_id, String(reminder.title).slice(0, 500),
           String(reminder.notes || '').slice(0, NOTES_MAX),
-          typeof reminder.due_at === 'string' ? reminder.due_at : null,
+          isoOrNull(reminder.due_at),
           reminder.has_time ? 1 : 0, reminder.completed ? 1 : 0,
-          typeof reminder.completed_at === 'string' ? reminder.completed_at : null,
+          isoOrNull(reminder.completed_at),
           reminder.urgent ? 1 : 0, rule, model, zone,
-          typeof reminder.snoozed_until === 'string' ? reminder.snoozed_until : null,
-          typeof reminder.notified_at === 'string' ? reminder.notified_at : null,
-          null, 0,
+          isoOrNull(reminder.snoozed_until),
+          isoOrNull(reminder.notified_at),
+          null,
           Number.isInteger(reminder.sort_order) ? reminder.sort_order : 0,
           typeof reminder.created_at === 'string' ? reminder.created_at : new Date().toISOString(),
           typeof reminder.updated_at === 'string' ? reminder.updated_at : new Date().toISOString(),
@@ -1292,10 +1351,10 @@ async function main() {
           VALUES (?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(reminder_id, occurrence_at) DO NOTHING
         `, [
-          occurrence.reminder_id, occurrence.occurrence_at, occurrence.status,
+          occurrence.reminder_id, isoOrNull(occurrence.occurrence_at), occurrence.status,
           typeof occurrence.title === 'string' ? occurrence.title.slice(0, 500) : null,
           typeof occurrence.notes === 'string' ? occurrence.notes.slice(0, NOTES_MAX) : null,
-          typeof occurrence.completed_at === 'string' ? occurrence.completed_at : null,
+          isoOrNull(occurrence.completed_at),
           typeof occurrence.created_at === 'string' ? occurrence.created_at : new Date().toISOString(),
         ]);
         counts.occurrencesAdded += 1;
@@ -1537,10 +1596,6 @@ async function main() {
       zone = recurrence.isValidTimeZone(settings.device_zone) ? settings.device_zone : 'UTC';
     }
     const { rule, cleaned } = recurrence.detectRepeat(input);
-    // chrono skips bare ordinals ("on the 31st"), so pull those out first and
-    // parse the remainder for anything else.
-    const monthday = recurrence.detectMonthDay(cleaned);
-    const chronoText = monthday ? monthday.cleaned : cleaned;
     // chrono reads the process timezone, so pin it to the device zone for the
     // synchronous parse call only, then restore it. No await in between, so
     // concurrent requests cannot observe the switch.
@@ -1553,7 +1608,7 @@ async function main() {
     let parsedStart = null;
     try {
       if (zone) process.env.TZ = zone;
-      results = chrono.parse(chronoText, new Date(), { forwardDate: true });
+      results = chrono.parse(cleaned, new Date(), { forwardDate: true });
       if (results.length) {
         parsedStart = {
           ms: results[0].start.date().getTime(),
@@ -1565,6 +1620,10 @@ async function main() {
       else process.env.TZ = previousTZ;
     }
     if (!results.length) {
+      // chrono skips bare ordinals ("on the 31st") — pull those out only when
+      // chrono found nothing else, so "on the 31st at 9am" follows chrono's
+      // date ("at 9am") instead of hijacking it with a stripped title.
+      const monthday = recurrence.detectMonthDay(cleaned);
       if (monthday) {
         return res.json({
           title: monthday.cleaned || input,
@@ -1593,7 +1652,7 @@ async function main() {
     const time = hasTime
       ? `${String(wall.h).padStart(2, '0')}:${String(wall.mi).padStart(2, '0')}`
       : null;
-    let title = chronoText.replace(results[0].text, ' ')
+    let title = cleaned.replace(results[0].text, ' ')
       .replace(/\s{2,}/g, ' ')
       .replace(/^[\s,;:-]+|[\s,;:-]+$/g, '')
       .trim() || input;
@@ -2307,6 +2366,9 @@ async function main() {
             }
             fields.push('snoozed_until = ?');
             params.push(until.toISOString());
+            fields.push('notified_at = NULL');
+            fields.push('last_push_at = NULL');
+            fields.push('push_count = 0');
           }
         }
         if (!fields.length) return { status: 400, body: { error: 'Nothing to update' } };
@@ -2372,7 +2434,11 @@ async function main() {
         return res.status(400).json({ error: 'Only dated repeating items have occurrences to edit' });
       }
       const allowed = ['title', 'notes', 'list_id', 'urgent'];
-      const provided = Object.keys(req.body).filter((key) => key !== 'scope');
+      // device_zone is a settings echo the client always saves alongside;
+      // it is not an occurrence-readable field, so ignore it rather than
+      // failing every "This occurrence" edit.
+      const provided = Object.keys(req.body)
+        .filter((key) => key !== 'scope' && key !== 'device_zone');
       if (provided.some((key) => !allowed.includes(key))) {
         return res.status(400).json({ error: 'Date changes apply to the whole series — edit those with scope "series"' });
       }
@@ -2517,6 +2583,10 @@ async function main() {
         }
         fields.push('snoozed_until = ?');
         params.push(until.toISOString());
+        // Re-arm like /snooze does: a fired reminder keeps snoozing usefully.
+        fields.push('notified_at = NULL');
+        fields.push('last_push_at = NULL');
+        fields.push('push_count = 0');
       }
     }
 
@@ -2586,6 +2656,7 @@ async function main() {
   });
 
   app.use((err, req, res, next) => {
+    if (res.headersSent) return next(err);
     console.error(err);
     res.status(500).json({ error: 'Server error' });
   });
@@ -2678,10 +2749,15 @@ async function main() {
           sigComplete: await signPushAction(reminder.id, reminder.due_at, 'complete'),
           sigSnooze: await signPushAction(reminder.id, reminder.due_at, 'snooze'),
         });
+        // Stamp only if the reminder is still on THIS occurrence: a slow
+        // push loop can race the user re-arming or completing the item, and
+        // an unconditional stamp would mark the NEXT occurrence as already
+        // notified (it would then never fire with re-push off).
         await db.run(
           `UPDATE reminders SET notified_at = COALESCE(notified_at, ?),
-             last_push_at = ?, push_count = COALESCE(push_count, 0) + 1 WHERE id = ?`,
-          [now, now, reminder.id]
+             last_push_at = ?, push_count = COALESCE(push_count, 0) + 1
+           WHERE id = ? AND due_at = ?`,
+          [now, now, reminder.id, reminder.due_at]
         );
       }
     } catch (err) {
