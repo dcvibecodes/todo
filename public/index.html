@@ -376,14 +376,13 @@
               <span class="ed-label">Added</span>
               <span class="ed-value" id="e-added-value"></span>
             </div>
-            <div class="ed-row ed-select-row">
+            <div class="ed-row ed-select-row" id="e-model-row">
               <span class="ed-ic"><svg class="ic"><use href="#i-clock"/></svg></span>
               <span class="ed-label">Time model</span>
-              <span class="ed-value" id="e-model-value">Fixed time</span>
+              <span class="ed-value" id="e-model-value">My local time (Floating)</span>
               <select id="e-model" aria-label="Time model">
-                <option value="fixed">Fixed time</option>
-                <option value="floating">Floating (last confirmed device zone)</option>
-                <option value="anchored">Anchored to a time zone</option>
+                <option value="floating">My local time (Floating)</option>
+                <option value="anchored">A specific time zone (Anchored)</option>
               </select>
             </div>
             <div class="ed-row ed-select-row" id="e-zone-row" hidden>
@@ -501,7 +500,6 @@
           <label class="settings-row" for="set-default-model">
             <span>Default time model</span>
             <select id="set-default-model">
-              <option value="fixed">Fixed time</option>
               <option value="floating">Floating</option>
               <option value="anchored">Anchored</option>
             </select>
@@ -517,7 +515,7 @@
             <input id="set-default-time" type="time">
           </label>
           <p class="settings-note"><strong>Applies to new items only.</strong> Existing items keep their current time model and zone. Floating items follow the last confirmed device zone.</p>
-          <p class="notify-hint">Floating follows the last confirmed device zone; Fixed keeps an absolute instant; Anchored pins a named zone.</p>
+          <p class="notify-hint">Floating follows the last confirmed device zone; Anchored pins a named zone.</p>
         </div>
         <div class="settings-group">
           <h3>Sorting</h3>
