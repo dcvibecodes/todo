@@ -2,6 +2,10 @@
 
 A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due dates, urgent flags, recurring reminders, natural-language quick add, smart lists, floating time zones, a token API for external agents, completed history, dark mode, and web push. No frontend framework and no build step.
 
+## What's New in v2.7.11
+
+- **Snoozed items leave the app-icon badge** - reminders snoozed into the future no longer count toward the Home Screen icon badge, in pushed counts and on open alike; they rejoin the count automatically when the snooze fires, and expired snoozes still count. List rows, smart views, and push timing are unchanged. Service worker cache bumped to `todo-v2.7.11`.
+
 ## What's New in v2.7.10
 
 - **Hourly snooze means the chosen next alert** - an explicit snooze now overrides the original alert time for both date-only and timed items, even when their usual alert is later. The task's date, Time switch, recurrence and badge rules stay unchanged. A successful snooze alert does not cause a second first-alert at the original time; configured repeat pushes still apply. Failed delivery remains eligible for retry. A concurrent snooze, completion or edit is not marked notified by an older in-flight dispatch. Service worker cache bumped to `todo-v2.7.10`.

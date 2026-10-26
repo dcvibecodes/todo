@@ -205,7 +205,7 @@ function updateBadge() {
   try {
     const limit = endOfToday();
     const count = incompleteReminders()
-      .filter((reminder) => reminder.due_at && new Date(reminder.due_at) <= limit).length;
+      .filter((reminder) => reminder.due_at && new Date(reminder.due_at) <= limit && !isSnoozed(reminder)).length;
     if ('setAppBadge' in navigator && navigator.setAppBadge) {
       if (count > 0) navigator.setAppBadge(count);
       else if ('clearAppBadge' in navigator) navigator.clearAppBadge();
