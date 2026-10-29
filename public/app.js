@@ -1940,6 +1940,13 @@ function resetRowDelete(button) {
 }
 
 function handleRowDelete(reminder, button) {
+  // Recurring series: an inline, acknowledged warning instead of the two-step
+  // Confirm?. Deleting wipes the series and its whole history, so the message
+  // must stay until the user chooses (never an auto-dismissing toast).
+  if (isRecurringReminder(reminder)) {
+    showRowSeriesWarning(reminder, button.closest('.reminder'), button);
+    return;
+  }
   if (button.dataset.confirm !== '1') {
     if (!button.dataset.origLabel) button.dataset.origLabel = button.getAttribute('aria-label') || 'Delete item';
     button.dataset.confirm = '1';
@@ -1955,6 +1962,14 @@ function handleRowDelete(reminder, button) {
 }
 
 function handleSwipeDelete(reminder, button) {
+  if (isRecurringReminder(reminder)) {
+    // Close the swipe first: the warning is full-width inside the row, so the
+    // content must be back in its resting position before it is shown.
+    const row = button.closest('.reminder');
+    resetSwipe(row);
+    showRowSeriesWarning(reminder, row, null);
+    return;
+  }
   if (button.dataset.confirm !== '1') {
     button.dataset.confirm = '1';
     const label = button.querySelector('.del-label');
@@ -1963,6 +1978,54 @@ function handleSwipeDelete(reminder, button) {
     return;
   }
   deleteReminderInline(reminder, button.closest('.reminder'));
+}
+
+function isRecurringReminder(reminder) {
+  const rule = reminder ? parseRuleClient(reminder.repeat_rule) : null;
+  return Boolean(rule && rule.type !== 'none');
+}
+
+// Inline series-delete warning inside the row. Stays put until the user picks
+// Delete everything or Cancel; nothing auto-dismisses and the row never moves
+// out from under the finger.
+function showRowSeriesWarning(reminder, row, button) {
+  if (!row) return;
+  const existing = row.querySelector('.row-series-warn');
+  if (existing) { existing.querySelector('button').focus(); return; }
+  const body = row.querySelector('.reminder-body');
+  if (!body) return;
+  const rule = parseRuleClient(reminder.repeat_rule);
+  const panel = el('div', { class: 'row-series-warn', role: 'alert' }, [
+    el('p', {
+      class: 'row-series-warn-text',
+      text: `This repeats (${repeatLabel(rule)}). Deleting removes the whole series and its history. To remove just this occurrence, use Skip.`,
+    }),
+    el('div', { class: 'row-series-warn-actions' }, [
+      el('button', {
+        type: 'button',
+        class: 'mini-btn danger-mini',
+        text: 'Delete everything',
+        onclick: (event) => {
+          event.stopPropagation();
+          deleteReminderInline(reminder, row);
+        },
+      }),
+      el('button', {
+        type: 'button',
+        class: 'mini-btn',
+        text: 'Cancel',
+        onclick: (event) => {
+          event.stopPropagation();
+          panel.remove();
+          resetRowDelete(button);
+          resetSwipe(row);
+        },
+      }),
+    ]),
+  ]);
+  // Clicks inside the warning must never open the editor or re-close the swipe.
+  panel.addEventListener('click', (event) => event.stopPropagation());
+  body.append(panel);
 }
 
 function deleteReminderInline(reminder, row) {

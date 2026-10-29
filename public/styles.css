@@ -917,6 +917,37 @@ body.list-dragging .list-grip { cursor: grabbing; }
   opacity: 1;
 }
 
+/* Series-delete warning: persistent, in-row, and it must not shift the row's
+   height in a way that moves the buttons under the finger (it grows downward
+   from the row's own body, and only once per tap). */
+.row-series-warn {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--red) 40%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--red) 8%, transparent);
+}
+
+.row-series-warn-text {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  color: var(--red);
+}
+
+.row-series-warn-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+.mini-btn.danger-mini {
+  color: var(--red);
+  border-color: color-mix(in srgb, var(--red) 40%, transparent);
+  background: color-mix(in srgb, var(--red) 10%, transparent);
+}
+
 /* Deleting collapses the row after the inline confirm. */
 .reminder.removing {
   overflow: hidden;
