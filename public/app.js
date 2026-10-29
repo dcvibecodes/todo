@@ -2177,7 +2177,13 @@ function syncSnoozeRow() {
     return;
   }
   row.hidden = false;
-  if (isSnoozed(reminder)) {
+  if (pendingSnooze === 'unsnooze') {
+    $('#e-snooze-label').textContent = 'Snooze off (staged)';
+    $('#e-snooze-btn').textContent = 'Unstage';
+  } else if (pendingSnooze === 'snooze') {
+    $('#e-snooze-label').textContent = 'Snooze 1h (staged)';
+    $('#e-snooze-btn').textContent = 'Unstage';
+  } else if (isSnoozed(reminder)) {
     $('#e-snooze-label').textContent = snoozeLabel(reminder.snoozed_until);
     $('#e-snooze-btn').textContent = 'Cancel';
   } else {
@@ -2189,20 +2195,11 @@ function syncSnoozeRow() {
 async function toggleEditorSnooze() {
   const reminder = findReminder(state.editingId);
   if (!reminder) return;
-  try {
-    if (isSnoozed(reminder)) {
-      await api('/api/reminders/' + reminder.id + '/snooze', { method: 'POST', body: { clear: true } });
-      toast('Snooze cancelled');
-    } else {
-      const result = await api('/api/reminders/' + reminder.id + '/snooze', { method: 'POST', body: { hours: 1 } });
-      toast(`Snoozed until ${new Date(result.snoozedUntil).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}`);
-    }
-    await loadState();
-    render();
-    syncSnoozeRow();
-  } catch (err) {
-    toast(err.message);
-  }
+  // Staged like history undos: tapping records intent, Save applies it.
+  const want = isSnoozed(reminder) ? 'unsnooze' : 'snooze';
+  pendingSnooze = (pendingSnooze === want) ? null : want;
+  syncSnoozeRow();
+  syncEditorSubmit();
 }
 
 async function skipCurrentOccurrence() {
@@ -2244,20 +2241,12 @@ async function loadHistory(id) {
         el('span', { class: 'history-date', text: formatOccurrenceDate(occurrence.occurrence_at) }),
       ]);
       if (occurrence.status === 'skipped') {
-        row.append(el('button', {
-          class: 'history-undo',
-          type: 'button',
-          text: 'Undo skip',
-          onclick: () => undoSkip(id, occurrence.occurrence_at),
-        }));
+        if (isOpStaged('unskip', occurrence.occurrence_at)) row.classList.add('history-staged');
+        row.append(historyUndoButton(id, 'unskip', occurrence.occurrence_at, 'Undo skip'));
       }
       if (occurrence.status === 'completed') {
-        row.append(el('button', {
-          class: 'history-undo',
-          type: 'button',
-          text: 'Undo',
-          onclick: () => undoComplete(id, occurrence.occurrence_at),
-        }));
+        if (isOpStaged('uncomplete', occurrence.occurrence_at)) row.classList.add('history-staged');
+        row.append(historyUndoButton(id, 'uncomplete', occurrence.occurrence_at, 'Undo'));
       }
       wrap.append(row);
     }
@@ -2304,57 +2293,90 @@ function syncDateHistoryHint() {
   }
 }
 
-// Removing the skip record entirely: if the occurrence sits before the
-// series' current date the server moves the series back to it, so refresh
-// the editor's date fields too when that item is open.
-async function undoSkip(id, occurrenceAt) {
-  try {
-    const result = await api('/api/reminders/' + id + '/unskip', {
-      method: 'POST',
-      body: { occurrence_at: occurrenceAt },
-    });
-    await loadState();
-    render();
-    const reminder = findReminder(id);
-    if (reminder && state.editingId === id) {
-      const due = reminder.due_at ? new Date(reminder.due_at) : null;
-      $('#e-date').value = due ? localDateValue(due) : '';
-      $('#e-time').value = due && reminder.has_time ? localTimeValue(due) : '';
-      editorSnapshot = editorValues();
-      syncEditorSubmit();
-    }
-    await loadHistory(id);
-    const next = new Date(result.dueAt);
-    toast(`Skip undone — next: ${next.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}`);
-  } catch (err) {
-    toast(err.message);
-  }
+// Pending occurrence ops: history undos (and the editor snooze toggle) are
+// STAGED, not applied. Tapping one only records intent ({kind,
+// occurrence_at}); Save applies them first (newest first, so the server's
+// most-recent-first rule is satisfied), then the field PATCH. Cancel or
+// closing the sheet drops the list — nothing was ever sent. The list is tiny
+// (history is capped at 25 rows), so staging any number of undos is trivial.
+let pendingOccurrenceOps = [];
+let pendingSnooze = null; // null | 'snooze' | 'unsnooze'
+
+function isOpStaged(kind, occurrenceAt) {
+  return pendingOccurrenceOps.some((o) => o.kind === kind
+    && (o.occurrence_at || null) === (occurrenceAt || null));
 }
 
-// Undo a completion: the history row disappears and the series goes back to
-// the undone date. The server refuses settled history (next occurrence
-// already passed) and non-latest completions; those refusals toast as-is.
-async function undoComplete(id, occurrenceAt) {
-  try {
-    const result = await api('/api/reminders/' + id + '/uncomplete', {
-      method: 'POST',
-      body: { occurrence_at: occurrenceAt },
-    });
-    await loadState();
-    render();
-    const reminder = findReminder(id);
-    if (reminder && state.editingId === id) {
-      const due = reminder.due_at ? new Date(reminder.due_at) : null;
-      $('#e-date').value = due ? localDateValue(due) : '';
-      $('#e-time').value = due && reminder.has_time ? localTimeValue(due) : '';
-      editorSnapshot = editorValues();
-      syncEditorSubmit();
+function historyUndoButton(id, kind, occurrenceAt, label) {
+  const staged = isOpStaged(kind, occurrenceAt);
+  const btn = el('button', {
+    class: 'history-undo' + (staged ? ' staged' : ''),
+    type: 'button',
+    text: staged ? 'Staged ✓' : label,
+  });
+  btn.title = staged ? 'Staged — tap to unstage, Save to apply' : 'Stage this undo — applies when you Save';
+  btn.addEventListener('click', () => toggleStagedOp(kind, id, occurrenceAt));
+  return btn;
+}
+
+function toggleStagedOp(kind, id, occurrenceAt) {
+  const i = pendingOccurrenceOps.findIndex((o) => o.kind === kind
+    && (o.occurrence_at || null) === (occurrenceAt || null));
+  if (i >= 0) {
+    pendingOccurrenceOps.splice(i, 1);
+  } else {
+    if (state.editScope === 'occurrence') {
+      setScope('series');
+      toast('Switched to Whole series — staged undos apply to the series');
     }
-    await loadHistory(id);
-    const due = new Date(result.dueAt);
-    toast(`Completion undone — due: ${due.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}`);
-  } catch (err) {
-    toast(err.message);
+    pendingOccurrenceOps.push({ kind, occurrence_at: occurrenceAt });
+  }
+  syncStagedDate(id);
+  loadHistory(id); // re-render rows (server data unchanged) with staged marks
+  syncEditorSubmit();
+}
+
+// The date field previews the outcome: the earliest staged date wins (each
+// undo moves the series back only when earlier), so the field shows the
+// minimum of the server date and the staged dates.
+function syncStagedDate(id) {
+  const reminder = findReminder(id);
+  if (!reminder || !reminder.due_at) return;
+  let iso = reminder.due_at;
+  for (const o of pendingOccurrenceOps) {
+    if (o.occurrence_at && o.occurrence_at < iso) iso = o.occurrence_at;
+  }
+  const d = new Date(iso);
+  $('#e-date-on').checked = true;
+  $('#e-date').value = localDateValue(d);
+  if (reminder.has_time) {
+    $('#e-time-on').checked = true;
+    $('#e-time').value = localTimeValue(d);
+  }
+  syncDateTimeRows();
+}
+
+// Apply staged ops newest-first (LIFO — the server refuses anything else),
+// then the staged snooze toggle. Applied ops leave the list as they land;
+// on the first failure the rest stay staged and the error propagates.
+async function applyPendingOps(id) {
+  const ops = [...pendingOccurrenceOps]
+    .sort((a, b) => ((a.occurrence_at || '') < (b.occurrence_at || '') ? 1 : -1));
+  for (const op of ops) {
+    const route = op.kind === 'unskip' ? 'unskip' : 'uncomplete';
+    await api('/api/reminders/' + id + '/' + route, {
+      method: 'POST',
+      body: { occurrence_at: op.occurrence_at },
+    });
+    pendingOccurrenceOps.splice(pendingOccurrenceOps.indexOf(op), 1);
+  }
+  if (pendingSnooze) {
+    const want = pendingSnooze;
+    await api('/api/reminders/' + id + '/snooze', {
+      method: 'POST',
+      body: want === 'snooze' ? { hours: 1 } : { clear: true },
+    });
+    pendingSnooze = null;
   }
 }
 
@@ -2391,6 +2413,7 @@ function editorValues() {
 }
 
 function editorIsDirty() {
+  if (pendingOccurrenceOps.length || pendingSnooze) return true;
   if (!editorSnapshot) return false;
   const current = editorValues();
   return Object.keys(current).some((key) => current[key] !== editorSnapshot[key]);
@@ -2490,6 +2513,8 @@ function openEditor(id) {
   hideParseChip();
 
   state.editingId = reminder ? reminder.id : null;
+  pendingOccurrenceOps = [];
+  pendingSnooze = null;
   $('#editor-heading').textContent = reminder ? 'Edit Item' : 'New Item';
   $('#e-title').value = reminder ? reminder.title : '';
   clearFieldError($('#e-title'), $('#e-title-error'));
@@ -2611,7 +2636,8 @@ async function saveEditor(event) {
 
   const model = $('#e-model').value;
   const editingSeries = current && parseRuleClient(current.repeat_rule).type !== 'none';
-  const scope = editingSeries ? state.editScope : 'series';
+  // Staged undos are series-level by definition; scope toggles can't split them.
+  const scope = (editingSeries && !pendingOccurrenceOps.length && !pendingSnooze) ? state.editScope : 'series';
   const body = {
     title,
     notes: $('#e-notes').value,
@@ -2639,7 +2665,15 @@ async function saveEditor(event) {
   setEditorSubmitting(true);
   try {
     if (state.editingId) {
+      // Staged occurrence undos (and the snooze toggle) apply first, newest
+      // first; then the field PATCH lands on top. A mid-way failure keeps
+      // the sheet open with the remaining ops still staged.
+      const stagedCount = pendingOccurrenceOps.length + (pendingSnooze ? 1 : 0);
+      if (stagedCount) await applyPendingOps(state.editingId);
       await api('/api/reminders/' + state.editingId, { method: 'PATCH', body });
+      if (stagedCount) {
+        toast(`Saved — ${stagedCount} staged change${stagedCount === 1 ? '' : 's'} applied`);
+      }
     } else {
       const created = await api('/api/reminders', { method: 'POST', body });
       state.justAddedId = created && created.id ? created.id : null;
