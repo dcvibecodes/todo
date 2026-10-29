@@ -1417,6 +1417,27 @@ function renderMain() {
     syncSortDirLabels($('#sort-field'), $('#sort-dir'));
   }
 
+  // "Show completed" lives in the sort bar for individual lists (the only
+  // views that have completed items to reveal). It stays visible on every
+  // list page so the bar keeps its shape, and is disabled — not hidden — when
+  // the list has nothing completed. Hidden during search and on Home.
+  const isList = typeof view === 'number';
+  const completeCount = isList
+    ? state.reminders.filter((reminder) => reminder.list_id === view && reminder.completed).length
+    : 0;
+  const showCompletedToggle = isList && !state.search;
+  const completedWrap = $('#sort-completed-wrap');
+  completedWrap.hidden = !showCompletedToggle;
+  if (showCompletedToggle) {
+    const box = $('#sort-completed');
+    box.checked = Boolean(state.showCompleted);
+    box.disabled = completeCount === 0;
+    completedWrap.classList.toggle('is-disabled', completeCount === 0);
+    $('#sort-completed-text').textContent = completeCount
+      ? `Completed (${completeCount})`
+      : 'Completed';
+  }
+
   if (state.search) {
     renderSearchResults(content);
     return;
@@ -1439,10 +1460,7 @@ function renderMain() {
   }
 
   const items = viewItems();
-  const completed = typeof view === 'number' && state.showCompleted ? completedInList(view) : [];
-  const completeCount = typeof view === 'number' && list
-    ? state.reminders.filter((reminder) => reminder.list_id === list.id && reminder.completed).length
-    : 0;
+  const completed = isList && state.showCompleted ? completedInList(view) : [];
 
   $('#view-title').textContent = title;
   const shownCount = typeof view === 'number'
@@ -1470,23 +1488,11 @@ function renderMain() {
     content.append(group);
   }
 
-  if (typeof view === 'number' && completeCount) {
-    content.append(el('button', {
-      class: 'toggle-completed',
-      text: `${state.showCompleted ? 'Hide' : 'Show'} ${completeCount} Completed`,
-      onclick: () => {
-        state.showCompleted = !state.showCompleted;
-        if (typeof state.view === 'number') setShowCompleted(state.view, state.showCompleted);
-        renderMain();
-      },
-    }));
-
-    if (state.showCompleted && completed.length) {
-      content.append(el('h3', { class: 'group-title', text: 'Completed' }));
-      const group = el('div', { class: 'reminder-group' });
-      for (const reminder of completed) group.append(reminderRow(reminder));
-      content.append(group);
-    }
+  if (isList && state.showCompleted && completed.length) {
+    content.append(el('h3', { class: 'group-title', text: 'Completed' }));
+    const group = el('div', { class: 'reminder-group' });
+    for (const reminder of completed) group.append(reminderRow(reminder));
+    content.append(group);
   }
 
   if (!state.lists.length) {
@@ -4091,6 +4097,15 @@ $('#sort-field').addEventListener('change', (event) => {
 $('#sort-dir').addEventListener('change', (event) => {
   setViewSort(state.view, { dir: event.target.value });
   render();
+});
+// Same outcome as the old "Show N Completed" link: reveal this list's
+// completed items and remember the choice per list (localStorage), so every
+// visit to that list restores it.
+$('#sort-completed').addEventListener('change', (event) => {
+  if (typeof state.view !== 'number') return;
+  state.showCompleted = event.target.checked;
+  setShowCompleted(state.view, state.showCompleted);
+  renderMain();
 });
 $('#set-sort-field').addEventListener('change', () => {
   if ($('#set-sort-field').value === 'due') $('#set-sort-dir').value = 'asc';

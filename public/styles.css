@@ -759,6 +759,27 @@ body.list-dragging .list-grip { cursor: grabbing; }
 
 .sort-control select:focus { outline: none; color: var(--text); }
 
+/* "Show completed" toggle: a compact checkbox that reads as part of the sort
+   bar (same text size/colour as the Sort and Order labels). Disabled when the
+   list has nothing completed — dimmed, never a layout jump. */
+.sort-toggle { cursor: pointer; }
+
+.sort-toggle input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  margin: 0;
+  cursor: pointer;
+  accent-color: var(--accent);
+}
+
+.sort-toggle > span { color: var(--text-2); }
+
+.sort-toggle.is-disabled { cursor: default; }
+.sort-toggle.is-disabled input[type="checkbox"],
+.sort-toggle.is-disabled > span { opacity: 0.45; }
+.sort-toggle.is-disabled input[type="checkbox"] { cursor: default; }
+
 .content {
   flex: 1;
   width: 100%;

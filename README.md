@@ -2,6 +2,11 @@
 
 A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due dates, urgent flags, recurring reminders, natural-language quick add, smart lists, floating time zones, a token API for external agents, completed history, dark mode, and web push. No frontend framework and no build step.
 
+## What's New in v2.8.9
+
+- **"Show completed" is now a toggle in the sort bar** - inside a list it sits to the right of Sort and Order instead of as a link under the items, so it is visible without scrolling to the bottom. It shows the count ("Completed (3)") and is dimmed and disabled when the list has nothing completed. Same result as before: completed items appear under a Completed heading and count toward the list total, and the choice is still remembered per list.
+- Service worker cache bumped to `todo-v2.8.9`.
+
 ## What's New in v2.8.8
 
 - **Clock time sits with the date** - timed items now read "Fri, Nov 6 3:00 PM in 7 days": the time joins the date in the same bold weight and colour, and the relative countdown follows it.
