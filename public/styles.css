@@ -963,6 +963,16 @@ body.list-dragging .list-grip { cursor: grabbing; }
   background: var(--c);
 }
 
+/* Temporary compat: old app.js still renders .meta-due until the app.js update lands. */
+.meta-due { display: inline-flex; align-items: center; gap: 5px; font-weight: 550; }
+.meta-due .ic { width: 12px; height: 12px; }
+.meta-due.overdue {
+  color: var(--red);
+  font-weight: 700;
+  background: color-mix(in srgb, var(--red) 10%, transparent);
+  border-radius: 4px;
+  padding: 1px 6px;
+}
 .reminder-due {
   display: inline-flex;
   align-items: center;
@@ -2497,4 +2507,4 @@ body.sheet-open .sidebar {
   .skel { animation: none; }
   .e-more { transition: none; }
   .e-more-toggle .ic { transition: none; }
-}
+  }
