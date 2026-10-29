@@ -1577,6 +1577,7 @@ body.sheet-open .sidebar {
   line-height: 1.4;
   color: var(--text-3);
 }
+.ed-hint.ed-warning { color: var(--red); }
 
 .ed-list-row { cursor: pointer; }
 

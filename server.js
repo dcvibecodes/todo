@@ -404,6 +404,11 @@ function parseRuleColumn(value) {
   }
 }
 
+// A completed stamp newer than this is treated as a double-tap / racing
+// retry of the same occurrence; an older stamp is history (the user moved
+// the date back) and completes normally.
+const DUPLICATE_COMPLETE_WINDOW_MS = 10000;
+
 async function completeReminder(id) {
   const reminder = await loadReminder(id);
   if (!reminder) {
@@ -433,16 +438,25 @@ async function completeReminder(id) {
   // Series created before anchorHour/anchorMinute existed still get the right
   // DST behavior: derive the intended clock time from the current occurrence.
   rule = recurrence.anchorRule(rule, reminder.due_at, zone);
-  // Concurrency guard: if THIS scheduled occurrence is already recorded as
-  // completed, the series already moved on (double-tap / racing retry).
-  // Re-running would record the NEXT occurrence and advance the series a
-  // second time, silently skipping a day.
+  // Concurrency guard: if THIS scheduled occurrence was JUST recorded as
+  // completed (within seconds), the series already moved on (double-tap /
+  // racing retry). Re-running would record the NEXT occurrence and advance
+  // the series a second time, silently skipping a day.
+  //
+  // But an OLDER stamp is history, not a duplicate: the user moved the date
+  // back onto an already-completed occurrence. Refusing forever would brick
+  // the series, so a stale stamp is treated as a fresh completion below.
   const prior = await db.get(
-    `SELECT status FROM reminder_occurrences
+    `SELECT status, completed_at FROM reminder_occurrences
      WHERE reminder_id = ? AND occurrence_at = ? AND status = 'completed'`,
     [id, reminder.due_at]
   );
-  if (prior) return { advanced: false, alreadyDone: true, reminder };
+  if (prior) {
+    const stampAge = Date.now() - new Date(prior.completed_at || 0).getTime();
+    if (Number.isFinite(stampAge) && stampAge < DUPLICATE_COMPLETE_WINDOW_MS) {
+      return { advanced: false, alreadyDone: true, reminder };
+    }
+  }
   const next = recurrence.firstFutureOccurrence(rule, reminder.due_at, zone, now);
   const exception = await db.get(
     `SELECT title, notes, list_id, urgent FROM reminder_occurrences
@@ -558,6 +572,103 @@ async function unskipOccurrence(id, occurrenceAt) {
   const hasOverride = row.title !== null || row.notes !== null
     || (row.list_id !== null && row.list_id !== undefined)
     || (row.urgent !== null && row.urgent !== undefined);
+  if (hasOverride) {
+    await db.run(
+      `UPDATE reminder_occurrences SET status = 'exception'
+       WHERE reminder_id = ? AND occurrence_at = ?`,
+      [id, occurrenceAt]
+    );
+  } else {
+    await db.run(
+      'DELETE FROM reminder_occurrences WHERE reminder_id = ? AND occurrence_at = ?',
+      [id, occurrenceAt]
+    );
+  }
+  let dueAt = reminder.due_at;
+  if (occurrenceMs < Date.parse(reminder.due_at)) {
+    dueAt = occurrenceAt;
+    await db.run(
+      `UPDATE reminders SET due_at = ?, notified_at = NULL, last_push_at = NULL,
+         push_count = 0, snoozed_until = NULL, updated_at = ?, revision = revision + 1 WHERE id = ?`,
+      [dueAt, now, id]
+    );
+  } else {
+    await db.run(
+      'UPDATE reminders SET updated_at = ?, revision = revision + 1 WHERE id = ?',
+      [now, id]
+    );
+  }
+  return { dueAt };
+}
+
+// Undo a completion: the history row disappears and the series goes back to
+// the undone date, as if that occurrence had never been completed. Two
+// guards keep history honest:
+//   1. Most-recent-first: a completion with a later completed occurrence
+//      still on record cannot be undone (undo the newer one first), so the
+//      series can never replay over an already-completed occurrence.
+//   2. Settled history: once the NEXT occurrence after the undone one has
+//      passed, the undo is refused — there is nothing useful to reopen.
+async function uncompleteOccurrence(id, occurrenceAt) {
+  const reminder = await loadReminder(id);
+  if (!reminder) {
+    const err = new Error('Item not found');
+    err.status = 404;
+    throw err;
+  }
+  let rule = parseRuleColumn(reminder.repeat_rule);
+  if (!recurrence.isRecurringRule(rule) || !reminder.due_at) {
+    const err = new Error('Only dated repeating items can undo a completion');
+    err.status = 400;
+    throw err;
+  }
+  const occurrenceMs = Date.parse(occurrenceAt);
+  if (typeof occurrenceAt !== 'string' || Number.isNaN(occurrenceMs)) {
+    const err = new Error('A valid occurrence_at is required');
+    err.status = 400;
+    throw err;
+  }
+  const row = await db.get(
+    'SELECT status, title, notes, list_id, urgent FROM reminder_occurrences WHERE reminder_id = ? AND occurrence_at = ?',
+    [id, occurrenceAt]
+  );
+  if (!row || row.status !== 'completed') {
+    const err = new Error('That completed occurrence was not found');
+    err.status = 404;
+    throw err;
+  }
+  const newer = await db.get(
+    `SELECT occurrence_at FROM reminder_occurrences
+     WHERE reminder_id = ? AND occurrence_at > ? AND status = 'completed' LIMIT 1`,
+    [id, occurrenceAt]
+  );
+  if (newer) {
+    const err = new Error('Undo the most recent completion first');
+    err.status = 409;
+    throw err;
+  }
+  const settings = await getSettings();
+  const zone = effectiveZoneFor(reminder, settings);
+  rule = recurrence.anchorRule(rule, occurrenceAt, zone);
+  const now = new Date().toISOString();
+  // The immediate successor decides: if it already passed, this slice of
+  // history is settled. (firstFutureOccurrence would skip over the past and
+  // wrongly reopen long-settled occurrences.)
+  const next = recurrence.advanceOccurrence(rule, occurrenceAt, zone);
+  if (new Date(next).getTime() <= Date.now()) {
+    const err = new Error('That occurrence has already passed — history is settled');
+    err.status = 409;
+    throw err;
+  }
+  // A completed row always snapshots the series values, so "has an edit"
+  // means the snapshot differs from the series as it stands now. Only then
+  // is there a this-occurrence edit worth keeping (revert to 'exception');
+  // otherwise the row is removed so the date leaves the history.
+  const same = (a, b) => (a ?? null) === (b ?? null);
+  const hasOverride = !same(row.title, reminder.title)
+    || (row.notes || null) !== (reminder.notes || null)
+    || !same(row.list_id, reminder.list_id)
+    || !same(row.urgent, reminder.urgent);
   if (hasOverride) {
     await db.run(
       `UPDATE reminder_occurrences SET status = 'exception'
@@ -1557,6 +1668,18 @@ async function main() {
     }
   });
 
+  app.post('/api/reminders/:id/uncomplete', async (req, res) => {
+    const id = parseId(req.params.id);
+    if (req.token) return denyToken(res);
+    if (!id) return res.status(400).json({ error: 'Invalid item' });
+    try {
+      const result = await uncompleteOccurrence(id, req.body ? req.body.occurrence_at : undefined);
+      res.json({ ok: true, dueAt: result.dueAt });
+    } catch (err) {
+      res.status(err.status || 500).json({ error: err.message || 'Server error' });
+    }
+  });
+
   app.post('/api/reminders/:id/snooze', async (req, res) => {
     const id = parseId(req.params.id);
     if (req.token && (req.token.profile || 'legacy') === 'write') {
@@ -2217,7 +2340,7 @@ async function main() {
           try {
             const result = await completeReminder(id);
             const reminder = await loadReminder(id);
-            return { status: 200, body: { ok: true, advanced: result.advanced || false, nextDue: result.nextDue || null, reminder }, reminderId: id };
+            return { status: 200, body: { ok: true, advanced: result.advanced || false, alreadyDone: result.alreadyDone || false, nextDue: result.nextDue || null, reminder }, reminderId: id };
           } catch (err) {
             return { status: err.status || 500, body: { error: err.message || 'Server error' } };
           }
@@ -2426,7 +2549,7 @@ async function main() {
     if (req.body.completed === true && !current.completed) {
       try {
         const result = await completeReminder(id);
-        return res.json({ ok: true, advanced: result.advanced || false, nextDue: result.nextDue || null });
+        return res.json({ ok: true, advanced: result.advanced || false, alreadyDone: result.alreadyDone || false, nextDue: result.nextDue || null });
       } catch (err) {
         return res.status(err.status || 500).json({ error: err.message || 'Server error' });
       }

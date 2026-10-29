@@ -2022,6 +2022,8 @@ async function toggleCompleted(reminder, row) {
     if (result && result.advanced && result.nextDue) {
       const next = new Date(result.nextDue);
       toast(`Done — next: ${next.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}`);
+    } else if (result && result.alreadyDone) {
+      toast('Already recorded for this date — move the date to a new day to advance');
     }
   } catch (err) {
     if (row) row.classList.remove('completing');
@@ -2224,9 +2226,11 @@ function formatOccurrenceDate(iso) {
 async function loadHistory(id) {
   const wrap = $('#e-history');
   wrap.replaceChildren();
+  state.editingOccurrences = [];
   try {
     const data = await api('/api/reminders/' + id + '/occurrences');
     const rows = data.occurrences || [];
+    state.editingOccurrences = rows;
     if (!rows.length) {
       wrap.append(el('p', { class: 'history-empty', text: 'No completions or skips yet.' }));
     }
@@ -2245,11 +2249,56 @@ async function loadHistory(id) {
           onclick: () => undoSkip(id, occurrence.occurrence_at),
         }));
       }
+      if (occurrence.status === 'completed') {
+        row.append(el('button', {
+          class: 'history-undo',
+          type: 'button',
+          text: 'Undo',
+          onclick: () => undoComplete(id, occurrence.occurrence_at),
+        }));
+      }
       wrap.append(row);
     }
     wrap.hidden = false;
+    syncDateHistoryHint();
   } catch {
     wrap.hidden = true;
+  }
+}
+
+// Warn when the editor's picked date lands on an already-completed
+// occurrence: completing will re-record it and move the series forward (the
+// old "nothing happens" dead end is gone server-side, but the date may not
+// be what the user expects). The candidate instant mirrors saveEditor's
+// construction exactly (default time, preserved date-only instant).
+function editorPickedDueISO() {
+  if (!$('#e-date-on').checked || !$('#e-date').value) return null;
+  const [year, month, day] = $('#e-date').value.split('-').map(Number);
+  if ($('#e-time-on').checked && $('#e-time').value) {
+    const [hours, minutes] = $('#e-time').value.split(':').map(Number);
+    return new Date(year, month - 1, day, hours, minutes).toISOString();
+  }
+  const [defHours, defMinutes] = String((state.settings && state.settings.default_time) || '09:00').split(':').map(Number);
+  let dueAt = new Date(year, month - 1, day, defHours, defMinutes).toISOString();
+  const current = state.editingId ? findReminder(state.editingId) : null;
+  if (current && current.due_at && !current.has_time
+    && $('#e-date').value === localDateValue(new Date(current.due_at))) {
+    dueAt = current.due_at;
+  }
+  return dueAt;
+}
+
+function syncDateHistoryHint() {
+  const hint = $('#e-date-history-hint');
+  if (!hint) return;
+  hint.hidden = true;
+  if (!state.editingId || $('#series-section').hidden) return;
+  const candidate = editorPickedDueISO();
+  if (!candidate) return;
+  const match = (state.editingOccurrences || []).some((o) => o.status === 'completed' && o.occurrence_at === candidate);
+  if (match) {
+    hint.textContent = 'This date was already completed once — completing it again moves the series to the next occurrence.';
+    hint.hidden = false;
   }
 }
 
@@ -2275,6 +2324,33 @@ async function undoSkip(id, occurrenceAt) {
     await loadHistory(id);
     const next = new Date(result.dueAt);
     toast(`Skip undone — next: ${next.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}`);
+  } catch (err) {
+    toast(err.message);
+  }
+}
+
+// Undo a completion: the history row disappears and the series goes back to
+// the undone date. The server refuses settled history (next occurrence
+// already passed) and non-latest completions; those refusals toast as-is.
+async function undoComplete(id, occurrenceAt) {
+  try {
+    const result = await api('/api/reminders/' + id + '/uncomplete', {
+      method: 'POST',
+      body: { occurrence_at: occurrenceAt },
+    });
+    await loadState();
+    render();
+    const reminder = findReminder(id);
+    if (reminder && state.editingId === id) {
+      const due = reminder.due_at ? new Date(reminder.due_at) : null;
+      $('#e-date').value = due ? localDateValue(due) : '';
+      $('#e-time').value = due && reminder.has_time ? localTimeValue(due) : '';
+      editorSnapshot = editorValues();
+      syncEditorSubmit();
+    }
+    await loadHistory(id);
+    const due = new Date(result.dueAt);
+    toast(`Completion undone — due: ${due.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}`);
   } catch (err) {
     toast(err.message);
   }
@@ -3784,6 +3860,7 @@ $('#e-date').addEventListener('change', () => {
   } else {
     markScheduleManual();
   }
+  syncDateHistoryHint();
 });
 $('#e-time').addEventListener('change', () => {
   if (!$('#e-time').value) {
@@ -3792,6 +3869,7 @@ $('#e-time').addEventListener('change', () => {
   } else {
     markScheduleManual();
   }
+  syncDateHistoryHint();
 });
 $('#e-list').addEventListener('change', updateEditorListVisual);
 $('#e-title').addEventListener('keydown', (event) => {
