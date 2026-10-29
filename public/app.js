@@ -452,12 +452,12 @@ function formatDue(reminder) {
     day = date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
   }
   const time = reminder.has_time
-    ? ' ' + date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+    ? date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
     : '';
   const overdue = !reminder.completed && (
     reminder.has_time ? date.getTime() < Date.now() : dueDay.getTime() < today.getTime()
   );
-  return { text: day + time, overdue };
+  return { day, time, text: time ? day + ' ' + time : day, overdue };
 }
 
 function formatRecordDate(value) {
@@ -1740,12 +1740,6 @@ function reminderRow(reminder, options = {}) {
       el('span', { text: list.name }),
     ]));
   }
-  if (due) {
-    meta.append(el('span', {
-      class: 'meta-due' + (due.overdue ? ' overdue' : ''),
-      html: ICON('calendar', 'ic') + `<span>${escapeHtml(due.text)}</span>`,
-    }));
-  }
   if (reminder.completed && reminder.completed_at) {
     const completedText = formatRecordDate(reminder.completed_at);
     if (completedText) {
@@ -1783,10 +1777,20 @@ function reminderRow(reminder, options = {}) {
     }));
   }
 
-  const body = el('div', { class: 'reminder-body' }, [
+  // The due date leads the card on its own line above the title so a scan
+  // down the list reads dates first; the clock time stays quieter beside it.
+  const body = el('div', { class: 'reminder-body' });
+  if (due) {
+    body.append(el('div', {
+      class: 'reminder-due' + (due.overdue ? ' overdue' : ''),
+      html: ICON('calendar', 'ic') + `<span>${escapeHtml(due.day)}</span>`
+        + (due.time ? `<span class="due-time">${escapeHtml(due.time)}</span>` : ''),
+    }));
+  }
+  body.append(
     el('div', { class: 'reminder-title', text: reminder.title }),
     meta,
-  ]);
+  );
   if (reminder.notes) {
     const parts = noteParts(reminder.notes);
     if (parts.text) {
