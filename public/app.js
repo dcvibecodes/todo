@@ -457,7 +457,21 @@ function formatDue(reminder) {
   const overdue = !reminder.completed && (
     reminder.has_time ? date.getTime() < Date.now() : dueDay.getTime() < today.getTime()
   );
-  return { day, time, text: time ? day + ' ' + time : day, overdue };
+  return { day, time, text: time ? day + ' ' + time : day, overdue, dayDiff };
+}
+
+// Relative wording for the due line: "due in 5 days" or "3 days overdue".
+// Today and tomorrow are skipped: formatDue already renders those as the words
+// "Today" / "Tomorrow", so a countdown there would just repeat the date.
+// Completed items never say overdue — a finished item is not late.
+function dueCountdown(due, completed) {
+  if (!due || typeof due.dayDiff !== 'number') return '';
+  const diff = due.dayDiff;
+  if (diff >= 2) return `due in ${diff} days`;
+  if (diff >= 0) return '';
+  if (completed) return '';
+  const late = Math.abs(diff);
+  return late === 1 ? '1 day overdue' : `${late} days overdue`;
 }
 
 function formatRecordDate(value) {
@@ -1781,9 +1795,11 @@ function reminderRow(reminder, options = {}) {
   // down the list reads dates first; the clock time stays quieter beside it.
   const body = el('div', { class: 'reminder-body' });
   if (due) {
+    const countdown = dueCountdown(due, reminder.completed);
     body.append(el('div', {
       class: 'reminder-due' + (due.overdue ? ' overdue' : ''),
       html: ICON('calendar', 'ic') + `<span>${escapeHtml(due.day)}</span>`
+        + (countdown ? `<span class="due-in">${escapeHtml(countdown)}</span>` : '')
         + (due.time ? `<span class="due-time">${escapeHtml(due.time)}</span>` : ''),
     }));
   }

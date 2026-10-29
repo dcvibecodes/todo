@@ -2,6 +2,11 @@
 
 A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due dates, urgent flags, recurring reminders, natural-language quick add, smart lists, floating time zones, a token API for external agents, completed history, dark mode, and web push. No frontend framework and no build step.
 
+## What's New in v2.8.6
+
+- **Relative due dates** - each reminder's due line now also says how far away it is: "Mon, Nov 2 due in 3 days", or "5 days overdue" for past items. It sits between the date and the clock time in the same light gray as the other metadata, and appears everywhere reminder rows are listed (Today, Scheduled, lists, search). Items due today or tomorrow keep just "Today" / "Tomorrow"; completed items never read as overdue.
+- Service worker cache bumped to `todo-v2.8.6`.
+
 ## What's New in v2.8.5
 
 - **Recurring delete warns from the list too** - v2.8.4 only guarded the editor's Delete Item button; deleting a repeating item by swiping its row (or the desktop ×) still deleted it silently. Both row paths now show the same persistent warning with Delete everything / Cancel, and the swipe closes first so the message is never half off-screen. One-off deletes are unchanged.

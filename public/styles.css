@@ -1006,6 +1006,7 @@ body.list-dragging .list-grip { cursor: grabbing; }
 }
 .reminder-due .ic { width: 12px; height: 12px; }
 .reminder-due .due-time { color: var(--text-2); font-weight: 600; }
+.reminder-due .due-in { color: var(--text-3); font-weight: 400; }
 .reminder-due.overdue {
   color: var(--red);
   background: color-mix(in srgb, var(--red) 10%, transparent);
