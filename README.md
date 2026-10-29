@@ -2,6 +2,13 @@
 
 A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due dates, urgent flags, recurring reminders, natural-language quick add, smart lists, floating time zones, a token API for external agents, completed history, dark mode, and web push. No frontend framework and no build step.
 
+## What's New in v2.8.4
+
+- **Tap-time undo order + steady history list** - undoing an older completion while a newer one is unstaged is refused immediately ("Undo the most recent completion first") instead of at Save; history rows paint in place so the list never jumps, and the already-completed warning reserves its line.
+- **Autofill no longer sticks** - if the words that turned the date/time/repeat on are deleted again (and you haven't touched the fields yourself), the toggles revert to how they were.
+- **Recurring delete warns first** - deleting a repeating series now explains it removes the whole series and its history (Skip removes just one occurrence); the button becomes "Delete everything" and only the second tap deletes. One-off deletes are unchanged.
+- Service worker cache bumped to `todo-v2.8.4`.
+
 ## What's New in v2.8.3
 
 - **History undos and snooze are staged until Save** - Undo skip, Undo completion, and the editor Snooze toggle now stage instead of applying instantly: rows dim with a "Staged ✓" tag (tap again to unstage), the date field previews the outcome, and Save lights up. Save applies staged undos newest-first, then the field edits; Cancel drops everything since nothing was ever sent. Staging any number of undos is trivial — it is just a small in-memory list.

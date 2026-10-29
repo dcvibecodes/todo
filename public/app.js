@@ -2242,11 +2242,11 @@ async function loadHistory(id) {
       ]);
       if (occurrence.status === 'skipped') {
         if (isOpStaged('unskip', occurrence.occurrence_at)) row.classList.add('history-staged');
-        row.append(historyUndoButton(id, 'unskip', occurrence.occurrence_at, 'Undo skip'));
+        row.append(historyUndoButton(id, 'unskip', occurrence.occurrence_at, 'Undo skip', row));
       }
       if (occurrence.status === 'completed') {
         if (isOpStaged('uncomplete', occurrence.occurrence_at)) row.classList.add('history-staged');
-        row.append(historyUndoButton(id, 'uncomplete', occurrence.occurrence_at, 'Undo'));
+        row.append(historyUndoButton(id, 'uncomplete', occurrence.occurrence_at, 'Undo', row));
       }
       wrap.append(row);
     }
@@ -2282,14 +2282,21 @@ function editorPickedDueISO() {
 function syncDateHistoryHint() {
   const hint = $('#e-date-history-hint');
   if (!hint) return;
-  hint.hidden = true;
-  if (!state.editingId || $('#series-section').hidden) return;
+  // Zero-shift rule: when the series section is open, the line always keeps
+  // its space (visibility, not display) so showing/hiding the warning never
+  // moves the rows below. Otherwise the element stays out of layout entirely.
+  if (!state.editingId || $('#series-section').hidden) {
+    hint.style.display = 'none';
+    return;
+  }
+  hint.style.display = '';
+  hint.style.visibility = 'hidden';
   const candidate = editorPickedDueISO();
   if (!candidate) return;
   const match = (state.editingOccurrences || []).some((o) => o.status === 'completed' && o.occurrence_at === candidate);
   if (match) {
     hint.textContent = 'Already completed — completing again moves to the next date.';
-    hint.hidden = false;
+    hint.style.visibility = 'visible';
   }
 }
 
@@ -2307,7 +2314,7 @@ function isOpStaged(kind, occurrenceAt) {
     && (o.occurrence_at || null) === (occurrenceAt || null));
 }
 
-function historyUndoButton(id, kind, occurrenceAt, label) {
+function historyUndoButton(id, kind, occurrenceAt, label, row) {
   const staged = isOpStaged(kind, occurrenceAt);
   const btn = el('button', {
     class: 'history-undo' + (staged ? ' staged' : ''),
@@ -2315,11 +2322,24 @@ function historyUndoButton(id, kind, occurrenceAt, label) {
     text: staged ? 'Staged ✓' : label,
   });
   btn.title = staged ? 'Staged — tap to unstage, Save to apply' : 'Stage this undo — applies when you Save';
-  btn.addEventListener('click', () => toggleStagedOp(kind, id, occurrenceAt));
+  btn.addEventListener('click', (e) => toggleStagedOp(kind, id, occurrenceAt, e.currentTarget, row));
   return btn;
 }
 
-function toggleStagedOp(kind, id, occurrenceAt) {
+function toggleStagedOp(kind, id, occurrenceAt, btn, row) {
+  // Sequence is enforced HERE, at tap time — never silently staged for a
+  // surprise at Save. A completion can only stage when every newer completed
+  // occurrence is already staged (those undo first at Save, so the server's
+  // most-recent-first rule is satisfied). Skips have no order rule.
+  if (kind === 'uncomplete') {
+    const blocked = (state.editingOccurrences || []).some((o) =>
+      o.status === 'completed' && o.occurrence_at > occurrenceAt
+      && !isOpStaged('uncomplete', o.occurrence_at));
+    if (blocked) {
+      toast('Undo the most recent completion first');
+      return;
+    }
+  }
   const i = pendingOccurrenceOps.findIndex((o) => o.kind === kind
     && (o.occurrence_at || null) === (occurrenceAt || null));
   if (i >= 0) {
@@ -2331,8 +2351,16 @@ function toggleStagedOp(kind, id, occurrenceAt) {
     }
     pendingOccurrenceOps.push({ kind, occurrence_at: occurrenceAt });
   }
+  // Paint this row in place: no list re-fetch, no rebuild, no scroll jump.
+  const staged = isOpStaged(kind, occurrenceAt);
+  if (row) row.classList.toggle('history-staged', staged);
+  if (btn) {
+    btn.classList.toggle('staged', staged);
+    btn.textContent = staged ? 'Staged ✓' : (kind === 'unskip' ? 'Undo skip' : 'Undo');
+    btn.title = staged ? 'Staged — tap to unstage, Save to apply' : 'Stage this undo — applies when you Save';
+  }
   syncStagedDate(id);
-  loadHistory(id); // re-render rows (server data unchanged) with staged marks
+  syncDateHistoryHint();
   syncEditorSubmit();
 }
 
@@ -2515,6 +2543,9 @@ function openEditor(id) {
   state.editingId = reminder ? reminder.id : null;
   pendingOccurrenceOps = [];
   pendingSnooze = null;
+  deleteArmed = false;
+  $('#e-delete').textContent = 'Delete Item';
+  $('#e-delete-warn').hidden = true;
   $('#editor-heading').textContent = reminder ? 'Edit Item' : 'New Item';
   $('#e-title').value = reminder ? reminder.title : '';
   clearFieldError($('#e-title'), $('#e-title-error'));
@@ -2734,18 +2765,39 @@ function chipDateLabel(dateStr, timeStr) {
 
 function applyParse(result) {
   if ((!result.date) && (!result.repeat || result.repeat === 'none')) {
+    // Nothing left to autofill: if an earlier keystroke turned fields on and
+    // the user hasn't touched them since, put everything back how it was.
+    // Without this, toggles flipped on by a half-typed phrase stick on
+    // forever (e.g. type "friday", delete it, date stays on).
+    if (parseSnapshot && !scheduleLocked) {
+      $('#e-date-on').checked = parseSnapshot.dateOn;
+      $('#e-time-on').checked = parseSnapshot.timeOn;
+      $('#e-date').value = parseSnapshot.date;
+      $('#e-time').value = parseSnapshot.time;
+      $('#e-repeat').value = parseSnapshot.repeat;
+      $('#e-repeat-interval').value = parseSnapshot.interval;
+      $('#e-repeat-unit').value = parseSnapshot.unit;
+      syncDateTimeRows();
+      syncRepeatRows();
+    }
+    parseSnapshot = null;
     hideParseChip();
+    syncEditorSubmit();
     return;
   }
-  parseSnapshot = {
-    dateOn: $('#e-date-on').checked,
-    timeOn: $('#e-time-on').checked,
-    date: $('#e-date').value,
-    time: $('#e-time').value,
-    repeat: $('#e-repeat').value,
-    interval: $('#e-repeat-interval').value,
-    unit: $('#e-repeat-unit').value,
-  };
+  // Capture the pre-autofill baseline only once: later keystrokes must not
+  // overwrite it, or reverting would restore a half-autofilled state.
+  if (!parseSnapshot) {
+    parseSnapshot = {
+      dateOn: $('#e-date-on').checked,
+      timeOn: $('#e-time-on').checked,
+      date: $('#e-date').value,
+      time: $('#e-time').value,
+      repeat: $('#e-repeat').value,
+      interval: $('#e-repeat-interval').value,
+      unit: $('#e-repeat-unit').value,
+    };
+  }
   if (result.date) {
     $('#e-date-on').checked = true;
     $('#e-date').value = result.date;
@@ -2793,9 +2845,28 @@ function clearParse() {
   syncEditorSubmit();
 }
 
+let deleteArmed = false; // second tap confirms a recurring-series delete
+
 async function deleteReminder() {
   if (!state.editingId) return;
-  if (!window.confirm('Delete this item?')) return;
+  // Deleting a series wipes it and its whole history (ON DELETE CASCADE),
+  // so a recurring item needs an acknowledged warning — not a toast, not a
+  // bare confirm. First tap explains and arms; second tap deletes.
+  const reminder = findReminder(state.editingId);
+  const rule = reminder ? parseRuleClient(reminder.repeat_rule) : { type: 'none' };
+  if (!rule || rule.type === 'none') {
+    deleteArmed = false;
+    $('#e-delete-warn').hidden = true;
+    $('#e-delete').textContent = 'Delete Item';
+    if (!window.confirm('Delete this item?')) return;
+  } else if (!deleteArmed) {
+    deleteArmed = true;
+    const warn = $('#e-delete-warn');
+    warn.textContent = `This repeats (${repeatLabel(rule)}). Deleting removes the whole series and its history. To remove just this occurrence, use Skip instead.`;
+    warn.hidden = false;
+    $('#e-delete').textContent = 'Delete everything';
+    return;
+  }
   try {
     await api('/api/reminders/' + state.editingId, { method: 'DELETE' });
     closeSheet('#editor');
