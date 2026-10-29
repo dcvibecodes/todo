@@ -460,14 +460,14 @@ function formatDue(reminder) {
   return { day, time, text: time ? day + ' ' + time : day, overdue, dayDiff };
 }
 
-// Relative wording for the due line: "due in 5 days" or "3 days overdue".
+// Relative wording for the due line: "in 5 days" or "3 days overdue".
 // Today and tomorrow are skipped: formatDue already renders those as the words
 // "Today" / "Tomorrow", so a countdown there would just repeat the date.
 // Completed items never say overdue — a finished item is not late.
 function dueCountdown(due, completed) {
   if (!due || typeof due.dayDiff !== 'number') return '';
   const diff = due.dayDiff;
-  if (diff >= 2) return `due in ${diff} days`;
+  if (diff >= 2) return `in ${diff} days`;
   if (diff >= 0) return '';
   if (completed) return '';
   const late = Math.abs(diff);
