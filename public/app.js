@@ -2297,7 +2297,7 @@ function syncDateHistoryHint() {
   if (!candidate) return;
   const match = (state.editingOccurrences || []).some((o) => o.status === 'completed' && o.occurrence_at === candidate);
   if (match) {
-    hint.textContent = 'This date was already completed once — completing it again moves the series to the next occurrence.';
+    hint.textContent = 'Already completed — completing again moves to the next date.';
     hint.hidden = false;
   }
 }

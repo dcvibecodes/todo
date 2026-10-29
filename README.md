@@ -2,6 +2,11 @@
 
 A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due dates, urgent flags, recurring reminders, natural-language quick add, smart lists, floating time zones, a token API for external agents, completed history, dark mode, and web push. No frontend framework and no build step.
 
+## What's New in v2.8.1
+
+- **Clearer already-completed warning** - the editor note is shorter ("Already completed — completing again moves to the next date.") and sits below the date card with the same spacing as the other hints.
+- Service worker cache bumped to `todo-v2.8.1`.
+
 ## What's New in v2.8.0
 
 - **Undo a completion on repeating items** - each completed row in a series' history now has an Undo button. Undo removes that completion from history and puts the due date back, re-armed. It works most-recent-first (undo December before November) and only while the next occurrence hasn't passed yet — settled history stays settled, with a plain message when undo isn't available.
