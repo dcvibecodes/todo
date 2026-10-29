@@ -2,6 +2,11 @@
 
 A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due dates, urgent flags, recurring reminders, natural-language quick add, smart lists, floating time zones, a token API for external agents, completed history, dark mode, and web push. No frontend framework and no build step.
 
+## What's New in v2.8.8
+
+- **Clock time sits with the date** - timed items now read "Fri, Nov 6 3:00 PM in 7 days": the time joins the date in the same bold weight and colour, and the relative countdown follows it.
+- Service worker cache bumped to `todo-v2.8.8`.
+
 ## What's New in v2.8.7
 
 - **Shorter countdown wording** - the relative due text now reads "in 3 days" instead of "due in 3 days".
@@ -9,7 +14,7 @@ A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due
 
 ## What's New in v2.8.6
 
-- **Relative due dates** - each reminder's due line now also says how far away it is: "Mon, Nov 2 in 3 days", or "5 days overdue" for past items. It sits between the date and the clock time in the same light gray as the other metadata, and appears everywhere reminder rows are listed (Today, Scheduled, lists, search). Items due today or tomorrow keep just "Today" / "Tomorrow"; completed items never read as overdue.
+- **Relative due dates** - each reminder's due line now also says how far away it is: "Mon, Nov 2 in 3 days", or "5 days overdue" for past items. It follows the date and clock time in the same light gray as the other metadata, and appears everywhere reminder rows are listed (Today, Scheduled, lists, search). Items due today or tomorrow keep just "Today" / "Tomorrow"; completed items never read as overdue.
 - Service worker cache bumped to `todo-v2.8.6`.
 
 ## What's New in v2.8.5

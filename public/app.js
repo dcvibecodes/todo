@@ -1799,8 +1799,8 @@ function reminderRow(reminder, options = {}) {
     body.append(el('div', {
       class: 'reminder-due' + (due.overdue ? ' overdue' : ''),
       html: ICON('calendar', 'ic') + `<span>${escapeHtml(due.day)}</span>`
-        + (countdown ? `<span class="due-in">${escapeHtml(countdown)}</span>` : '')
-        + (due.time ? `<span class="due-time">${escapeHtml(due.time)}</span>` : ''),
+        + (due.time ? `<span class="due-time">${escapeHtml(due.time)}</span>` : '')
+        + (countdown ? `<span class="due-in">${escapeHtml(countdown)}</span>` : ''),
     }));
   }
   body.append(

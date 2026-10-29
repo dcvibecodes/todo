@@ -1005,7 +1005,9 @@ body.list-dragging .list-grip { cursor: grabbing; }
   color: var(--text);
 }
 .reminder-due .ic { width: 12px; height: 12px; }
-.reminder-due .due-time { color: var(--text-2); font-weight: 600; }
+/* The clock time belongs to the date: same weight and colour as it (inherit),
+   including the red overdue pill. Only the relative countdown stays quiet. */
+.reminder-due .due-time { color: inherit; font-weight: inherit; }
 .reminder-due .due-in { color: var(--text-3); font-weight: 400; }
 .reminder-due.overdue {
   color: var(--red);
@@ -1013,7 +1015,6 @@ body.list-dragging .list-grip { cursor: grabbing; }
   border-radius: 4px;
   padding: 1px 6px;
 }
-.reminder-due.overdue .due-time { color: inherit; }
 .meta-urgent { display: inline-flex; align-items: center; gap: 5px; color: var(--red); }
 .meta-urgent .ic { width: 12px; height: 12px; }
 .meta-repeat { display: inline-flex; align-items: center; gap: 5px; }
