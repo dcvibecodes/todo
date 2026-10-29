@@ -2,6 +2,11 @@
 
 A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due dates, urgent flags, recurring reminders, natural-language quick add, smart lists, floating time zones, a token API for external agents, completed history, dark mode, and web push. No frontend framework and no build step.
 
+## What's New in v2.7.12
+
+- **Dates lead each reminder** - the due date moves out of the metadata row onto its own line above the title, bold and in the page text color at the usual metadata size, so scanning a list reads dates first. Timed items keep the clock time beside the date in a quieter tone; date-only items show just the date. Overdue dates keep their red highlight, and the calendar icon stays with the date.
+- **Stronger section headings** - Scheduled's group headings (Overdue, Today, Tomorrow, This Week, Next Week, Later This Month, Later) now use the same Fraunces serif and page-text color as the page title, a step smaller, replacing the small gray caps. Titles, metadata, notes, icons, list colors, spacing and all other typography are unchanged. Service worker cache bumped to `todo-v2.7.12`.
+
 ## What's New in v2.7.11
 
 - **Snoozed items leave the app-icon badge** - reminders snoozed into the future no longer count toward the Home Screen icon badge, in pushed counts and on open alike; they rejoin the count automatically when the snooze fires, and expired snoozes still count. List rows, smart views, and push timing are unchanged. Service worker cache bumped to `todo-v2.7.11`.
