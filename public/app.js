@@ -2220,7 +2220,7 @@ async function skipCurrentOccurrence() {
 }
 
 function formatOccurrenceDate(iso) {
-  return new Date(iso).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+  return new Date(iso).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 async function loadHistory(id) {
@@ -2233,6 +2233,8 @@ async function loadHistory(id) {
     state.editingOccurrences = rows;
     if (!rows.length) {
       wrap.append(el('p', { class: 'history-empty', text: 'No completions or skips yet.' }));
+    } else {
+      wrap.append(el('p', { class: 'history-title', text: 'History' }));
     }
     for (const occurrence of rows) {
       const label = occurrence.status === 'completed' ? 'Done'
