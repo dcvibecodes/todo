@@ -611,12 +611,16 @@ button, a, input, select, textarea, [tabindex] { touch-action: manipulation; }
 
 .badge {
   min-width: 20px;
+  flex: none;
   text-align: right;
+  white-space: nowrap;
   font-size: 0.72rem;
   font-weight: 500;
   color: var(--text-3);
   font-variant-numeric: tabular-nums;
 }
+
+.badge-overdue { color: var(--red); font-weight: 600; }
 
 .new-list-btn {
   border: 0;

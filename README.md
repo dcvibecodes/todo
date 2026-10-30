@@ -2,6 +2,11 @@
 
 A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due dates, urgent flags, recurring reminders, natural-language quick add, smart lists, floating time zones, a token API for external agents, completed history, dark mode, and web push. No frontend framework and no build step.
 
+## What's New in v2.10.1
+
+- **Today's nav badge now explains overdue** - the Today row reads "Nothing due" when the day is clear, keeps a plain total when nothing is late, and shows the split when something is overdue: "4 · 2 overdue". When every Today item is overdue it shows just "2 overdue" instead of repeating the number. The overdue phrase uses the existing red token; the seven-day strip is unchanged and still leaves overdue items to the Today view. The Today row also carries a full accessible label ("Today, 4 items, 2 overdue").
+- Service worker cache bumped to `todo-v2.10.1`.
+
 ## What's New in v2.10.0
 
 - **Day Peek on Home** - a rolling seven-day strip now sits under Search: today first, then the next six days. Each cell shows the weekday, date and either one dot per open item (up to four) or the exact count from five. Today has a soft gray fill; a selected day gets an accent outline. Tap a day to open an inline card with its items using the normal rows (check, wrapped title, list colour/name, repeat and time); tapping the selected day again closes it, tapping another switches it in place. The card caps at about four rows and scrolls inside; empty days say "Nothing due". The strip rolls at local midnight and re-checks on resume, using the same local-date rules as Scheduled (overdue, completed and undated items are not counted). Expand/collapse and content crossfades respect reduced motion.

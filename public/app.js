@@ -1794,11 +1794,33 @@ function renderSidebar() {
   const incomplete = incompleteReminders();
   const todayCount = incomplete
     .filter((reminder) => reminder.due_at && new Date(reminder.due_at) <= todayLimit).length;
+  const overdueCount = incomplete.filter(isOverdue).length;
   const allCount = incomplete.length;
   const scheduledCount = incomplete.filter((reminder) => reminder.due_at).length;
   const flaggedCount = incomplete.filter((reminder) => reminder.urgent).length;
 
-  $('#count-today').textContent = todayCount ? String(todayCount) : '';
+  const todayBadge = $('#count-today');
+  todayBadge.replaceChildren();
+  if (!todayCount) {
+    todayBadge.textContent = 'Nothing due';
+  } else if (!overdueCount) {
+    todayBadge.textContent = String(todayCount);
+  } else if (overdueCount >= todayCount) {
+    todayBadge.append(el('span', { class: 'badge-overdue', text: `${overdueCount} overdue` }));
+  } else {
+    todayBadge.append(
+      el('span', { text: String(todayCount) }),
+      el('span', { class: 'badge-sep', text: ' \u00b7 ' }),
+      el('span', { class: 'badge-overdue', text: `${overdueCount} overdue` }),
+    );
+  }
+  const todayRow = $('#smart-nav .nav-row[data-view="today"]');
+  if (todayRow) {
+    const itemWord = todayCount === 1 ? 'item' : 'items';
+    todayRow.setAttribute('aria-label', todayCount
+      ? `Today, ${todayCount} ${itemWord}${overdueCount ? `, ${overdueCount} overdue` : ''}`
+      : 'Today, nothing due');
+  }
   $('#count-scheduled').textContent = scheduledCount ? String(scheduledCount) : '';
   $('#count-all').textContent = allCount ? String(allCount) : '';
   $('#count-flagged').textContent = flaggedCount ? String(flaggedCount) : '';
