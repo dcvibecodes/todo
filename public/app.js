@@ -729,27 +729,53 @@ function paintPullIndicator(distance, gesture) {
   if (gesture) gesture.armed = armed;
 }
 
-function pullAllowed(scroller) {
+// Nested scrollers (the expanded day card) must finish scrolling to their top
+// before a downward drag can become the refresh gesture. Walk from the touch
+// target up to the page scroller and remember every vertical scroller.
+function pullScrollChain(target, scroller) {
+  const chain = [];
+  let node = target instanceof Element ? target : null;
+  while (node && node !== scroller) {
+    if (node instanceof HTMLElement) {
+      const style = getComputedStyle(node);
+      if (/(auto|scroll)/.test(style.overflowY) && node.scrollHeight > node.clientHeight + 1) {
+        chain.push(node);
+      }
+    }
+    node = node.parentElement;
+  }
+  chain.push(scroller);
+  return chain;
+}
+
+function pullChainAtTop(chain) {
+  return chain.every((node) => node.scrollTop <= 0);
+}
+
+function pullAllowed() {
   if (!PULL_MEDIA.matches) return false;
   if (!state.authenticated || refreshing || pullBusy) return false;
   if (document.body.classList.contains('sheet-open')) return false;
   if (listDrag) return false;
-  return scroller.scrollTop <= 0;
+  return true;
 }
 
 function onPullStart(event) {
   if (event.touches.length !== 1) return;
   const scroller = event.currentTarget;
-  if (!pullAllowed(scroller)) return;
+  if (!pullAllowed()) return;
   const touch = event.touches[0];
   pullGesture = {
     scroller,
+    chain: pullScrollChain(event.target, scroller),
     id: touch.identifier,
     startX: touch.clientX,
     startY: touch.clientY,
+    pullStartY: touch.clientY,
     distance: 0,
     armed: false,
     mode: null,
+    blockedByScroll: false,
   };
 }
 
@@ -778,17 +804,24 @@ function onPullMove(event) {
       return;
     }
     if (dy <= 6) return;
+    if (!pullChainAtTop(gesture.chain)) {
+      gesture.blockedByScroll = true;
+      return;
+    }
+    // When the drag began with content still scrolled, the refresh distance
+    // starts at the moment the chain reaches its top, so the pill never jumps.
     gesture.mode = 'pull';
+    gesture.pullStartY = gesture.blockedByScroll ? touch.clientY : gesture.startY;
   }
 
-  if (gesture.scroller.scrollTop > 0) {
+  if (!pullChainAtTop(gesture.chain)) {
     pullGesture = null;
     hidePullIndicator();
     return;
   }
 
   if (event.cancelable) event.preventDefault();
-  gesture.distance = Math.max(0, Math.min(PULL_MAX, dy * PULL_RESISTANCE));
+  gesture.distance = Math.max(0, Math.min(PULL_MAX, (touch.clientY - gesture.pullStartY) * PULL_RESISTANCE));
   paintPullIndicator(gesture.distance, gesture);
 }
 

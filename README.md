@@ -2,6 +2,11 @@
 
 A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due dates, urgent flags, recurring reminders, natural-language quick add, smart lists, floating time zones, a token API for external agents, completed history, dark mode, and web push. No frontend framework and no build step.
 
+## What's New in v2.10.2
+
+- **Pull-to-refresh no longer hijacks the day card** - a downward drag inside an expanded day with more items than fit now scrolls the card back to its top first. The refresh pill and the request only start once every scroller (the card and Home) is at the top and the drag continues; lifting as soon as the card reaches the top does not refresh. The same rule applies when Home itself is scrolled, so pulling down reaches the top before refreshing.
+- Service worker cache bumped to `todo-v2.10.2`.
+
 ## What's New in v2.10.1
 
 - **Today's nav badge now explains overdue** - the Today row reads "Nothing due" when the day is clear, keeps a plain total when nothing is late, and shows the split when something is overdue: "4 · 2 overdue". When every Today item is overdue it shows just "2 overdue" instead of repeating the number. The overdue phrase uses the existing red token; the seven-day strip is unchanged and still leaves overdue items to the Today view. The Today row also carries a full accessible label ("Today, 4 items, 2 overdue").
