@@ -2,6 +2,11 @@
 
 A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due dates, urgent flags, recurring reminders, natural-language quick add, smart lists, floating time zones, a token API for external agents, completed history, dark mode, and web push. No frontend framework and no build step.
 
+## What's New in v2.10.4
+
+- **The seven-day strip is one calendar card** - the rolling week now sits in a soft rounded panel (5% theme-text tint, 1px soft border, 6px padding, 14px radius) instead of floating directly on Home. Today's gray fill and the selected-day accent outline are unchanged, and all seven cells still fit on a 320px screen at large text.
+- Service worker cache bumped to `todo-v2.10.4`.
+
 ## What's New in v2.10.3
 
 - **Scrolling inside an expanded day no longer fights refresh** - pull-to-refresh is now armed only when a touch starts with the day card and Home already at the top. A drag that begins inside a scrolled card is left entirely to the card, so it can scroll in either direction and reverse freely; the card's overscroll is contained so reaching its edge never drags Home or arms a refresh. Once the card is back at the top, lift and pull again to refresh. A normal pull from the top is unchanged.
