@@ -425,16 +425,21 @@ button, a, input, select, textarea, [tabindex] { touch-action: manipulation; }
 
 /* ---------- Day Peek ---------- */
 
-.day-peek { display: flex; flex-direction: column; gap: 10px; }
+.day-peek {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  border: 1px solid var(--line-soft);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--text) 5%, var(--surface));
+  overflow: hidden;
+}
 
 .day-strip {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 2px;
   padding: 6px;
-  border: 1px solid var(--line-soft);
-  border-radius: 14px;
-  background: color-mix(in srgb, var(--text) 5%, var(--surface));
 }
 
 .day-cell {
@@ -514,8 +519,9 @@ button, a, input, select, textarea, [tabindex] { touch-action: manipulation; }
 
 .day-card {
   overflow: hidden;
-  border: 1px solid var(--line-soft);
-  border-radius: var(--radius);
+  border: 0;
+  border-top: 1px solid var(--line-soft);
+  border-radius: 0;
   background: var(--surface);
 }
 
@@ -543,7 +549,7 @@ button, a, input, select, textarea, [tabindex] { touch-action: manipulation; }
 .day-card-scroll {
   max-height: 264px;
   overflow-y: auto;
-  overscroll-behavior-y: contain;
+  overscroll-behavior-y: none;
   scrollbar-width: thin;
   scrollbar-color: var(--line) transparent;
 }

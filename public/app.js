@@ -1802,6 +1802,35 @@ function checkDayRollover() {
   render();
 }
 
+function initDayCardScrollGuard() {
+  const scroll = $('#day-card-scroll');
+  if (!scroll) return;
+  let guard = null;
+  scroll.addEventListener('touchstart', (event) => {
+    if (event.touches.length !== 1) {
+      guard = null;
+      return;
+    }
+    const touch = event.touches[0];
+    guard = { id: touch.identifier, lastY: touch.clientY };
+  }, { passive: true });
+  scroll.addEventListener('touchmove', (event) => {
+    if (!guard) return;
+    const touch = Array.from(event.touches).find((item) => item.identifier === guard.id);
+    if (!touch) return;
+    const delta = touch.clientY - guard.lastY;
+    guard.lastY = touch.clientY;
+    const atBottom = scroll.scrollTop + scroll.clientHeight >= scroll.scrollHeight - 1;
+    // Only block the segment that would hand the scroll to Home when the card
+    // is already at its bottom. A reversal (finger moving down) must pass
+    // straight through so the card starts scrolling again immediately.
+    if (atBottom && delta < 0 && event.cancelable) event.preventDefault();
+  }, { passive: false });
+  const end = () => { guard = null; };
+  scroll.addEventListener('touchend', end, { passive: true });
+  scroll.addEventListener('touchcancel', end, { passive: true });
+}
+
 function initDayPeek() {
   const card = $('#day-card');
   const scroll = $('#day-card-scroll');
@@ -1818,6 +1847,7 @@ function initDayPeek() {
     });
   }
   if (scroll) scroll.addEventListener('scroll', syncDayCardOverflow, { passive: true });
+  initDayCardScrollGuard();
   scheduleDayRollover();
 }
 
