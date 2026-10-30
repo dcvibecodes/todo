@@ -764,18 +764,21 @@ function onPullStart(event) {
   if (event.touches.length !== 1) return;
   const scroller = event.currentTarget;
   if (!pullAllowed()) return;
+  const chain = pullScrollChain(event.target, scroller);
+  // Only arm refresh when the gesture starts with every nested scroller at its
+  // top. A drag that starts inside a scrolled day card belongs to that card;
+  // never take it over mid-gesture.
+  if (!pullChainAtTop(chain)) return;
   const touch = event.touches[0];
   pullGesture = {
     scroller,
-    chain: pullScrollChain(event.target, scroller),
+    chain,
     id: touch.identifier,
     startX: touch.clientX,
     startY: touch.clientY,
-    pullStartY: touch.clientY,
     distance: 0,
     armed: false,
     mode: null,
-    blockedByScroll: false,
   };
 }
 
@@ -805,13 +808,10 @@ function onPullMove(event) {
     }
     if (dy <= 6) return;
     if (!pullChainAtTop(gesture.chain)) {
-      gesture.blockedByScroll = true;
+      pullGesture = null;
       return;
     }
-    // When the drag began with content still scrolled, the refresh distance
-    // starts at the moment the chain reaches its top, so the pill never jumps.
     gesture.mode = 'pull';
-    gesture.pullStartY = gesture.blockedByScroll ? touch.clientY : gesture.startY;
   }
 
   if (!pullChainAtTop(gesture.chain)) {
@@ -821,7 +821,7 @@ function onPullMove(event) {
   }
 
   if (event.cancelable) event.preventDefault();
-  gesture.distance = Math.max(0, Math.min(PULL_MAX, (touch.clientY - gesture.pullStartY) * PULL_RESISTANCE));
+  gesture.distance = Math.max(0, Math.min(PULL_MAX, dy * PULL_RESISTANCE));
   paintPullIndicator(gesture.distance, gesture);
 }
 

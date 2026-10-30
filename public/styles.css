@@ -539,6 +539,7 @@ button, a, input, select, textarea, [tabindex] { touch-action: manipulation; }
 .day-card-scroll {
   max-height: 264px;
   overflow-y: auto;
+  overscroll-behavior-y: contain;
   scrollbar-width: thin;
   scrollbar-color: var(--line) transparent;
 }

@@ -2,6 +2,11 @@
 
 A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due dates, urgent flags, recurring reminders, natural-language quick add, smart lists, floating time zones, a token API for external agents, completed history, dark mode, and web push. No frontend framework and no build step.
 
+## What's New in v2.10.3
+
+- **Scrolling inside an expanded day no longer fights refresh** - pull-to-refresh is now armed only when a touch starts with the day card and Home already at the top. A drag that begins inside a scrolled card is left entirely to the card, so it can scroll in either direction and reverse freely; the card's overscroll is contained so reaching its edge never drags Home or arms a refresh. Once the card is back at the top, lift and pull again to refresh. A normal pull from the top is unchanged.
+- Service worker cache bumped to `todo-v2.10.3`.
+
 ## What's New in v2.10.2
 
 - **Pull-to-refresh no longer hijacks the day card** - a downward drag inside an expanded day with more items than fit now scrolls the card back to its top first. The refresh pill and the request only start once every scroller (the card and Home) is at the top and the drag continues; lifting as soon as the card reaches the top does not refresh. The same rule applies when Home itself is scrolled, so pulling down reaches the top before refreshing.
