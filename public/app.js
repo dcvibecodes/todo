@@ -729,9 +729,9 @@ function paintPullIndicator(distance, gesture) {
   if (gesture) gesture.armed = armed;
 }
 
-// Nested scrollers (the expanded day card) must finish scrolling to their top
-// before a downward drag can become the refresh gesture. Walk from the touch
-// target up to the page scroller and remember every vertical scroller.
+// Walk from the touch target up to the page scroller and remember every
+// vertical scroller in the chain. Refresh only arms when the whole chain is at
+// its top; otherwise the gesture belongs to scrolling.
 function pullScrollChain(target, scroller) {
   const chain = [];
   let node = target instanceof Element ? target : null;
@@ -765,9 +765,9 @@ function onPullStart(event) {
   const scroller = event.currentTarget;
   if (!pullAllowed()) return;
   const chain = pullScrollChain(event.target, scroller);
-  // Only arm refresh when the gesture starts with every nested scroller at its
-  // top. A drag that starts inside a scrolled day card belongs to that card;
-  // never take it over mid-gesture.
+  // Only arm refresh when the gesture starts with the chain at the top. A drag
+  // that starts while Home is scrolled belongs to scrolling, never a
+  // mid-gesture refresh takeover.
   if (!pullChainAtTop(chain)) return;
   const touch = event.touches[0];
   pullGesture = {
@@ -1457,7 +1457,6 @@ const DAY_PEEK_REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)');
 let dayPeekSelected = null;
 let dayPeekOpen = false;
 let dayPeekSignature = '';
-let dayPeekRenderedKey = null;
 let dayPeekCardAnimating = false;
 let dayPeekTodayKey = localDateValue(new Date());
 let dayRolloverTimer = null;
@@ -1552,7 +1551,6 @@ function resetDayPeek() {
   dayPeekOpen = false;
   dayPeekSelected = null;
   dayPeekSignature = '';
-  dayPeekRenderedKey = null;
   dayPeekCardAnimating = false;
   const card = $('#day-card');
   if (!card) return;
@@ -1564,7 +1562,6 @@ function resetDayPeek() {
   card.setAttribute('aria-hidden', 'true');
   card.style.transition = 'none';
   card.style.height = '';
-  card.classList.remove('has-overflow');
 }
 
 function updateDayStrip() {
@@ -1633,15 +1630,6 @@ function dayCardTargetHeight(card) {
   return target;
 }
 
-function syncDayCardOverflow() {
-  const card = $('#day-card');
-  const scroll = $('#day-card-scroll');
-  if (!card || !scroll || card.hidden) return;
-  const overflow = scroll.scrollHeight > scroll.clientHeight + 1;
-  const atEnd = scroll.scrollTop + scroll.clientHeight >= scroll.scrollHeight - 1;
-  card.classList.toggle('has-overflow', overflow && !atEnd);
-}
-
 function syncDayCardHeight(card, animate) {
   if (!card || card.hidden || !homeScreenVisible()) return;
   const current = card.getBoundingClientRect().height;
@@ -1650,7 +1638,6 @@ function syncDayCardHeight(card, animate) {
     dayPeekCardAnimating = false;
     card.style.transition = 'none';
     card.style.height = 'auto';
-    syncDayCardOverflow();
     return;
   }
   dayPeekCardAnimating = true;
@@ -1706,9 +1693,7 @@ function renderDayPeek(options = {}) {
     if (!dayPeekCardAnimating) syncDayCardHeight(card, false);
     return;
   }
-  const keyChanged = key !== dayPeekRenderedKey;
   dayPeekSignature = signature;
-  dayPeekRenderedKey = key;
   const date = parseDayKey(key);
   $('#day-card-title').textContent = dayPeekDateLabel(date);
   $('#day-card-meta').textContent = `${dayPeekRelativeLabel(key)} · ${dayPeekItemWord(items.length)}`;
@@ -1720,12 +1705,7 @@ function renderDayPeek(options = {}) {
   } else {
     list.append(el('p', { class: 'day-peek-empty', text: 'Nothing due' }));
   }
-  const previousTop = keyChanged ? 0 : scroll.scrollTop;
   scroll.replaceChildren(list);
-  if (homeScreenVisible()) {
-    scroll.scrollTop = previousTop;
-    syncDayCardOverflow();
-  }
   if (options.crossfade) fadeDayPeekContent(true);
   syncDayCardHeight(card, true);
 }
@@ -1743,7 +1723,6 @@ function openDayPeek(key) {
     if (!wasOpen) {
       card.style.transition = 'none';
       card.style.height = '0px';
-      card.classList.remove('has-overflow');
     }
   }
   updateDayStrip();
@@ -1772,7 +1751,6 @@ function closeDayPeek(instant = false) {
   void card.offsetHeight;
   card.style.transition = `height ${DAY_PEEK_COLLAPSE_MS}ms cubic-bezier(0.4, 0, 0.2, 1)`;
   card.style.height = '0px';
-  card.classList.remove('has-overflow');
 }
 
 function toggleDayPeek(key) {
@@ -1802,52 +1780,19 @@ function checkDayRollover() {
   render();
 }
 
-function initDayCardScrollGuard() {
-  const scroll = $('#day-card-scroll');
-  if (!scroll) return;
-  let guard = null;
-  scroll.addEventListener('touchstart', (event) => {
-    if (event.touches.length !== 1) {
-      guard = null;
-      return;
-    }
-    const touch = event.touches[0];
-    guard = { id: touch.identifier, lastY: touch.clientY };
-  }, { passive: true });
-  scroll.addEventListener('touchmove', (event) => {
-    if (!guard) return;
-    const touch = Array.from(event.touches).find((item) => item.identifier === guard.id);
-    if (!touch) return;
-    const delta = touch.clientY - guard.lastY;
-    guard.lastY = touch.clientY;
-    const atBottom = scroll.scrollTop + scroll.clientHeight >= scroll.scrollHeight - 1;
-    // Only block the segment that would hand the scroll to Home when the card
-    // is already at its bottom. A reversal (finger moving down) must pass
-    // straight through so the card starts scrolling again immediately.
-    if (atBottom && delta < 0 && event.cancelable) event.preventDefault();
-  }, { passive: false });
-  const end = () => { guard = null; };
-  scroll.addEventListener('touchend', end, { passive: true });
-  scroll.addEventListener('touchcancel', end, { passive: true });
-}
-
 function initDayPeek() {
   const card = $('#day-card');
-  const scroll = $('#day-card-scroll');
   if (card) {
     card.addEventListener('transitionend', (event) => {
       if (event.target !== card || event.propertyName !== 'height') return;
       dayPeekCardAnimating = false;
       if (dayPeekOpen) {
         card.style.height = 'auto';
-        syncDayCardOverflow();
       } else {
         resetDayPeek();
       }
     });
   }
-  if (scroll) scroll.addEventListener('scroll', syncDayCardOverflow, { passive: true });
-  initDayCardScrollGuard();
   scheduleDayRollover();
 }
 
