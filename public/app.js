@@ -658,9 +658,12 @@ async function loadState() {
   if (state.search) await runSearch(state.search);
 }
 
+let refreshing = false;
+
 async function refreshState() {
+  if (refreshing) return false;
+  refreshing = true;
   const buttons = $$('.refresh-btn');
-  if (buttons.some((btn) => btn.disabled)) return;
   buttons.forEach((btn) => {
     btn.disabled = true;
     btn.classList.add('loading');
@@ -669,14 +672,175 @@ async function refreshState() {
     await loadState();
     render();
     toast('Refreshed');
+    return true;
   } catch (err) {
     toast(err.message);
+    return false;
   } finally {
+    refreshing = false;
     buttons.forEach((btn) => {
       btn.disabled = false;
       btn.classList.remove('loading');
     });
   }
+}
+
+/* ---------------- Pull to refresh (touch phones) ----------------
+   Desktop/web keeps the refresh icon. On touch devices in the mobile layout,
+   pulling down at the top of either scroller (Home's .sidebar or a view's
+   #content) drives the same refreshState(). The pill is fixed; the content
+   itself is never transformed, so sticky headers and scrolling stay intact. */
+
+const PULL_MEDIA = window.matchMedia('(max-width: 899px) and (pointer: coarse)');
+const PULL_THRESHOLD = 56;
+const PULL_MAX = 90;
+const PULL_RESISTANCE = 0.7;
+const PULL_MIN_SPIN = 500;
+const PULL_START_OFFSET = -36;
+
+let pullGesture = null;
+let pullBusy = false;
+
+function pullElements() {
+  return { pill: $('#pull-refresh'), label: $('#pull-refresh-label') };
+}
+
+function hidePullIndicator() {
+  const { pill, label } = pullElements();
+  if (!pill) return;
+  pill.classList.remove('pulling', 'armed', 'refreshing');
+  pill.style.opacity = '0';
+  pill.style.transform = `translate(-50%, ${PULL_START_OFFSET}px)`;
+  if (label) label.textContent = 'Pull to refresh';
+}
+
+function paintPullIndicator(distance, gesture) {
+  const { pill, label } = pullElements();
+  if (!pill) return;
+  const armed = distance >= PULL_THRESHOLD;
+  pill.classList.add('pulling');
+  pill.classList.remove('refreshing');
+  pill.classList.toggle('armed', armed);
+  pill.style.opacity = String(Math.min(1, distance / 48));
+  pill.style.transform = `translate(-50%, ${PULL_START_OFFSET + distance}px)`;
+  if (label && label.textContent !== (armed ? 'Release to refresh' : 'Pull to refresh')) {
+    label.textContent = armed ? 'Release to refresh' : 'Pull to refresh';
+  }
+  if (gesture) gesture.armed = armed;
+}
+
+function pullAllowed(scroller) {
+  if (!PULL_MEDIA.matches) return false;
+  if (!state.authenticated || refreshing || pullBusy) return false;
+  if (document.body.classList.contains('sheet-open')) return false;
+  if (listDrag) return false;
+  return scroller.scrollTop <= 0;
+}
+
+function onPullStart(event) {
+  if (event.touches.length !== 1) return;
+  const scroller = event.currentTarget;
+  if (!pullAllowed(scroller)) return;
+  const touch = event.touches[0];
+  pullGesture = {
+    scroller,
+    id: touch.identifier,
+    startX: touch.clientX,
+    startY: touch.clientY,
+    distance: 0,
+    armed: false,
+    mode: null,
+  };
+}
+
+function onPullMove(event) {
+  const gesture = pullGesture;
+  if (!gesture || event.currentTarget !== gesture.scroller) return;
+  if (listDrag || event.touches.length > 1) {
+    pullGesture = null;
+    hidePullIndicator();
+    return;
+  }
+  const touch = Array.from(event.touches).find((item) => item.identifier === gesture.id);
+  if (!touch) return;
+
+  const dx = touch.clientX - gesture.startX;
+  const dy = touch.clientY - gesture.startY;
+
+  if (!gesture.mode) {
+    // Let horizontal swipes and upward scrolls behave normally.
+    if (Math.abs(dx) > 6 && Math.abs(dx) > Math.abs(dy)) {
+      pullGesture = null;
+      return;
+    }
+    if (dy < -6) {
+      pullGesture = null;
+      return;
+    }
+    if (dy <= 6) return;
+    gesture.mode = 'pull';
+  }
+
+  if (gesture.scroller.scrollTop > 0) {
+    pullGesture = null;
+    hidePullIndicator();
+    return;
+  }
+
+  if (event.cancelable) event.preventDefault();
+  gesture.distance = Math.max(0, Math.min(PULL_MAX, dy * PULL_RESISTANCE));
+  paintPullIndicator(gesture.distance, gesture);
+}
+
+function onPullEnd(event) {
+  const gesture = pullGesture;
+  if (!gesture || event.currentTarget !== gesture.scroller) return;
+  pullGesture = null;
+  if (gesture.mode !== 'pull') return;
+  if (gesture.distance >= PULL_THRESHOLD) {
+    runPullRefresh();
+  } else {
+    hidePullIndicator();
+  }
+}
+
+function onPullCancel(event) {
+  if (!pullGesture || event.currentTarget !== pullGesture.scroller) return;
+  pullGesture = null;
+  hidePullIndicator();
+}
+
+async function runPullRefresh() {
+  const { pill, label } = pullElements();
+  if (!pill) return;
+  pullBusy = true;
+  pill.classList.remove('pulling');
+  pill.classList.add('armed', 'refreshing');
+  pill.style.opacity = '1';
+  pill.style.transform = `translate(-50%, ${PULL_START_OFFSET + PULL_THRESHOLD}px)`;
+  if (label) label.textContent = 'Refreshing…';
+
+  const startedAt = Date.now();
+  await refreshState();
+  const remaining = PULL_MIN_SPIN - (Date.now() - startedAt);
+  if (remaining > 0) await new Promise((resolve) => setTimeout(resolve, remaining));
+
+  hidePullIndicator();
+  pullBusy = false;
+}
+
+function initPullToRefresh() {
+  [$('.sidebar'), $('#content')].filter(Boolean).forEach((scroller) => {
+    scroller.addEventListener('touchstart', onPullStart, { passive: true });
+    scroller.addEventListener('touchmove', onPullMove, { passive: false });
+    scroller.addEventListener('touchend', onPullEnd, { passive: true });
+    scroller.addEventListener('touchcancel', onPullCancel, { passive: true });
+  });
+  PULL_MEDIA.addEventListener('change', () => {
+    if (PULL_MEDIA.matches) return;
+    pullGesture = null;
+    hidePullIndicator();
+  });
 }
 
 /* ---------------- Routing ---------------- */
@@ -4200,4 +4364,5 @@ document.addEventListener('visibilitychange', () => {
 
 applyDensity();
 syncMenuButtons();
+initPullToRefresh();
 boot();

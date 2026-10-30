@@ -2,6 +2,11 @@
 
 A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due dates, urgent flags, recurring reminders, natural-language quick add, smart lists, floating time zones, a token API for external agents, completed history, dark mode, and web push. No frontend framework and no build step.
 
+## What's New in v2.9.0
+
+- **Pull down to refresh on phones** - on touch devices in the mobile layout the header refresh icon is gone: pull down at the top of Home or any task list instead. A small pill shows "Pull to refresh" / "Release to refresh" / "Refreshing…" as you drag, then reports "Refreshed" when the same refresh run finishes. Desktop and web keep the refresh button, including a narrow desktop window.
+- Service worker cache bumped to `todo-v2.9.0`.
+
 ## What's New in v2.8.9
 
 - **"Show completed" is now a toggle in the sort bar** - inside a list it sits to the right of Sort and Order instead of as a link under the items, so it is visible without scrolling to the bottom. It shows the count ("Completed (3)") and is dimmed and disabled when the list has nothing completed. Same result as before: completed items appear under a Completed heading and count toward the list total, and the choice is still remembered per list.

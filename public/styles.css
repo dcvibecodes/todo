@@ -322,6 +322,47 @@ button, a, input, select, textarea, [tabindex] { touch-action: manipulation; }
   .refresh-btn.loading .ic { animation: none; }
 }
 
+/* ---------- Pull to refresh (touch phones) ----------
+   The refresh glyph is a desktop/web affordance: touch devices in the mobile
+   layout pull down at the top of a scroller instead. The pill is fixed and
+   slides into view as the pull progresses. */
+@media (max-width: 899px) and (pointer: coarse) {
+  .refresh-btn { display: none; }
+}
+
+.pull-refresh {
+  position: fixed;
+  top: calc(env(safe-area-inset-top) + 6px);
+  left: 50%;
+  z-index: 45;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 12px 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--elev);
+  color: var(--text-2);
+  font-size: 0.75rem;
+  font-weight: 500;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, -36px);
+  transition: transform 0.22s ease, opacity 0.18s ease;
+  will-change: transform, opacity;
+}
+
+.pull-refresh .ic { width: 15px; height: 15px; }
+.pull-refresh.armed { color: var(--text); }
+.pull-refresh.pulling { transition: none; }
+.pull-refresh.refreshing .ic { animation: spin 0.7s linear infinite; transform-origin: center; }
+
+@media (prefers-reduced-motion: reduce) {
+  .pull-refresh { transition: none; }
+  .pull-refresh.refreshing .ic { animation: none; }
+}
+
 /* ---------- Touch targets (coarse pointers) ----------
    Visual sizes stay as above; an invisible ::after pad expands the tap area
    to 44px without shifting layout or neighbours. */
