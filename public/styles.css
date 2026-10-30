@@ -423,6 +423,151 @@ button, a, input, select, textarea, [tabindex] { touch-action: manipulation; }
 .search input:focus { outline: none; border-color: var(--accent); }
 .search input::-webkit-search-cancel-button { -webkit-appearance: none; }
 
+/* ---------- Day Peek ---------- */
+
+.day-peek { display: flex; flex-direction: column; gap: 10px; }
+
+.day-strip {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.day-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 1px;
+  min-width: 0;
+  padding: 7px 2px 6px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-2);
+  outline: 1.5px solid transparent;
+  outline-offset: 1px;
+  transition: background 200ms ease, outline-color 200ms ease, color 200ms ease;
+}
+
+@media (hover: hover) {
+  .day-cell:hover { background: var(--hover); }
+}
+
+.day-cell.is-today {
+  background: color-mix(in srgb, var(--text) 12%, var(--surface));
+  color: var(--text);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+
+.day-cell.is-selected { outline-color: var(--accent); }
+
+.day-weekday {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  line-height: 1.2;
+  text-transform: uppercase;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0.75;
+}
+
+.day-cell.is-selected .day-weekday { font-weight: 700; opacity: 1; }
+
+.day-date {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
+
+.day-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: 10px;
+  min-width: 12px;
+  margin-top: 1px;
+  font-size: 0.5625rem;
+  font-weight: 600;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.day-dot {
+  width: 4px;
+  height: 4px;
+  flex: none;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.day-indicator.is-count { opacity: 0.85; }
+
+.day-card {
+  overflow: hidden;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.day-card-head {
+  padding: 11px 14px 9px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.day-card-title {
+  margin: 0;
+  font-family: 'Fraunces', serif;
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.day-card-meta {
+  margin: 2px 0 0;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.day-card-scroll {
+  max-height: 264px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+
+.day-card.has-overflow .day-card-scroll {
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 26px), transparent calc(100% - 4px));
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 26px), transparent calc(100% - 4px));
+}
+
+.day-card-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+.day-card-scroll::-webkit-scrollbar-track { background: transparent; }
+.day-card-scroll::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
+.day-card-scroll::-webkit-scrollbar-thumb:hover { background: var(--text-3); }
+
+.day-card-list .reminder { border-bottom: 1px solid var(--line); }
+.day-card-list .reminder:last-child { border-bottom: 0; }
+
+.day-peek-empty {
+  margin: 0;
+  padding: 26px 14px;
+  text-align: center;
+  font-size: 0.8125rem;
+  color: var(--text-3);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .day-cell { transition: none; }
+}
+
 .nav { display: flex; flex-direction: column; gap: 1px; }
 
 .nav-row, .list-row {
@@ -2221,6 +2366,7 @@ body.sheet-open .sidebar {
 
 /* ---------- Compact density (opt-in) ---------- */
 
+[data-density="compact"] .day-card-scroll { max-height: 210px; }
 [data-density="compact"] .list-row { min-height: 0; padding: 6px 8px; }
 [data-density="compact"] .swipe-content { min-height: 0; padding: 8px 12px; gap: 10px; }
 [data-density="compact"] .reminder-due { font-size: 0.7rem; }

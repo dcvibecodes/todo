@@ -1412,7 +1412,384 @@ function snoozeLabel(untilISO) {
   return sameDay ? `Snoozed until ${time}` : `Snoozed until ${day.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}, ${time}`;
 }
 
+/* ---------------- Day Peek ---------------- */
+
+const DAY_MS = 86400000;
+const DAY_PEEK_EXPAND_MS = 220;
+const DAY_PEEK_COLLAPSE_MS = 210;
+const DAY_PEEK_FADE_MS = 150;
+const DAY_PEEK_EASE = 'cubic-bezier(0.22, 0.8, 0.3, 1)';
+const DAY_PEEK_REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+let dayPeekSelected = null;
+let dayPeekOpen = false;
+let dayPeekSignature = '';
+let dayPeekRenderedKey = null;
+let dayPeekCardAnimating = false;
+let dayPeekTodayKey = localDateValue(new Date());
+let dayRolloverTimer = null;
+
+function dayPeekReduced() {
+  return DAY_PEEK_REDUCED.matches;
+}
+
+function dayKeyIndex(key) {
+  const [year, month, day] = key.split('-').map(Number);
+  return Math.round(Date.UTC(year, month - 1, day) / DAY_MS);
+}
+
+function dayKeyDiff(key) {
+  return dayKeyIndex(key) - dayKeyIndex(localDateValue(new Date()));
+}
+
+function parseDayKey(key) {
+  const [year, month, day] = key.split('-').map(Number);
+  return new Date(year, month - 1, day);
+}
+
+function dayPeekDates() {
+  const now = new Date();
+  const dates = [];
+  for (let offset = 0; offset < 7; offset += 1) {
+    dates.push(new Date(now.getFullYear(), now.getMonth(), now.getDate() + offset));
+  }
+  return dates;
+}
+
+function dayPeekCounts() {
+  const counts = new Map();
+  for (const reminder of incompleteReminders()) {
+    if (!reminder.due_at || isOverdue(reminder)) continue;
+    const key = localDateValue(new Date(reminder.due_at));
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+  return counts;
+}
+
+function dayPeekItems(key) {
+  return sortItems(
+    incompleteReminders().filter((reminder) => reminder.due_at
+      && !isOverdue(reminder)
+      && localDateValue(new Date(reminder.due_at)) === key),
+    effectiveSort('scheduled'),
+  );
+}
+
+function dayPeekRelativeLabel(key) {
+  const diff = dayKeyDiff(key);
+  if (diff === 0) return 'Today';
+  if (diff === 1) return 'Tomorrow';
+  return `In ${diff} days`;
+}
+
+function dayPeekDateLabel(date) {
+  const options = { weekday: 'long', month: 'short', day: 'numeric' };
+  if (date.getFullYear() !== new Date().getFullYear()) options.year = 'numeric';
+  return date.toLocaleDateString(undefined, options);
+}
+
+function dayPeekItemWord(count) {
+  return `${count} item${count === 1 ? '' : 's'}`;
+}
+
+function fillDayIndicator(node, count) {
+  node.replaceChildren();
+  node.classList.toggle('is-count', count > 4);
+  if (count <= 4) {
+    for (let index = 0; index < count; index += 1) node.append(el('span', { class: 'day-dot' }));
+    return;
+  }
+  node.textContent = String(count);
+}
+
+function dayPeekCellLabel(date, key, count) {
+  const today = dayKeyDiff(key) === 0;
+  const year = date.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined;
+  const dateText = date.toLocaleDateString(undefined, {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+    year,
+  });
+  const countText = count === 0 ? 'no items' : dayPeekItemWord(count);
+  return `${today ? 'Today, ' : ''}${dateText} — ${countText}`;
+}
+
+function resetDayPeek() {
+  dayPeekOpen = false;
+  dayPeekSelected = null;
+  dayPeekSignature = '';
+  dayPeekRenderedKey = null;
+  dayPeekCardAnimating = false;
+  const card = $('#day-card');
+  if (!card) return;
+  card.getAnimations().forEach((animation) => animation.cancel());
+  const scroll = $('#day-card-scroll');
+  if (scroll) scroll.getAnimations().forEach((animation) => animation.cancel());
+  card.hidden = true;
+  card.inert = true;
+  card.setAttribute('aria-hidden', 'true');
+  card.style.transition = 'none';
+  card.style.height = '';
+  card.classList.remove('has-overflow');
+}
+
+function updateDayStrip() {
+  const strip = $('#day-strip');
+  if (!strip) return;
+  const today = localDateValue(new Date());
+  if (today !== dayPeekTodayKey) {
+    dayPeekTodayKey = today;
+    if (dayPeekSelected && dayKeyDiff(dayPeekSelected) < 0) resetDayPeek();
+  }
+  const dates = dayPeekDates();
+  const signature = dates.map((date) => localDateValue(date)).join('|');
+  if (strip.dataset.days !== signature) {
+    strip.dataset.days = signature;
+    strip.replaceChildren();
+    for (const date of dates) {
+      const key = localDateValue(date);
+      const cell = el('button', {
+        type: 'button',
+        class: 'day-cell',
+        'data-day': key,
+        'aria-expanded': 'false',
+        'aria-controls': 'day-card',
+      }, [
+        el('span', { class: 'day-weekday', text: date.toLocaleDateString(undefined, { weekday: 'short' }) }),
+        el('span', { class: 'day-date', text: String(date.getDate()) }),
+        el('span', { class: 'day-indicator' }),
+      ]);
+      cell.addEventListener('click', () => toggleDayPeek(key));
+      strip.append(cell);
+    }
+  }
+  const counts = dayPeekCounts();
+  for (const cell of $$('#day-strip .day-cell')) {
+    const key = cell.dataset.day;
+    const count = counts.get(key) || 0;
+    const countText = String(count);
+    if (cell.dataset.count !== countText) {
+      cell.dataset.count = countText;
+      const indicator = cell.querySelector('.day-indicator');
+      if (indicator) fillDayIndicator(indicator, count);
+    }
+    const isToday = dayKeyDiff(key) === 0;
+    const isSelected = dayPeekOpen && key === dayPeekSelected;
+    cell.classList.toggle('is-today', isToday);
+    cell.classList.toggle('is-selected', isSelected);
+    cell.setAttribute('aria-expanded', isSelected ? 'true' : 'false');
+    const label = dayPeekCellLabel(parseDayKey(key), key, count);
+    cell.setAttribute('aria-label', isSelected ? `${label}, expanded` : label);
+  }
+}
+
+function homeScreenVisible() {
+  const sidebar = $('.sidebar');
+  return Boolean(sidebar && sidebar.getClientRects().length);
+}
+
+function dayCardTargetHeight(card) {
+  const height = card.style.height;
+  const transition = card.style.transition;
+  card.style.transition = 'none';
+  card.style.height = 'auto';
+  const target = card.getBoundingClientRect().height;
+  card.style.height = height;
+  card.style.transition = transition;
+  return target;
+}
+
+function syncDayCardOverflow() {
+  const card = $('#day-card');
+  const scroll = $('#day-card-scroll');
+  if (!card || !scroll || card.hidden) return;
+  const overflow = scroll.scrollHeight > scroll.clientHeight + 1;
+  const atEnd = scroll.scrollTop + scroll.clientHeight >= scroll.scrollHeight - 1;
+  card.classList.toggle('has-overflow', overflow && !atEnd);
+}
+
+function syncDayCardHeight(card, animate) {
+  if (!card || card.hidden || !homeScreenVisible()) return;
+  const current = card.getBoundingClientRect().height;
+  const target = dayCardTargetHeight(card);
+  if (!animate || dayPeekReduced() || Math.abs(target - current) < 0.5) {
+    dayPeekCardAnimating = false;
+    card.style.transition = 'none';
+    card.style.height = 'auto';
+    syncDayCardOverflow();
+    return;
+  }
+  dayPeekCardAnimating = true;
+  card.style.transition = 'none';
+  card.style.height = current + 'px';
+  void card.offsetHeight;
+  card.style.transition = `height ${DAY_PEEK_EXPAND_MS}ms ${DAY_PEEK_EASE}`;
+  card.style.height = target + 'px';
+}
+
+function fadeDayPeekContent(inbound) {
+  const scroll = $('#day-card-scroll');
+  if (!scroll) return;
+  scroll.getAnimations().forEach((animation) => animation.cancel());
+  if (dayPeekReduced()) return;
+  const frames = inbound ? [{ opacity: 0 }, { opacity: 1 }] : [{ opacity: 1 }, { opacity: 0 }];
+  scroll.animate(frames, {
+    duration: DAY_PEEK_FADE_MS,
+    easing: 'ease-out',
+    fill: inbound ? 'none' : 'forwards',
+  });
+}
+
+function reminderSignature(reminder) {
+  return [
+    reminder.id,
+    reminder.title,
+    reminder.notes || '',
+    reminder.due_at || '',
+    reminder.has_time ? 1 : 0,
+    reminder.completed ? 1 : 0,
+    reminder.urgent ? 1 : 0,
+    reminder.list_id,
+    reminder.sort_order,
+    reminder.repeat_rule || '',
+    reminder.snoozed_until || '',
+    reminder.time_model || '',
+    reminder.occurrence_edited ? 1 : 0,
+  ].join(':');
+}
+
+function renderDayPeek(options = {}) {
+  if (!dayPeekOpen || !dayPeekSelected) return;
+  const card = $('#day-card');
+  const scroll = $('#day-card-scroll');
+  if (!card || !scroll) return;
+  const key = dayPeekSelected;
+  const items = dayPeekItems(key);
+  const lists = state.lists.map((list) => `${list.id}:${list.name}:${list.color}`).join(',');
+  const signature = [key, String(dayKeyDiff(key)), lists, items.map(reminderSignature).join('~')].join('|');
+  const changed = signature !== dayPeekSignature;
+  if (!changed) {
+    if (!dayPeekCardAnimating) syncDayCardHeight(card, false);
+    return;
+  }
+  const keyChanged = key !== dayPeekRenderedKey;
+  dayPeekSignature = signature;
+  dayPeekRenderedKey = key;
+  const date = parseDayKey(key);
+  $('#day-card-title').textContent = dayPeekDateLabel(date);
+  $('#day-card-meta').textContent = `${dayPeekRelativeLabel(key)} · ${dayPeekItemWord(items.length)}`;
+  const list = el('div', { class: 'day-card-list' });
+  if (items.length) {
+    for (const reminder of items) {
+      list.append(reminderRow(reminder, { showList: true, dayPeek: true }));
+    }
+  } else {
+    list.append(el('p', { class: 'day-peek-empty', text: 'Nothing due' }));
+  }
+  const previousTop = keyChanged ? 0 : scroll.scrollTop;
+  scroll.replaceChildren(list);
+  if (homeScreenVisible()) {
+    scroll.scrollTop = previousTop;
+    syncDayCardOverflow();
+  }
+  if (options.crossfade) fadeDayPeekContent(true);
+  syncDayCardHeight(card, true);
+}
+
+function openDayPeek(key) {
+  const card = $('#day-card');
+  updateDayStrip();
+  const wasOpen = dayPeekOpen;
+  dayPeekSelected = key;
+  dayPeekOpen = true;
+  if (card) {
+    card.hidden = false;
+    card.inert = false;
+    card.setAttribute('aria-hidden', 'false');
+    if (!wasOpen) {
+      card.style.transition = 'none';
+      card.style.height = '0px';
+      card.classList.remove('has-overflow');
+    }
+  }
+  updateDayStrip();
+  renderDayPeek({ crossfade: true });
+}
+
+function closeDayPeek(instant = false) {
+  const card = $('#day-card');
+  const shouldAnimate = !instant && !dayPeekReduced() && homeScreenVisible();
+  dayPeekOpen = false;
+  dayPeekSelected = null;
+  dayPeekSignature = '';
+  updateDayStrip();
+  if (!card) return;
+  if (!shouldAnimate) {
+    resetDayPeek();
+    return;
+  }
+  card.inert = true;
+  fadeDayPeekContent(false);
+  dayPeekCardAnimating = true;
+  const current = card.getBoundingClientRect().height;
+  card.getAnimations().forEach((animation) => animation.cancel());
+  card.style.transition = 'none';
+  card.style.height = current + 'px';
+  void card.offsetHeight;
+  card.style.transition = `height ${DAY_PEEK_COLLAPSE_MS}ms cubic-bezier(0.4, 0, 0.2, 1)`;
+  card.style.height = '0px';
+  card.classList.remove('has-overflow');
+}
+
+function toggleDayPeek(key) {
+  if (dayPeekOpen && dayPeekSelected === key) {
+    closeDayPeek();
+    return;
+  }
+  openDayPeek(key);
+}
+
+function scheduleDayRollover() {
+  clearTimeout(dayRolloverTimer);
+  const now = new Date();
+  const next = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 1);
+  dayRolloverTimer = setTimeout(() => {
+    checkDayRollover();
+    scheduleDayRollover();
+  }, Math.max(1000, next.getTime() - now.getTime()));
+}
+
+function checkDayRollover() {
+  if (localDateValue(new Date()) === dayPeekTodayKey) return;
+  if (!state.authenticated) {
+    dayPeekTodayKey = localDateValue(new Date());
+    return;
+  }
+  render();
+}
+
+function initDayPeek() {
+  const card = $('#day-card');
+  const scroll = $('#day-card-scroll');
+  if (card) {
+    card.addEventListener('transitionend', (event) => {
+      if (event.target !== card || event.propertyName !== 'height') return;
+      dayPeekCardAnimating = false;
+      if (dayPeekOpen) {
+        card.style.height = 'auto';
+        syncDayCardOverflow();
+      } else {
+        resetDayPeek();
+      }
+    });
+  }
+  if (scroll) scroll.addEventListener('scroll', syncDayCardOverflow, { passive: true });
+  scheduleDayRollover();
+}
+
 function renderSidebar() {
+  updateDayStrip();
   const todayLimit = endOfToday();
   const incomplete = incompleteReminders();
   const todayCount = incomplete
@@ -1434,6 +1811,7 @@ function renderSidebar() {
   wrap.replaceChildren();
   if (!state.lists.length) {
     wrap.append(el('p', { class: 'section-empty', text: 'No lists yet' }));
+    renderDayPeek();
     return;
   }
 
@@ -1508,6 +1886,7 @@ function renderSidebar() {
   }
 
   $('#notifications-label').textContent = state.subscription ? 'Notifications On' : 'Notifications';
+  renderDayPeek();
 }
 
 function renderSearchResults(content) {
@@ -1965,13 +2344,22 @@ function reminderRow(reminder, options = {}) {
   // down the list reads dates first; the clock time stays quieter beside it.
   const body = el('div', { class: 'reminder-body' });
   if (due) {
-    const countdown = dueCountdown(due, reminder.completed);
-    body.append(el('div', {
-      class: 'reminder-due' + (due.overdue ? ' overdue' : ''),
-      html: ICON('calendar', 'ic') + `<span>${escapeHtml(due.day)}</span>`
-        + (due.time ? `<span class="due-time">${escapeHtml(due.time)}</span>` : '')
-        + (countdown ? `<span class="due-in">${escapeHtml(countdown)}</span>` : ''),
-    }));
+    if (options.dayPeek) {
+      if (due.time) {
+        body.append(el('div', {
+          class: 'reminder-due',
+          html: ICON('clock', 'ic') + `<span>${escapeHtml(due.time)}</span>`,
+        }));
+      }
+    } else {
+      const countdown = dueCountdown(due, reminder.completed);
+      body.append(el('div', {
+        class: 'reminder-due' + (due.overdue ? ' overdue' : ''),
+        html: ICON('calendar', 'ic') + `<span>${escapeHtml(due.day)}</span>`
+          + (due.time ? `<span class="due-time">${escapeHtml(due.time)}</span>` : '')
+          + (countdown ? `<span class="due-in">${escapeHtml(countdown)}</span>` : ''),
+      }));
+    }
   }
   body.append(
     el('div', { class: 'reminder-title', text: reminder.title }),
@@ -1989,68 +2377,70 @@ function reminderRow(reminder, options = {}) {
     }
   }
 
-  // Contextual actions live on the row so due items never require opening
-  // the editor. Snoozing only silences the alert; rescheduling moves the due
-  // date. They are separate groups so the labels say which is which.
-  const snoozeActions = [];
-  const rescheduleActions = [];
-  const recurring = rule.type !== 'none';
-  const overdue = isOverdue(reminder);
-  const dueToday = Boolean(due) && new Date(reminder.due_at) <= endOfToday();
-  const dueOnToday = Boolean(reminder.due_at)
-    && localDateValue(new Date(reminder.due_at)) === localDateValue(new Date());
-  if (!reminder.completed && reminder.due_at && !isSnoozed(reminder) && dueToday) {
-    const hourChips = [];
-    for (const hours of [1, 3, 6]) {
-      hourChips.push(el('button', {
+  if (!options.dayPeek) {
+    // Contextual actions live on the row so due items never require opening
+    // the editor. Snoozing only silences the alert; rescheduling moves the due
+    // date. They are separate groups so the labels say which is which.
+    const snoozeActions = [];
+    const rescheduleActions = [];
+    const recurring = rule.type !== 'none';
+    const overdue = isOverdue(reminder);
+    const dueToday = Boolean(due) && new Date(reminder.due_at) <= endOfToday();
+    const dueOnToday = Boolean(reminder.due_at)
+      && localDateValue(new Date(reminder.due_at)) === localDateValue(new Date());
+    if (!reminder.completed && reminder.due_at && !isSnoozed(reminder) && dueToday) {
+      const hourChips = [];
+      for (const hours of [1, 3, 6]) {
+        hourChips.push(el('button', {
+          type: 'button',
+          class: 'mini-btn',
+          text: `${hours} hour${hours === 1 ? '' : 's'}`,
+          'aria-label': `Snooze ${reminder.title} until ${hours} hour${hours === 1 ? '' : 's'} from now`,
+          onclick: (event) => { event.stopPropagation(); snoozeRow(reminder, hours); },
+        }));
+      }
+      snoozeActions.push(el('span', { class: 'snooze-hours' }, hourChips));
+      if (recurring) {
+        snoozeActions.push(el('button', {
+          type: 'button',
+          class: 'mini-btn',
+          text: 'Next occurrence',
+          title: 'Snooze until the next scheduled occurrence',
+          'aria-label': `Snooze ${reminder.title} until the next occurrence`,
+          onclick: (event) => { event.stopPropagation(); skipToNext(reminder); },
+        }));
+      }
+    }
+    // "Today" would be a no-op on an item already due today (overdue only by
+    // time), so only offer it when the calendar date is actually earlier.
+    if (!reminder.completed && options.reschedule && overdue && !dueOnToday) {
+      rescheduleActions.push(el('button', {
         type: 'button',
         class: 'mini-btn',
-        text: `${hours} hour${hours === 1 ? '' : 's'}`,
-        'aria-label': `Snooze ${reminder.title} until ${hours} hour${hours === 1 ? '' : 's'} from now`,
-        onclick: (event) => { event.stopPropagation(); snoozeRow(reminder, hours); },
+        text: 'Today',
+        'aria-label': `Reschedule ${reminder.title} to today`,
+        onclick: (event) => { event.stopPropagation(); rescheduleRow(reminder, 'today'); },
       }));
     }
-    snoozeActions.push(el('span', { class: 'snooze-hours' }, hourChips));
-    if (recurring) {
-      snoozeActions.push(el('button', {
+    if (!reminder.completed && reminder.due_at && dueToday && (!recurring || (options.reschedule && overdue))) {
+      rescheduleActions.push(el('button', {
         type: 'button',
         class: 'mini-btn',
-        text: 'Next occurrence',
-        title: 'Snooze until the next scheduled occurrence',
-        'aria-label': `Snooze ${reminder.title} until the next occurrence`,
-        onclick: (event) => { event.stopPropagation(); skipToNext(reminder); },
+        text: 'Tomorrow',
+        'aria-label': `Reschedule ${reminder.title} to tomorrow`,
+        onclick: (event) => { event.stopPropagation(); rescheduleRow(reminder, 'tomorrow'); },
       }));
     }
+    const actionGroups = [];
+    for (const [label, actions] of [['Snooze', snoozeActions], ['Reschedule', rescheduleActions]]) {
+      if (!actions.length) continue;
+      actionGroups.push(el('div', { class: 'row-actions', 'aria-label': label }, [
+        el('span', { class: 'row-actions-label', text: label }),
+        ...actions,
+      ]));
+    }
+    if (actionGroups.length) body.append(el('div', { class: 'row-action-stack' }, actionGroups));
   }
-  // "Today" would be a no-op on an item already due today (overdue only by
-  // time), so only offer it when the calendar date is actually earlier.
-  if (!reminder.completed && options.reschedule && overdue && !dueOnToday) {
-    rescheduleActions.push(el('button', {
-      type: 'button',
-      class: 'mini-btn',
-      text: 'Today',
-      'aria-label': `Reschedule ${reminder.title} to today`,
-      onclick: (event) => { event.stopPropagation(); rescheduleRow(reminder, 'today'); },
-    }));
-  }
-  if (!reminder.completed && reminder.due_at && dueToday && (!recurring || (options.reschedule && overdue))) {
-    rescheduleActions.push(el('button', {
-      type: 'button',
-      class: 'mini-btn',
-      text: 'Tomorrow',
-      'aria-label': `Reschedule ${reminder.title} to tomorrow`,
-      onclick: (event) => { event.stopPropagation(); rescheduleRow(reminder, 'tomorrow'); },
-    }));
-  }
-  const actionGroups = [];
-  for (const [label, actions] of [['Snooze', snoozeActions], ['Reschedule', rescheduleActions]]) {
-    if (!actions.length) continue;
-    actionGroups.push(el('div', { class: 'row-actions', 'aria-label': label }, [
-      el('span', { class: 'row-actions-label', text: label }),
-      ...actions,
-    ]));
-  }
-  if (actionGroups.length) body.append(el('div', { class: 'row-action-stack' }, actionGroups));
 
   const check = el('button', {
     class: 'check',
@@ -4349,6 +4739,7 @@ document.addEventListener('keydown', (event) => {
 
 async function refreshOnResume() {
   if (!state.authenticated) return;
+  checkDayRollover();
   try {
     await loadState();
     render();
@@ -4365,4 +4756,5 @@ document.addEventListener('visibilitychange', () => {
 applyDensity();
 syncMenuButtons();
 initPullToRefresh();
+initDayPeek();
 boot();
