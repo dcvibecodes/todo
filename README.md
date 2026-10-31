@@ -2,6 +2,11 @@
 
 A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due dates, urgent flags, recurring reminders, natural-language quick add, smart lists, floating time zones, a token API for external agents, completed history, dark mode, and web push. No frontend framework and no build step.
 
+## What's New in v2.12.1
+
+- **List back-slide matches the entry** - the mobile pop transition now uses a gentler ease-in-out over the same 260ms instead of the entry's fast-start ease-out, so tapping Back no longer feels like a snap. Push is unchanged; a finger-driven browser back gesture still follows the finger.
+- Service worker cache bumped to `todo-v2.12.1`.
+
 ## What's New in v2.12.0
 
 - **Long-note collapse keeps your place** - after expanding a very long note and scrolling through it, collapsing now brings that same item back into view instead of leaving you on the later rows that were underneath. Expanded notes also keep their paragraph breaks instead of joining into one block.

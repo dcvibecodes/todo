@@ -1037,7 +1037,12 @@ function screenSnapshot(selector, zIndex) {
 
 function animateScreenTransition(push, snapshot) {
   const duration = 260;
-  const easing = 'cubic-bezier(0.22, 1, 0.36, 1)';
+  // A fast-start ease-out reads as a smooth push into a new screen, but makes
+  // the same duration feel like a snap when leaving. Use a gentler ease-in-out
+  // for the pop so Back matches the entry's sense of motion.
+  const easing = push
+    ? 'cubic-bezier(0.22, 1, 0.36, 1)'
+    : 'cubic-bezier(0.4, 0, 0.2, 1)';
   document.body.classList.add('nav-animating');
   activeNavSnapshot = snapshot;
   let animation;
