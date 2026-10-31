@@ -2717,26 +2717,6 @@ function noteForId(id) {
   return fallback;
 }
 
-function syncNoteToggleMeta(row, expandable) {
-  const wrap = row.querySelector('.note-wrap');
-  if (!wrap) return;
-  if (!expandable) {
-    wrap.removeAttribute('tabindex');
-    wrap.removeAttribute('role');
-    wrap.removeAttribute('aria-expanded');
-    wrap.removeAttribute('aria-label');
-    wrap.removeAttribute('title');
-    return;
-  }
-  const expanded = expandedNoteId === row.dataset.reminderId;
-  const title = row.querySelector('.reminder-title')?.textContent || 'item';
-  wrap.tabIndex = 0;
-  wrap.setAttribute('role', 'button');
-  wrap.setAttribute('aria-expanded', expanded ? 'true' : 'false');
-  wrap.setAttribute('aria-label', `${expanded ? 'Collapse' : 'Show full'} note for ${title}`);
-  wrap.title = expanded ? 'Collapse note' : 'Show full note';
-}
-
 function ensureNoteRowVisible(row) {
   if (!row) return;
   const scroller = row.closest('#content') || row.closest('.sidebar');
@@ -2786,10 +2766,7 @@ function collapseExpandedNote() {
   if (!expandedNoteId) return;
   const found = noteForId(expandedNoteId);
   expandedNoteId = null;
-  if (found) {
-    animateNote(found.note, false);
-    syncNoteToggleMeta(found.row, found.row.classList.contains('has-long-note'));
-  }
+  if (found) animateNote(found.note, false);
 }
 
 function toggleNoteForRow(row, note) {
@@ -2802,7 +2779,6 @@ function toggleNoteForRow(row, note) {
     expandedNoteId = id;
     animateNote(note, true);
   }
-  syncNoteToggleMeta(row, row.classList.contains('has-long-note'));
 }
 
 function syncNoteExpanders() {
@@ -2819,7 +2795,6 @@ function syncNoteExpanders() {
     }
     const expandable = expanded || note.scrollHeight > note.clientHeight + 1;
     row.classList.toggle('has-long-note', expandable);
-    syncNoteToggleMeta(row, expandable);
     if (expandable && expanded) expandedSeen = true;
   }
   if (expandedNoteId && !expandedSeen) expandedNoteId = null;
@@ -2908,17 +2883,7 @@ function reminderRow(reminder, options = {}) {
         class: 'reminder-notes' + (expanded ? ' is-expanded' : ''),
         text: parts.text,
       });
-      body.append(el('div', {
-        class: 'note-wrap',
-        onkeydown: (event) => {
-          if (event.repeat) return;
-          if (event.key !== 'Enter' && event.key !== ' ') return;
-          const row = note.closest('.reminder');
-          if (!row || !row.classList.contains('has-long-note')) return;
-          event.preventDefault();
-          toggleNoteForRow(row, note);
-        },
-      }, [note]));
+      body.append(el('div', { class: 'note-wrap' }, [note]));
     }
     if (parts.links.length) {
       const links = el('div', { class: 'reminder-links' });

@@ -2,6 +2,12 @@
 
 A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due dates, urgent flags, recurring reminders, natural-language quick add, smart lists, floating time zones, a token API for external agents, completed history, dark mode, and web push. No frontend framework and no build step.
 
+## What's New in v2.13.6
+
+- **Long notes are click/tap only** - removed the keyboard focus and Enter/Space toggle added in v2.13.5. The ellipsis remains the expand indicator, and the card still expands on tap/click.
+- **Sort bar stays on one row** - the phone layout no longer wraps Completed onto a second line. Controls tighten below 380px, where the **Sort** and **Order** labels hide while their selected values remain; spacing tightens again below 340px.
+- Service worker cache bumped to `todo-v2.13.6`.
+
 ## What's New in v2.13.5
 
 - **Long notes lose the chevron** - the two-line ellipsis is now the only indicator that a note can expand. Tapping or clicking the card still expands and collapses it, and long notes stay keyboard-accessible: tab to the note, then press Enter or Space. Short notes are not focusable. The note text now uses the full card width.
@@ -44,13 +50,13 @@ A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due
 - **Rapid deletes work through the toast** - the "Item deleted" toast is now click-through (only an action button is tappable) and dismisses as soon as you start another row action, so confirming item 2 immediately after item 1 is not swallowed.
 - **Mobile list push/pop** - opening a list slides it in from the right over Home; Back (button or browser Back) slides it out to the right. Desktop keeps its instant navigation. Since v2.13.1 browser/hardware Back uses the browser’s own transition instead of a second custom pop.
 - **Completed retention** - Settings → Completed items can keep completed items for 1 month, 3 months, 6 months, 1 year, or indefinitely (default). Shortening the window permanently deletes older completed one-off items and asks first; repeating-series history is kept. State, search, list counts, the Completed view and its empty copy all follow the chosen window.
-- **Show Completed is a switch** - the sort bar uses a proper toggle switch. Showing completed preserves your scroll position; hiding it collapses the section without jumping to the top, landing near the end of the active items.
+- **Show Completed is a switch** - the sort bar uses a proper toggle switch and stays on one row on phones, including when it shows a count. Showing completed preserves your scroll position; hiding it collapses the section without jumping to the top, landing near the end of the active items.
 - **Bottom-sheet transitions on phones** - New Item, Edit Item, Settings, the list sheet and other sheets slide up from the bottom and slide back down on Save/Cancel/backdrop/Escape. Desktop keeps its centered modal.
 - Service worker cache bumped to `todo-v2.12.0`.
 
 ## What's New in v2.11.3
 
-- **Long notes open with a single tap** - removed the persistent selected row and its gray fill/accent bar. A tap or click on a long-note card now expands its note immediately; another tap collapses it. Tapping a different long-note card collapses the previous note and opens the new one. The existing hover highlight on desktop is the only row highlight; v2.13.3 removed the touch press highlight. Since v2.13.5 the chevron is gone; the ellipsis is the expand indicator, and keyboard users can focus the note and press Enter or Space. Short/no-note cards stay inert, and scrolling/swiping never expands.
+- **Long notes open with a single tap** - removed the persistent selected row and its gray fill/accent bar. A tap or click on a long-note card now expands its note immediately; another tap collapses it. Tapping a different long-note card collapses the previous note and opens the new one. The existing hover highlight on desktop is the only row highlight; v2.13.3 removed the touch press highlight. Since v2.13.5 the chevron is gone and the ellipsis is the expand indicator. Since v2.13.6 expansion is click/tap only, with no keyboard focus target. Short/no-note cards stay inert, and scrolling/swiping never expands.
 - Service worker cache bumped to `todo-v2.11.3`.
 
 ## What's New in v2.11.2

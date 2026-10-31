@@ -1456,12 +1456,6 @@ body.flipping .reminder-group { overflow: visible; }
   min-width: 0;
 }
 
-.note-wrap:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-  border-radius: 4px;
-}
-
 .reminder-links {
   display: flex;
   flex-wrap: wrap;
@@ -2734,12 +2728,22 @@ body.sheet-open .sidebar {
 
   .sort-bar {
     margin: 12px 18px 0;
+    flex-wrap: nowrap;
+    gap: 4px;
+  }
+
+  .sort-control {
+    gap: 2px;
+    min-width: 0;
   }
 
   .sort-control select {
     max-width: 130px;
-    font-size: 0.75rem;
+    min-width: 0;
+    font-size: 0.71875rem;
   }
+
+  .sort-toggle { gap: 4px; }
 
   .main-search .search-ic { left: 10px; width: 16px; height: 16px; }
 
@@ -2834,6 +2838,16 @@ body.sheet-open .sidebar {
   .settings-group input { height: var(--control-height-touch); }
   #token-generate, #token-copy { min-height: var(--control-height-touch); }
   .sidebar-head, .main-head { min-height: var(--icon-size-touch); }
+}
+
+@media (max-width: 380px) {
+  .sort-bar .sort-control:not(.sort-toggle) > span { display: none; }
+}
+
+@media (max-width: 340px) {
+  .sort-bar { gap: 2px; }
+  .sort-toggle { gap: 2px; }
+  .sort-toggle > span { font-size: 0.6875rem; }
 }
 
 @media (max-width: 899px) and (prefers-reduced-motion: reduce) {
