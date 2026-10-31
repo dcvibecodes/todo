@@ -2,6 +2,11 @@
 
 A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due dates, urgent flags, recurring reminders, natural-language quick add, smart lists, floating time zones, a token API for external agents, completed history, dark mode, and web push. No frontend framework and no build step.
 
+## What's New in v2.13.8
+
+- **Completed filter highlight is quieter** - the active **✓ N** pill now uses the theme’s subtle grey fill and normal text colour in both light and dark instead of a black/white accent fill. Hover darkens the grey slightly; the FAB remains the only bright accent element.
+- Service worker cache bumped to `todo-v2.13.8`.
+
 ## What's New in v2.13.7
 
 - **Completed is now a compact check + count** - the sort bar shows **✓ N** at the far right, where N is the number of completed items in that list. Tap it to show or hide them; the pill fills with the accent colour while active and is dimmed when the list has none. Sort and Order labels stay visible at every width, and the row remains a single line down to 320px.
@@ -55,7 +60,7 @@ A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due
 - **Rapid deletes work through the toast** - the "Item deleted" toast is now click-through (only an action button is tappable) and dismisses as soon as you start another row action, so confirming item 2 immediately after item 1 is not swallowed.
 - **Mobile list push/pop** - opening a list slides it in from the right over Home; Back (button or browser Back) slides it out to the right. Desktop keeps its instant navigation. Since v2.13.1 browser/hardware Back uses the browser’s own transition instead of a second custom pop.
 - **Completed retention** - Settings → Completed items can keep completed items for 1 month, 3 months, 6 months, 1 year, or indefinitely (default). Shortening the window permanently deletes older completed one-off items and asks first; repeating-series history is kept. State, search, list counts, the Completed view and its empty copy all follow the chosen window.
-- **Show Completed is a compact filter** - the sort bar shows **✓ N** at the far right, where N is the completed count. Tapping it shows or hides completed items; it is accent-filled while active and dimmed when there are none. It stays on one row with Sort and Order at every phone width. Showing completed preserves your scroll position; hiding it collapses the section without jumping to the top, landing near the end of the active items.
+- **Show Completed is a compact filter** - the sort bar shows **✓ N** at the far right, where N is the completed count. Tapping it shows or hides completed items; it uses a subtle grey fill while active and is dimmed when there are none. It stays on one row with Sort and Order at every phone width. Showing completed preserves your scroll position; hiding it collapses the section without jumping to the top, landing near the end of the active items.
 - **Bottom-sheet transitions on phones** - New Item, Edit Item, Settings, the list sheet and other sheets slide up from the bottom and slide back down on Save/Cancel/backdrop/Escape. Desktop keeps its centered modal.
 - Service worker cache bumped to `todo-v2.12.0`.
 

@@ -991,8 +991,8 @@ body.list-dragging .list-grip { cursor: grabbing; }
 .sort-completed-filter .ic { width: 13px; height: 13px; }
 
 .sort-completed-filter[aria-pressed="true"] {
-  background: var(--accent);
-  color: var(--accent-contrast);
+  background: var(--fill);
+  color: var(--text);
 }
 
 .sort-completed-filter:disabled {
@@ -1003,8 +1003,8 @@ body.list-dragging .list-grip { cursor: grabbing; }
 @media (hover: hover) {
   .sort-completed-filter:hover { background: var(--fill); color: var(--text); }
   .sort-completed-filter[aria-pressed="true"]:hover {
-    background: var(--accent);
-    color: var(--accent-contrast);
+    background: color-mix(in srgb, var(--text) 10%, transparent);
+    color: var(--text);
   }
 }
 
