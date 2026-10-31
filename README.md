@@ -2,6 +2,11 @@
 
 A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due dates, urgent flags, recurring reminders, natural-language quick add, smart lists, floating time zones, a token API for external agents, completed history, dark mode, and web push. No frontend framework and no build step.
 
+## What's New in v2.10.7
+
+- **Edit is an explicit button** - tapping or clicking a reminder row no longer opens it, so an accidental tap is harmless. Every row now has a pencil button on the right; only that button opens the editor. On desktop the pencil sits left of the hover delete ×; on mobile the × is hidden and swipe-left still reveals Delete. Checkboxes, Snooze/Reschedule, links and swipe behaviour are unchanged.
+- Service worker cache bumped to `todo-v2.10.7`.
+
 ## What's New in v2.10.6
 
 - **Expanded days show every item** - the day card no longer caps at four rows or scrolls inside itself. Opening a day renders all of its reminders and the Home page scrolls normally, which removes the nested-scroll conflict on iPhone. The drawer frame, completion, row actions and editor behaviour are unchanged; an empty day still says "Nothing due".

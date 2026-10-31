@@ -2482,6 +2482,22 @@ function reminderRow(reminder, options = {}) {
     toggleCompleted(reminder, event.currentTarget.closest('.reminder'));
   });
 
+  // Editing is explicit: the pencil is the only row control that opens the
+  // editor. A tap anywhere else on the row is inert (or closes a parked swipe).
+  const edit = el('button', {
+    type: 'button',
+    class: 'row-edit',
+    title: 'Edit item',
+    'aria-label': `Edit ${reminder.title}`,
+    html: ICON('pencil', 'ic'),
+    onclick: (event) => {
+      event.stopPropagation();
+      const row = event.currentTarget.closest('.reminder');
+      if (row && row.classList.contains('swipe-open')) resetSwipe(row);
+      openEditor(reminder.id);
+    },
+  });
+
   // Web delete affordance: the × appears on hover (mouse only); first click
   // turns it into an inline Confirm?, second click deletes. No browser popup.
   const remove = el('button', {
@@ -2494,6 +2510,8 @@ function reminderRow(reminder, options = {}) {
       handleRowDelete(reminder, event.currentTarget);
     },
   });
+
+  const tools = el('div', { class: 'row-tools' }, [edit, remove]);
 
   const deleteAction = el('button', {
     type: 'button',
@@ -2509,7 +2527,7 @@ function reminderRow(reminder, options = {}) {
     el('span', { html: ICON('x', 'ic') }),
   ]);
 
-  const content = el('div', { class: 'swipe-content' }, [check, body, remove]);
+  const content = el('div', { class: 'swipe-content' }, [check, body, tools]);
   const background = el('div', { class: 'swipe-bg', 'aria-hidden': 'true' }, [deleteAction]);
 
   // A title-only row (no meta, notes, or links) has a body shorter than the
@@ -2523,15 +2541,11 @@ function reminderRow(reminder, options = {}) {
     style: { '--c': color },
     'data-reminder-id': reminder.id,
     onclick: (event) => {
-      // A swipe that just ended must not open the editor.
+      // A swipe that just ended must not immediately close the reveal.
       if (Date.now() - lastSwipeEnd < 400) return;
       const row = event.currentTarget;
-      // Tapping a parked row closes the reveal instead of opening the editor.
-      if (row.classList.contains('swipe-open')) {
-        resetSwipe(row);
-        return;
-      }
-      openEditor(reminder.id);
+      // Tapping a parked row closes the reveal; it never opens the editor.
+      if (row.classList.contains('swipe-open')) resetSwipe(row);
     },
   }, [background, content]);
 }
