@@ -1089,7 +1089,7 @@ body.list-dragging .list-grip { cursor: grabbing; }
 .check .ic {
   width: 13px;
   height: 13px;
-  opacity: 0.24;
+  opacity: 0;
   transition: opacity 0.15s;
 }
 
@@ -1099,9 +1099,6 @@ body.list-dragging .list-grip { cursor: grabbing; }
   background: color-mix(in srgb, var(--c) 10%, transparent);
   color: var(--c);
 }
-
-.reminder:hover .check .ic,
-.check:focus-visible .ic { opacity: 0.55; }
 
 .row-tools {
   display: flex;
