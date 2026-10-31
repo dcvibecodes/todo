@@ -2,6 +2,11 @@
 
 A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due dates, urgent flags, recurring reminders, natural-language quick add, smart lists, floating time zones, a token API for external agents, completed history, dark mode, and web push. No frontend framework and no build step.
 
+## What's New in v2.11.3
+
+- **Long notes open with a single tap** - removed the persistent selected row and its gray fill/accent bar. A tap or click on a long-note card now expands its note immediately; another tap collapses it. Tapping a different long-note card collapses the previous note and opens the new one. The existing hover highlight on desktop and press highlight on touch are the only row highlights. The chevron still toggles directly, short/no-note cards stay inert, and scrolling/swiping never expands.
+- Service worker cache bumped to `todo-v2.11.3`.
+
 ## What's New in v2.11.2
 
 - **Tap the card to expand a long note** - the See more / See less buttons are gone. A long note keeps its two-line preview and gains a tiny chevron. The first tap on that card selects and highlights it without expanding; a second tap expands or collapses the note. Tapping a different long-note card moves the highlight there and closes the previous note. The chevron is a direct shortcut: one tap expands/collapses it immediately, no selection step.

@@ -988,7 +988,6 @@ function route() {
   const view = parseRoute();
   const previousView = state.view;
   if (view !== state.view) {
-    selectedNoteId = null;
     expandedNoteId = null;
   }
   // Search is global now, so navigating to a list or smart view leaves the
@@ -2565,7 +2564,6 @@ async function rescheduleRow(reminder, date) {
   }
 }
 
-let selectedNoteId = null;
 let expandedNoteId = null;
 let lastNoteScrollAt = 0;
 
@@ -2581,11 +2579,10 @@ function noteForId(id) {
   return fallback;
 }
 
-function setNoteMeta(row, note) {
+function setNoteMeta(row) {
   const id = row.dataset.reminderId;
   const expandable = row.classList.contains('has-long-note');
   const expanded = expandedNoteId === id;
-  row.classList.toggle('note-selected', expandable && selectedNoteId === id);
   const chevron = row.querySelector('.note-chevron');
   if (!chevron) return;
   const title = row.querySelector('.reminder-title')?.textContent || 'item';
@@ -2595,10 +2592,9 @@ function setNoteMeta(row, note) {
   chevron.title = expanded ? 'Collapse note' : 'Show full note';
 }
 
-function syncNoteSelection() {
+function syncNoteChevrons() {
   for (const row of $$('.reminder')) {
-    const note = row.querySelector('.reminder-notes');
-    if (note) setNoteMeta(row, note);
+    if (row.querySelector('.reminder-notes')) setNoteMeta(row);
   }
 }
 
@@ -2631,7 +2627,7 @@ function collapseExpandedNote() {
   expandedNoteId = null;
 }
 
-function toggleSelectedNote(row, note) {
+function toggleNoteForRow(row, note) {
   const id = row.dataset.reminderId;
   if (expandedNoteId === id) {
     expandedNoteId = null;
@@ -2641,35 +2637,15 @@ function toggleSelectedNote(row, note) {
     expandedNoteId = id;
     animateNote(note, true);
   }
-  syncNoteSelection();
-}
-
-function selectNoteRow(row) {
-  const id = row.dataset.reminderId;
-  if (selectedNoteId === id) return false;
-  if (expandedNoteId) collapseExpandedNote();
-  selectedNoteId = id;
-  syncNoteSelection();
-  return true;
+  syncNoteChevrons();
 }
 
 function handleNoteChevron(row, note) {
-  const id = row.dataset.reminderId;
   if (row.classList.contains('swipe-open')) resetSwipe(row);
-  if (expandedNoteId === id) {
-    expandedNoteId = null;
-    animateNote(note, false);
-  } else {
-    if (expandedNoteId) collapseExpandedNote();
-    expandedNoteId = id;
-    animateNote(note, true);
-  }
-  selectedNoteId = id;
-  syncNoteSelection();
+  toggleNoteForRow(row, note);
 }
 
 function syncNoteExpanders() {
-  let selectedSeen = false;
   let expandedSeen = false;
   for (const note of $$('.reminder-notes')) {
     const row = note.closest('.reminder');
@@ -2683,12 +2659,10 @@ function syncNoteExpanders() {
     }
     const expandable = expanded || note.scrollHeight > note.clientHeight + 1;
     row.classList.toggle('has-long-note', expandable);
-    if (expandable && selectedNoteId === id) selectedSeen = true;
     if (expandable && expanded) expandedSeen = true;
   }
-  if (selectedNoteId && !selectedSeen) selectedNoteId = null;
   if (expandedNoteId && !expandedSeen) expandedNoteId = null;
-  syncNoteSelection();
+  syncNoteChevrons();
 }
 
 function reminderRow(reminder, options = {}) {
@@ -2943,8 +2917,7 @@ function reminderRow(reminder, options = {}) {
       if (!row.classList.contains('has-long-note')) return;
       const note = row.querySelector('.reminder-notes');
       if (!note) return;
-      if (selectedNoteId !== row.dataset.reminderId) selectNoteRow(row);
-      else toggleSelectedNote(row, note);
+      toggleNoteForRow(row, note);
     },
   }, [background, content]);
 }
@@ -5089,7 +5062,6 @@ function setSearch(value, source) {
   const wasSearching = Boolean(state.search);
   state.search = value.trim();
   if (Boolean(state.search) !== wasSearching) {
-    selectedNoteId = null;
     expandedNoteId = null;
   }
   if (source !== 'sidebar') $('#search').value = value;

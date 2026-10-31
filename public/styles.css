@@ -2915,10 +2915,3 @@ body.sheet-open .sidebar {
   .e-more { transition: none; }
   .e-more-toggle .ic { transition: none; }
 }
-
-/* Keep the selected long-note row tinted on touch, after the hover/active
-   overrides above. */
-.reminder.note-selected .swipe-content {
-  background: color-mix(in srgb, var(--accent) 6%, var(--surface));
-  box-shadow: inset 2px 0 0 var(--accent);
-}
