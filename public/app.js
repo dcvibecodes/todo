@@ -4744,9 +4744,9 @@ const darkQuery = window.matchMedia('(prefers-color-scheme: dark)');
 let themePreference = localStorage.getItem(THEME_PREF_KEY) || 'auto';
 
 function applyTheme(pref, persist = true) {
+  themePreference = ['auto', 'light', 'dark'].includes(pref) ? pref : 'auto';
+  if (persist) localStorage.setItem(THEME_PREF_KEY, themePreference);
   const update = () => {
-    themePreference = ['auto', 'light', 'dark'].includes(pref) ? pref : 'auto';
-    if (persist) localStorage.setItem(THEME_PREF_KEY, themePreference);
     const dark = themePreference === 'dark' || (themePreference === 'auto' && darkQuery.matches);
     document.documentElement.dataset.theme = dark ? 'dark' : 'light';
     const meta = document.querySelector('meta[name="theme-color"]');

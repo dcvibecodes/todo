@@ -2,6 +2,11 @@
 
 A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due dates, urgent flags, recurring reminders, natural-language quick add, smart lists, floating time zones, a token API for external agents, completed history, dark mode, and web push. No frontend framework and no build step.
 
+## What's New in v2.13.9
+
+- **Theme changes enable Save on the first click** - the theme preference and localStorage now update immediately, while only the visual View Transition is deferred. Previously the dirty check ran before the preference changed, so the first Light/Dark/Auto click could leave Save disabled until a second change.
+- Service worker cache bumped to `todo-v2.13.9`.
+
 ## What's New in v2.13.8
 
 - **Completed filter highlight is quieter** - the active **✓ N** pill now uses the theme’s subtle grey fill and normal text colour in both light and dark instead of a black/white accent fill. Hover darkens the grey slightly; the FAB remains the only bright accent element.
