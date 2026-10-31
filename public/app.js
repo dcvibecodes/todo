@@ -948,7 +948,10 @@ function initPullToRefresh() {
 /* ---------------- Routing ---------------- */
 
 function go(view) {
-  location.hash = '#/' + view;
+  const hash = '#/' + view;
+  programmaticHash = hash;
+  programmaticUntil = performance.now() + 500;
+  location.hash = hash;
 }
 
 function clearSearch() {
@@ -997,6 +1000,10 @@ function setShowCompleted(listId, value) {
 
 const NAV_MOBILE = window.matchMedia('(max-width: 899px)');
 let activeNavSnapshot = null;
+let historyBackHash = null;
+let lastRenderedHash = location.hash;
+let programmaticHash = null;
+let programmaticUntil = 0;
 
 function finishNavAnimation() {
   if (!activeNavSnapshot) return;
@@ -1066,13 +1073,15 @@ function animateScreenTransition(push, snapshot) {
 
 function route() {
   finishNavAnimation();
+  const fromHistoryBack = historyBackHash !== null && historyBackHash === location.hash;
+  historyBackHash = null;
   const view = parseRoute();
   const previousView = state.view;
   const previousScreen = document.body.dataset.screen;
   const slidePush = previousView === 'home' && previousScreen === 'home'
     && view !== 'home' && !state.search;
   const slidePop = previousView !== 'home' && previousScreen === 'detail'
-    && view === 'home' && !state.search;
+    && view === 'home' && !state.search && !fromHistoryBack;
   const canSlide = (slidePush || slidePop) && NAV_MOBILE.matches
     && !MOTION_REDUCED.matches
     && !$$('.sheet').some((sheet) => !sheet.hidden);
@@ -1129,6 +1138,7 @@ function route() {
       target.value = value;
     }
   }
+  lastRenderedHash = location.hash;
 }
 
 /* ---------------- Render ---------------- */
@@ -5459,13 +5469,25 @@ document.addEventListener('click', (event) => {
 // once every sheet marker is popped — leave app-initiated sheets untouched
 // (already closed). History-anchored sheets, see openSheet.
 window.addEventListener('popstate', (event) => {
+  const fromProgrammatic = programmaticHash !== null
+    && location.hash === programmaticHash
+    && performance.now() < programmaticUntil;
+  programmaticHash = null;
+  programmaticUntil = 0;
   if (sheetPopGuard) {
     sheetPopGuard = false;
     return;
   }
   const depth = event.state && event.state.todoSheet ? event.state.todoSheet : 0;
   if (!depth) {
-    while (closeTopSheetInPlace()) { /* back past all sheet markers */ }
+    let closed = false;
+    while (closeTopSheetInPlace()) closed = true;
+    const hashChanged = location.hash !== lastRenderedHash;
+    if (!closed && !fromProgrammatic && hashChanged) {
+      historyBackHash = location.hash;
+    } else if (!closed && !fromProgrammatic && activeNavSnapshot) {
+      finishNavAnimation();
+    }
     return;
   }
   while ($$('.sheet').filter((sheet) => !sheet.hidden).length > depth) {
