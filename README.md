@@ -2,6 +2,11 @@
 
 A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due dates, urgent flags, recurring reminders, natural-language quick add, smart lists, floating time zones, a token API for external agents, completed history, dark mode, and web push. No frontend framework and no build step.
 
+## What's New in v2.13.11
+
+- **Reverted the custom sort selects** - restored the previous native Sort and Order selects, removing the explicit height, disabled native appearance, and custom chevron added in v2.13.10. The nearby labels and values return to the previous look.
+- Service worker cache bumped to `todo-v2.13.11`.
+
 ## What's New in v2.13.10
 
 - **Sort dropdown text is centred on iPhone** - the Sort and Order selects now use an explicit control height and line-height with native appearance disabled, plus a custom chevron. iOS no longer seats the selected text low inside the 44px control; labels and values share the same centre line. The sort row still fits on one line with all labels visible.
