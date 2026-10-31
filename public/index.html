@@ -437,6 +437,17 @@
         <input id="l-name" class="e-title" placeholder="List Name" maxlength="120" required autocomplete="off">
         <p id="l-name-error" class="form-msg field-error" hidden></p>
         <div class="swatches" id="swatches"></div>
+        <label class="settings-row list-retention-row" for="l-retention">
+          <span>Completed retention</span>
+          <select id="l-retention">
+            <option value="forever">Indefinitely</option>
+            <option value="1m">1 month</option>
+            <option value="3m">3 months</option>
+            <option value="6m">6 months</option>
+            <option value="12m">1 year</option>
+          </select>
+        </label>
+        <p class="notify-hint list-retention-hint">Applies to this list's completed items.</p>
         <button type="button" id="l-delete" class="danger-btn" hidden>Delete List</button>
       </div>
     </form>
@@ -516,20 +527,6 @@
             </select>
           </label>
           <p class="notify-hint">Bar and ring compare each list's open items with its completed ones — all time, or the last 30 days. Previews instantly — Save to sync these choices to your other devices, Cancel to undo.</p>
-        </div>
-        <div class="settings-group">
-          <h3>Completed items</h3>
-          <label class="settings-row" for="set-completed-retention">
-            <span>Keep completed items</span>
-            <select id="set-completed-retention">
-              <option value="1m">1 month</option>
-              <option value="3m">3 months</option>
-              <option value="6m">6 months</option>
-              <option value="12m">1 year</option>
-              <option value="forever">Indefinitely</option>
-            </select>
-          </label>
-          <p class="notify-hint">Older completed items are permanently deleted. Repeating-series history is kept.</p>
         </div>
         <div class="settings-group">
           <h3>New items</h3>

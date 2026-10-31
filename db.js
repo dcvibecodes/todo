@@ -117,6 +117,9 @@ async function init() {
   if (!listColumns.some((column) => column.name === 'is_system')) {
     await run('ALTER TABLE lists ADD COLUMN is_system INTEGER NOT NULL DEFAULT 0');
   }
+  if (!listColumns.some((column) => column.name === 'completed_retention')) {
+    await run("ALTER TABLE lists ADD COLUMN completed_retention TEXT NOT NULL DEFAULT 'forever'");
+  }
   // Pinned Unlisted list: always first, cannot be renamed/deleted/reordered.
   let systemList = await get('SELECT id, is_system, sort_order FROM lists WHERE is_system = 1 LIMIT 1');
   if (!systemList) {

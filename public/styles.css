@@ -1095,6 +1095,32 @@ body.flipping .reminder-group { overflow: visible; }
 
 .completed-section { display: flow-root; }
 
+.completed-retention {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 0 10px;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  color: var(--text-2);
+}
+
+.completed-retention.generic { justify-content: flex-start; margin-top: 0; }
+
+.completed-retention-edit {
+  flex: none;
+  padding: 2px 0;
+  font-size: 0.8125rem;
+  color: var(--accent);
+}
+
+.completed-retention-edit:hover {
+  background: transparent;
+  color: var(--accent);
+  text-decoration: underline;
+}
+
 .flip-moving { position: relative; z-index: 2; }
 
 @keyframes value-pop {
@@ -1751,6 +1777,14 @@ body.sheet-open .sidebar {
 
 #l-name { height: var(--control-height); min-height: var(--control-height); }
 #l-name:disabled { opacity: 0.65; cursor: default; }
+
+.list-retention-row {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.list-retention-hint { margin: 8px 0 0; }
 
 .e-notes {
   border: 1px solid var(--line);

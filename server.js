@@ -127,9 +127,6 @@ const SETTING_DEFAULTS = {
   // 'bar' | 'ring' | 'off', and 'all' | '30d' for what the counts cover.
   list_progress: 'bar',
   list_progress_range: 'all',
-  // How long completed one-off reminders are kept. 'forever' disables the
-  // purge; the other values are permanent retention windows.
-  completed_retention: 'forever',
   // Per-view sorting, synced across devices. JSON string:
   // { default: {field, dir} | null, overrides: { "list:5": {field, dir},
   // "today": {...}, ... } }. Empty means no device has seeded it yet; the
@@ -154,23 +151,42 @@ async function getSettings() {
   return out;
 }
 
+const COMPLETED_RETENTION_VALUES = ['1m', '3m', '6m', '12m', 'forever'];
 const COMPLETED_RETENTION_DAYS = { '1m': 30, '3m': 90, '6m': 180, '12m': 365 };
 
-function retentionCutoff(settings) {
-  const days = COMPLETED_RETENTION_DAYS[settings.completed_retention];
+function validCompletedRetention(value) {
+  return COMPLETED_RETENTION_VALUES.includes(value) ? value : null;
+}
+
+function retentionCutoff(value) {
+  const days = COMPLETED_RETENTION_DAYS[value];
   return days ? new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString() : null;
 }
 
-async function purgeCompletedRetention() {
-  const settings = await getSettings();
-  const cutoff = retentionCutoff(settings);
-  if (!cutoff) return 0;
-  const result = await db.run(
-    `DELETE FROM reminders
-     WHERE completed = 1 AND completed_at IS NOT NULL AND completed_at < ?`,
-    [cutoff]
-  );
-  return result.changes || 0;
+function retentionCutoffs() {
+  const cutoffs = {};
+  for (const [value, days] of Object.entries(COMPLETED_RETENTION_DAYS)) {
+    cutoffs[value] = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+  }
+  return cutoffs;
+}
+
+async function purgeCompletedRetention(listId = null) {
+  const lists = listId
+    ? await db.all('SELECT id, completed_retention FROM lists WHERE id = ?', [listId])
+    : await db.all('SELECT id, completed_retention FROM lists');
+  let total = 0;
+  for (const list of lists) {
+    const cutoff = retentionCutoff(list.completed_retention);
+    if (!cutoff) continue;
+    const result = await db.run(
+      `DELETE FROM reminders
+       WHERE list_id = ? AND completed = 1 AND completed_at IS NOT NULL AND completed_at < ?`,
+      [list.id, cutoff]
+    );
+    total += result.changes || 0;
+  }
+  return total;
 }
 
 // Only these keys may be written through the settings endpoint. Anything
@@ -213,11 +229,6 @@ function validateSetting(key, value) {
       return null;
     case 'list_progress_range':
       if (!['all', '30d'].includes(value)) return 'Must be all or 30d';
-      return null;
-    case 'completed_retention':
-      if (!['1m', '3m', '6m', '12m', 'forever'].includes(value)) {
-        return 'Must be 1m, 3m, 6m, 12m, or forever';
-      }
       return null;
     default:
       return 'Unknown setting';
@@ -1213,9 +1224,7 @@ async function main() {
       }
       await db.setSetting('device_zone_updated_at', new Date().toISOString());
     }
-    let purged = 0;
-    if ('completed_retention' in updates) purged = await purgeCompletedRetention();
-    res.json({ ok: true, settings: await getSettings(), floatingMoved: moved, moved: movedItems, purged });
+    res.json({ ok: true, settings: await getSettings(), floatingMoved: moved, moved: movedItems });
   });
 
   const SORT_FIELDS = ['due', 'created', 'name'];
@@ -1387,7 +1396,7 @@ async function main() {
   app.get('/api/export', async (req, res) => {
     if (req.token) return denyToken(res);
     const settings = await getSettings();
-    const lists = await db.all('SELECT id, name, color, sort_order, created_at FROM lists ORDER BY sort_order, id');
+    const lists = await db.all('SELECT id, name, color, sort_order, completed_retention, created_at FROM lists ORDER BY sort_order, id');
     const reminders = await db.all(`SELECT id, list_id, title, notes, due_at, has_time, completed,
       completed_at, urgent, repeat_rule, time_model, time_zone, snoozed_until,
       sort_order, created_at, updated_at, revision FROM reminders ORDER BY id`);
@@ -1433,9 +1442,10 @@ async function main() {
       if (knownLists.has(list.id)) { counts.listsSkipped += 1; continue; }
       try {
         await db.run(
-          'INSERT INTO lists (id, name, color, sort_order, created_at) VALUES (?, ?, ?, ?, ?)',
+          'INSERT INTO lists (id, name, color, sort_order, completed_retention, created_at) VALUES (?, ?, ?, ?, ?, ?)',
           [list.id, String(list.name).slice(0, 120), validColor(list.color),
             Number.isInteger(list.sort_order) ? list.sort_order : 0,
+            validCompletedRetention(list.completed_retention) || 'forever',
             typeof list.created_at === 'string' ? list.created_at : new Date().toISOString()]
         );
         knownLists.add(list.id);
@@ -1871,9 +1881,9 @@ async function main() {
   app.get('/api/state', async (req, res) => {
     const settings = await getSettings();
     const thirtyDayCutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-    const retention = retentionCutoff(settings);
+    const cutoffs = retentionCutoffs();
     const lists = await db.all(`
-      SELECT l.id, l.name, l.color, l.sort_order, l.created_at, l.is_system,
+      SELECT l.id, l.name, l.color, l.sort_order, l.completed_retention, l.created_at, l.is_system,
         (SELECT COUNT(*) FROM reminders r WHERE r.list_id = l.id AND r.completed = 0) AS count,
         (SELECT COUNT(*) FROM reminders r WHERE r.list_id = l.id AND r.completed = 1)
         AS done_count,
@@ -1882,22 +1892,21 @@ async function main() {
         AS done_count_30d
       FROM lists l ORDER BY l.sort_order, l.id
     `, [thirtyDayCutoff]);
-    const reminders = retention
-      ? await db.all(`
-          SELECT ${REMINDER_COLUMNS} FROM reminders
-          WHERE completed = 0 OR completed_at IS NULL OR completed_at >= ?
-          ORDER BY sort_order, id
-        `, [retention])
-      : await db.all(`
-          SELECT ${REMINDER_COLUMNS} FROM reminders
-          ORDER BY sort_order, id
-        `);
+    const reminders = await db.all(`
+      SELECT r.* FROM reminders r JOIN lists l ON l.id = r.list_id
+      WHERE r.completed = 0 OR r.completed_at IS NULL OR r.completed_at >=
+        CASE l.completed_retention
+          WHEN '1m' THEN ? WHEN '3m' THEN ? WHEN '6m' THEN ? WHEN '12m' THEN ?
+          ELSE '0000-01-01T00:00:00.000Z'
+        END
+      ORDER BY r.sort_order, r.id
+    `, [cutoffs['1m'], cutoffs['3m'], cutoffs['6m'], cutoffs['12m']]);
     await applyOccurrenceOverrides(reminders);
     res.json({ lists, reminders, settings, now: new Date().toISOString(), store_epoch: await getStoreEpoch() });
   });
 
-  // Full-history search for the UI: /api/state only carries 30 days of
-  // completed items, so older matches have to come from the database.
+  // Full-history search for the UI: /api/state only carries each list's
+  // retained completed items, so older matches have to come from the database.
   // Open matches are returned first; each group is capped independently so a
   // long completed history cannot crowd out active items.
   app.get('/api/search', async (req, res) => {
@@ -1913,28 +1922,36 @@ async function main() {
     }
     // Treat %, _ and \ as literal characters instead of LIKE wildcards.
     const pattern = `%${query.replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
-    const match = "(title LIKE ? ESCAPE '\\' OR notes LIKE ? ESCAPE '\\')";
+    const match = "(r.title LIKE ? ESCAPE '\\' OR r.notes LIKE ? ESCAPE '\\')";
     const params = [pattern, pattern];
-    const retention = retentionCutoff(await getSettings());
-    const completedFilter = retention
-      ? `${match} AND completed = 1 AND (completed_at IS NULL OR completed_at >= ?)`
-      : `${match} AND completed = 1`;
-    const completedParams = retention ? [...params, retention] : params;
+    const cutoffs = retentionCutoffs();
+    const completedFilter = `${match} AND r.completed = 1 AND (r.completed_at IS NULL OR r.completed_at >=
+      CASE l.completed_retention
+        WHEN '1m' THEN ? WHEN '3m' THEN ? WHEN '6m' THEN ? WHEN '12m' THEN ?
+        ELSE '0000-01-01T00:00:00.000Z'
+      END)`;
+    const completedParams = [
+      ...params, cutoffs['1m'], cutoffs['3m'], cutoffs['6m'], cutoffs['12m'],
+    ];
     const [open, completed, openCount, completedCount, storeEpoch] = await Promise.all([
       db.all(
-        `SELECT ${REMINDER_COLUMNS} FROM reminders
-         WHERE ${match} AND completed = 0
-         ORDER BY sort_order, id LIMIT ?`,
+        `SELECT r.* FROM reminders r
+         WHERE ${match} AND r.completed = 0
+         ORDER BY r.sort_order, r.id LIMIT ?`,
         [...params, limit]
       ),
       db.all(
-        `SELECT ${REMINDER_COLUMNS} FROM reminders
+        `SELECT r.* FROM reminders r JOIN lists l ON l.id = r.list_id
          WHERE ${completedFilter}
-         ORDER BY completed_at DESC, id DESC LIMIT ?`,
+         ORDER BY r.completed_at DESC, r.id DESC LIMIT ?`,
         [...completedParams, limit]
       ),
-      db.get(`SELECT COUNT(*) AS n FROM reminders WHERE ${match} AND completed = 0`, params),
-      db.get(`SELECT COUNT(*) AS n FROM reminders WHERE ${completedFilter}`, completedParams),
+      db.get(`SELECT COUNT(*) AS n FROM reminders r WHERE ${match} AND r.completed = 0`, params),
+      db.get(
+        `SELECT COUNT(*) AS n FROM reminders r JOIN lists l ON l.id = r.list_id
+         WHERE ${completedFilter}`,
+        completedParams
+      ),
       getStoreEpoch(),
     ]);
     await applyOccurrenceOverrides(open);
@@ -1952,7 +1969,7 @@ async function main() {
   app.get('/api/lists', async (req, res) => {
     const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
     const lists = await db.all(`
-      SELECT l.id, l.name, l.color, l.sort_order, l.created_at, l.is_system,
+      SELECT l.id, l.name, l.color, l.sort_order, l.completed_retention, l.created_at, l.is_system,
         (SELECT COUNT(*) FROM reminders r WHERE r.list_id = l.id AND r.completed = 0) AS count,
         (SELECT COUNT(*) FROM reminders r WHERE r.list_id = l.id AND r.completed = 1)
         AS done_count,
@@ -2027,12 +2044,18 @@ async function main() {
   app.post('/api/lists', async (req, res) => {
     const name = text(req.body.name, 120);
     if (!name) return res.status(400).json({ error: 'List name is required' });
+    const completedRetention = req.body.completed_retention === undefined
+      ? 'forever'
+      : validCompletedRetention(req.body.completed_retention);
+    if (!completedRetention) {
+      return res.status(400).json({ error: 'Invalid completed retention' });
+    }
     const max = await db.get('SELECT COALESCE(MAX(sort_order), -1) AS s FROM lists');
     const result = await db.run(
-      'INSERT INTO lists (name, color, sort_order, created_at) VALUES (?, ?, ?, ?)',
-      [name, validColor(req.body.color), max.s + 1, new Date().toISOString()]
+      'INSERT INTO lists (name, color, sort_order, completed_retention, created_at) VALUES (?, ?, ?, ?, ?)',
+      [name, validColor(req.body.color), max.s + 1, completedRetention, new Date().toISOString()]
     );
-    res.status(201).json({ id: result.lastID });
+    res.status(201).json({ id: result.lastID, completed_retention: completedRetention });
   });
 
   app.put('/api/lists/order', async (req, res) => {
@@ -2062,7 +2085,7 @@ async function main() {
   app.patch('/api/lists/:id', async (req, res) => {
     const id = parseId(req.params.id);
     if (!id) return res.status(400).json({ error: 'Invalid list' });
-    const list = await db.get('SELECT id, name, is_system FROM lists WHERE id = ?', [id]);
+    const list = await db.get('SELECT id, name, is_system, completed_retention FROM lists WHERE id = ?', [id]);
     if (!list) return res.status(404).json({ error: 'List not found' });
 
     const fields = [];
@@ -2080,10 +2103,21 @@ async function main() {
       fields.push('color = ?');
       params.push(validColor(req.body.color));
     }
+    let retentionChanged = false;
+    if (req.body.completed_retention !== undefined) {
+      const completedRetention = validCompletedRetention(req.body.completed_retention);
+      if (!completedRetention) {
+        return res.status(400).json({ error: 'Invalid completed retention' });
+      }
+      retentionChanged = completedRetention !== list.completed_retention;
+      fields.push('completed_retention = ?');
+      params.push(completedRetention);
+    }
     if (!fields.length) return res.status(400).json({ error: 'Nothing to update' });
     params.push(id);
     await db.run(`UPDATE lists SET ${fields.join(', ')} WHERE id = ?`, params);
-    res.json({ ok: true });
+    const purged = retentionChanged ? await purgeCompletedRetention(id) : 0;
+    res.json({ ok: true, purged });
   });
 
   app.delete('/api/lists/:id', async (req, res) => {

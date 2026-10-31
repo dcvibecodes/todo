@@ -2,6 +2,12 @@
 
 A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due dates, urgent flags, recurring reminders, natural-language quick add, smart lists, floating time zones, a token API for external agents, completed history, dark mode, and web push. No frontend framework and no build step.
 
+## What's New in v2.13.0
+
+- **Completed retention is per list** - each list now has its own **Completed retention** choice in Edit List: 1 month, 3 months, 6 months, 1 year, or indefinitely (default). Every existing and new list starts at indefinitely; there is no global retention setting. Shortening a list's window asks first and permanently deletes only that list's older completed one-off items; repeating-series history is kept.
+- **The completed section explains its window** - when Show Completed is on, the Completed heading says how long that list keeps finished items and offers an **Edit list** shortcut. The all-lists Completed view has a generic note because different lists can keep different windows.
+- Service worker cache bumped to `todo-v2.13.0`.
+
 ## What's New in v2.12.1
 
 - **List back-slide matches the entry** - the mobile pop transition now uses a gentler ease-in-out over the same 260ms instead of the entry's fast-start ease-out, so tapping Back no longer feels like a snap. Push is unchanged; a finger-driven browser back gesture still follows the finger.
@@ -314,7 +320,7 @@ A correctness release — no new screens, several bugs no longer possible.
 ## What's New in v2.2.0
 
 - **Quick-add clock times are correct in every time zone** — chrono resolved the parsed date lazily against the server's timezone after `/api/parse` restored it, so "at 5pm" landed hours late (and could roll into the next day). The instant is now captured while the device zone is pinned.
-- **Search covers all history** — search is global, not scoped to the open list, and runs on the server so completed to-dos older than 30 days are included. Results are grouped Open then Completed, and each row shows its list.
+- **Search covers retained history** — search is global, not scoped to the open list, and runs on the server so completed to-dos beyond the active view are included within each list's retention window. Results are grouped Open then Completed, and each row shows its list.
 - **Device-zone changes ask first** — opening the app in a new zone previews how many future floating to-dos would move, then asks before committing (per-zone dismissal) and offers Undo for 10 seconds. The stored zone is described honestly as the last zone a device confirmed. Service worker cache bumped to `todo-v2.2.0`.
 - **Settings has Cancel + Save** — Save lives in the header and stays disabled until a server-backed field changes; theme and density still apply instantly. The confirmation now names what actually changed instead of always claiming "new to-dos only".
 - **Clearer row actions and validation** — Snooze (1 hour / Next occurrence) and Reschedule (Today / Tomorrow) are separate labelled groups, a no-op Today is hidden, and empty titles/list names show an inline error. The More Options row is renamed "Time model".
@@ -409,7 +415,7 @@ A correctness release — no new screens, several bugs no longer possible.
 - Time models: floating wall-clock (default; follows the device's last-synced zone) or zone-anchored (with a styled Time zone picker in the editor). The choice appears once an item has a clock time; date-only items just take a date. Settings has a default model and default zone; changing them affects new reminders only, never existing ones.
 - Snooze (in-app button + notification actions where supported). Due rows group their actions under a clear **Snooze until** label: 1 hour, Today/Tomorrow, or Next occurrence for repeating reminders. Opt-in re-push with quiet hours.
 - Token API so external agents can list, add, and complete reminders without a browser.
-- Completed reminders follow Settings → Completed items: 1 month, 3 months, 6 months, 1 year, or indefinitely (default). Retention is permanent for completed one-off items; repeating-series occurrence history is kept. `GET /api/state` loads completed items within the chosen window, search is scoped to retained items, and the per-list Show Completed switch is remembered.
+- Completed reminders follow each list's **Completed retention** choice in Edit List: 1 month, 3 months, 6 months, 1 year, or indefinitely (default). Retention is permanent for completed one-off items; repeating-series occurrence history is kept. `GET /api/state` loads completed items within each list's window, search is scoped to retained items, and the per-list Show Completed switch is remembered.
 - Deleting is inline (no browser dialogs): on touch, swipe any row left — including completed rows — to reveal the red Delete action (centered label), tap it once for “Confirm?”, tap again to delete; swipe right closes the reveal. On the web there is no swipe; hover the row and click the ×, then “Confirm?”. The card slides away when deleted.
 - Search across active reminders and retained completed history.
 - Desktop uses a centered 60vw column (max 1100px) with one Home panel; reminders fill the column with a fixed FAB. There is no permanent sidebar.

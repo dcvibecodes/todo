@@ -113,16 +113,15 @@ const LIST_PROGRESS_SYNCED_KEY = 'todo.listProgressSynced';
 const LIST_PROGRESS_MODES = ['bar', 'ring', 'off'];
 const LIST_PROGRESS_RANGES = ['all', '30d'];
 const SETTINGS_PROGRESS_KEYS = ['list_progress', 'list_progress_range'];
-const SETTINGS_RETENTION_KEYS = ['completed_retention'];
 const RETENTION_ORDER = { '1m': 1, '3m': 3, '6m': 6, '12m': 12, forever: Infinity };
 const RETENTION_LABELS = { '1m': '1 month', '3m': '3 months', '6m': '6 months', '12m': '1 year', forever: 'indefinitely' };
 
-function retentionValue() {
-  const value = state.settings.completed_retention;
+function listRetention(list) {
+  const value = list && list.completed_retention;
   return value in RETENTION_ORDER ? value : 'forever';
 }
 
-function retentionLabel(value = retentionValue()) {
+function retentionLabel(value = 'forever') {
   return RETENTION_LABELS[value] || RETENTION_LABELS.forever;
 }
 
@@ -2387,6 +2386,12 @@ function renderMain() {
   } else if (view === 'today') {
     renderToday(content, items);
   } else {
+    if (view === 'completed') {
+      content.append(el('p', {
+        class: 'completed-retention generic',
+        text: 'Completed retention is set per list. Open a list to change it.',
+      }));
+    }
     const group = el('div', { class: 'reminder-group' });
     for (const reminder of items) {
       group.append(reminderRow(reminder, { reschedule: view === 'flagged' && isOverdue(reminder) }));
@@ -2395,10 +2400,24 @@ function renderMain() {
   }
 
   if (isList && state.showCompleted && completed.length) {
+    const retention = listRetention(list);
     const group = el('div', { class: 'reminder-group' });
     for (const reminder of completed) group.append(reminderRow(reminder));
     content.append(el('div', { class: 'completed-section' }, [
       el('h3', { class: 'group-title', text: 'Completed' }),
+      el('div', { class: 'completed-retention' }, [
+        el('span', {
+          text: retention === 'forever'
+            ? 'Completed items are kept indefinitely.'
+            : `Completed items are kept for ${retentionLabel(retention)}.`,
+        }),
+        el('button', {
+          type: 'button',
+          class: 'text-btn completed-retention-edit',
+          text: 'Edit list',
+          onclick: () => openListSheet(list),
+        }),
+      ]),
       group,
     ]));
   }
@@ -2423,9 +2442,7 @@ function emptyState(view) {
     completed: {
       icon: 'done',
       heading: 'No history yet',
-      message: retentionValue() === 'forever'
-        ? 'Finished items are kept indefinitely.'
-        : `Finished items are kept for ${retentionLabel()}.`,
+      message: 'Finished items follow each list’s completed retention.',
     },
   }[view] || { icon: 'all', heading: 'Nothing here', message: 'No items in this list yet.' };
   const children = [
@@ -4130,7 +4147,9 @@ function listCanSubmit() {
   const name = $('#l-name').value.trim();
   if (!name) return false;
   if (!listSnapshot) return true;
-  return name !== listSnapshot.name || state.selectedColor !== listSnapshot.color;
+  return name !== listSnapshot.name
+    || state.selectedColor !== listSnapshot.color
+    || ($('#l-retention').value || 'forever') !== listSnapshot.completed_retention;
 }
 
 function syncListSubmit() {
@@ -4140,6 +4159,7 @@ function syncListSubmit() {
 
 function openListSheet(list) {
   const system = Boolean(list && list.is_system);
+  const retention = list ? listRetention(list) : 'forever';
   state.editingListId = list ? list.id : null;
   state.selectedColor = list ? list.color : nextListColor();
   $('#list-heading').textContent = list ? (system ? 'Unlisted' : 'Edit List') : 'New List';
@@ -4149,9 +4169,10 @@ function openListSheet(list) {
   $('#l-delete').hidden = !list || system;
   $('#list-save').textContent = 'Save';
   $('#list-sheet').removeAttribute('aria-busy');
+  $('#l-retention').value = retention;
   renderSwatches();
   listSnapshot = list
-    ? { name: $('#l-name').value.trim(), color: state.selectedColor }
+    ? { name: $('#l-name').value.trim(), color: state.selectedColor, completed_retention: retention }
     : null;
   syncListSubmit();
   openSheet('#list-sheet');
@@ -4189,24 +4210,33 @@ async function saveList(event) {
   }
   clearFieldError(nameInput, $('#l-name-error'));
 
+  const retention = $('#l-retention').value || 'forever';
+  const previousRetention = existing ? listRetention(existing) : 'forever';
+  if (existing && RETENTION_ORDER[retention] < RETENTION_ORDER[previousRetention]) {
+    const ok = window.confirm(
+      `Change completed retention to ${retentionLabel(retention)}? Completed items older than that in this list will be permanently deleted.`
+    );
+    if (!ok) return;
+  }
   const body = system
-    ? { color: state.selectedColor }
-    : { name, color: state.selectedColor };
+    ? { color: state.selectedColor, completed_retention: retention }
+    : { name, color: state.selectedColor, completed_retention: retention };
   const startedAt = Date.now();
   let created = null;
+  let result = null;
   listSaving = true;
   $('#list-save').textContent = 'Saving...';
   $('#list-save').disabled = true;
   $('#list-sheet').setAttribute('aria-busy', 'true');
   try {
     if (system) {
-      await api('/api/lists/' + existing.id, { method: 'PATCH', body });
+      result = await api('/api/lists/' + existing.id, { method: 'PATCH', body });
     } else if (state.editingListId) {
-      await api('/api/lists/' + state.editingListId, { method: 'PATCH', body });
+      result = await api('/api/lists/' + state.editingListId, { method: 'PATCH', body });
     } else {
       created = await api('/api/lists', { method: 'POST', body });
     }
-    listSnapshot = { name, color: state.selectedColor };
+    listSnapshot = { name, color: state.selectedColor, completed_retention: retention };
     await settleSubmit(startedAt);
     closeSheet('#list-sheet');
     await loadState();
@@ -4214,6 +4244,10 @@ async function saveList(event) {
     else {
       requestListAnimation();
       render();
+    }
+    const purged = result && result.purged || 0;
+    if (purged) {
+      toast(`${purged} old completed item${purged === 1 ? '' : 's'} deleted`);
     }
   } catch (err) {
     toast(err.message);
@@ -4774,7 +4808,6 @@ function settingsValues() {
     quiet_end: $('#set-quiet-end').value,
     list_progress: $('#set-list-progress').value,
     list_progress_range: $('#set-list-progress-range').value,
-    completed_retention: $('#set-completed-retention').value,
   };
 }
 
@@ -4824,7 +4857,6 @@ async function openSettings() {
   $('#set-quiet-end').value = s.quiet_end || '07:00';
   $('#set-list-progress').value = getListProgress();
   $('#set-list-progress-range').value = getListProgressRange();
-  $('#set-completed-retention').value = retentionValue();
   $('#set-sort-field').value = state.sortDefault.field;
   $('#set-sort-dir').value = state.sortDefault.dir;
   syncSortDirLabels($('#set-sort-field'), $('#set-sort-dir'));
@@ -4856,19 +4888,9 @@ async function saveAppSettings() {
   const defaultsChanged = changed(SETTINGS_DEFAULT_KEYS);
   const notifyChanged = changed(SETTINGS_NOTIFY_KEYS);
   const progressChanged = changed(SETTINGS_PROGRESS_KEYS);
-  const retentionChanged = changed(SETTINGS_RETENTION_KEYS);
   const appearanceDirty = appearanceIsDirty();
   const sortChanged = sortIsDirty();
-  if (!defaultsChanged && !notifyChanged && !progressChanged && !retentionChanged && !appearanceDirty && !sortChanged) return;
-
-  if (retentionChanged) {
-    const before = previous.completed_retention || 'forever';
-    const after = current.completed_retention || 'forever';
-    if (RETENTION_ORDER[after] < RETENTION_ORDER[before]) {
-      const ok = window.confirm(`Permanently delete completed items older than ${retentionLabel(after)}? This cannot be undone.`);
-      if (!ok) return;
-    }
-  }
+  if (!defaultsChanged && !notifyChanged && !progressChanged && !appearanceDirty && !sortChanged) return;
 
   const saveBtn = $('#settings-save');
   const startedAt = Date.now();
@@ -4878,7 +4900,7 @@ async function saveAppSettings() {
   $('#settings-sheet').setAttribute('aria-busy', 'true');
   try {
     let message = '';
-    if (defaultsChanged || notifyChanged || progressChanged || retentionChanged) {
+    if (defaultsChanged || notifyChanged || progressChanged) {
       try {
         const result = await api('/api/settings', {
           method: 'POST',
@@ -4888,14 +4910,7 @@ async function saveAppSettings() {
         settingsSnapshot = current;
         cacheListProgress();
         renderSidebar();
-        if (retentionChanged) {
-          await loadState();
-          render();
-          const purged = result.purged || 0;
-          message = purged
-            ? `Saved — ${purged} old completed item${purged === 1 ? '' : 's'} deleted.`
-            : 'Saved — completed retention updated.';
-        } else if (defaultsChanged && notifyChanged) {
+        if (defaultsChanged && notifyChanged) {
           message = 'Saved. New item defaults apply to new items only; notification changes apply to all items from now on.';
         } else if (notifyChanged) {
           message = 'Saved — applies to how all items notify from now on.';
@@ -5422,6 +5437,7 @@ $('#l-name').addEventListener('input', () => {
   clearFieldError($('#l-name'), $('#l-name-error'));
   syncListSubmit();
 });
+$('#l-retention').addEventListener('change', syncListSubmit);
 $('#l-name').addEventListener('keydown', (event) => {
   if (event.key !== 'Enter' || event.isComposing) return;
   if ($('#list-save').disabled) event.preventDefault();
