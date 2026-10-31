@@ -218,6 +218,7 @@ function applyDensity(animate = false) {
   const update = () => {
     const density = localStorage.getItem(DENSITY_KEY) === 'compact' ? 'compact' : 'comfortable';
     document.documentElement.dataset.density = density;
+    if (document.readyState !== 'loading') syncNoteToggles();
   };
   if (animate) runViewTransition(update);
   else update();
@@ -1927,6 +1928,7 @@ function renderDayPeek(options = {}) {
     list.append(el('p', { class: 'day-peek-empty', text: 'Nothing due' }));
   }
   scroll.replaceChildren(list);
+  syncNoteToggles();
   if (options.crossfade) fadeDayPeekContent(true);
   syncDayCardHeight(card, true);
 }
@@ -2244,11 +2246,13 @@ function renderMain() {
 
   if (state.search) {
     renderSearchResults(content);
+    syncNoteToggles();
     return;
   }
 
   if (view === 'home') {
     document.title = 'ToDo';
+    syncNoteToggles();
     return;
   }
 
@@ -2308,6 +2312,7 @@ function renderMain() {
       onclick: () => openListSheet(null),
     }));
   }
+  syncNoteToggles();
 }
 
 function emptyState(view) {
@@ -2556,6 +2561,70 @@ async function rescheduleRow(reminder, date) {
   }
 }
 
+const expandedNotes = new Set();
+
+function setNoteButtonLabel(button, row, expanded) {
+  const title = row.querySelector('.reminder-title')?.textContent || 'item';
+  button.textContent = expanded ? 'See less' : 'See more';
+  button.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+  button.setAttribute('aria-label', `${expanded ? 'See less' : 'See more'} note for ${title}`);
+}
+
+function toggleNote(note, button) {
+  const row = button.closest('.reminder');
+  if (!row) return;
+  const id = row.dataset.reminderId;
+  note.getAnimations().forEach((animation) => animation.cancel());
+  note.style.height = '';
+  note.style.overflow = '';
+  const expanded = !expandedNotes.has(id);
+  const from = note.getBoundingClientRect().height;
+  if (expanded) {
+    expandedNotes.add(id);
+    note.classList.add('is-expanded');
+  } else {
+    expandedNotes.delete(id);
+    note.classList.remove('is-expanded');
+  }
+  const to = note.getBoundingClientRect().height;
+  setNoteButtonLabel(button, row, expanded);
+  if (MOTION_REDUCED.matches || Math.abs(to - from) < 1) return;
+  note.style.overflow = 'hidden';
+  note.style.height = `${from}px`;
+  const anim = note.animate(
+    [{ height: `${from}px` }, { height: `${to}px` }],
+    { duration: 200, easing: 'ease-out' },
+  );
+  const cleanup = () => {
+    note.style.height = '';
+    note.style.overflow = '';
+  };
+  anim.onfinish = cleanup;
+  anim.oncancel = cleanup;
+}
+
+function syncNoteToggles() {
+  for (const button of $$('.note-more')) {
+    const row = button.closest('.reminder');
+    const note = row && row.querySelector('.reminder-notes');
+    if (!note) {
+      button.hidden = true;
+      continue;
+    }
+    const id = row.dataset.reminderId;
+    const expanded = expandedNotes.has(id);
+    note.classList.toggle('is-expanded', expanded);
+    let visible = expanded;
+    if (!expanded) {
+      note.style.height = '';
+      note.style.overflow = '';
+      visible = note.scrollHeight > note.clientHeight + 1;
+    }
+    button.hidden = !visible;
+    setNoteButtonLabel(button, row, expanded);
+  }
+}
+
 function reminderRow(reminder, options = {}) {
   const list = listById(reminder.list_id);
   const color = colorVar(list ? list.color : 'blue');
@@ -2634,7 +2703,25 @@ function reminderRow(reminder, options = {}) {
   if (reminder.notes) {
     const parts = noteParts(reminder.notes);
     if (parts.text) {
-      body.append(el('div', { class: 'reminder-notes', text: parts.text }));
+      const noteId = String(reminder.id);
+      const expanded = expandedNotes.has(noteId);
+      const note = el('div', {
+        class: 'reminder-notes' + (expanded ? ' is-expanded' : ''),
+        text: parts.text,
+      });
+      const more = el('button', {
+        type: 'button',
+        class: 'note-more',
+        text: expanded ? 'See less' : 'See more',
+        hidden: !expanded,
+        'aria-expanded': expanded ? 'true' : 'false',
+        'aria-label': `${expanded ? 'See less' : 'See more'} note for ${reminder.title}`,
+        onclick: (event) => {
+          event.stopPropagation();
+          toggleNote(note, event.currentTarget);
+        },
+      });
+      body.append(note, more);
     }
     if (parts.links.length) {
       const links = el('div', { class: 'reminder-links' });
@@ -4115,25 +4202,16 @@ function syncSheetState() {
 // sheet with the same cancel semantics as Escape.
 let sheetPopGuard = false;
 
-const closingSheets = new WeakSet();
-
 function openSheet(selector) {
   if (!$$('.sheet').some((sheet) => !sheet.hidden)) {
     lastFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   }
   const sheet = $(selector);
-  closingSheets.delete(sheet);
   sheet.getAnimations().forEach((animation) => animation.cancel());
   sheet.querySelectorAll('.sheet-card, .sheet-backdrop').forEach((node) => {
     node.getAnimations().forEach((animation) => animation.cancel());
   });
   sheet.hidden = false;
-  if (!MOTION_REDUCED.matches) {
-    const backdrop = sheet.querySelector('.sheet-backdrop');
-    if (backdrop) {
-      backdrop.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 180, easing: 'ease-out' });
-    }
-  }
   try {
     const depth = (history.state && history.state.todoSheet || 0) + 1;
     history.pushState({ todoSheet: depth }, '', location.href);
@@ -4152,46 +4230,9 @@ function consumeSheetMarker() {
 
 function closeSheet(selector) {
   const sheet = $(selector);
-  if (!sheet || sheet.hidden || closingSheets.has(sheet)) {
-    if (sheet && sheet.hidden) {
-      consumeSheetMarker();
-      syncSheetState();
-    }
-    return;
-  }
-  closingSheets.add(sheet);
+  if (sheet) sheet.hidden = true;
+  syncSheetState();
   consumeSheetMarker();
-  const finish = () => {
-    closingSheets.delete(sheet);
-    sheet.hidden = true;
-    sheet.style.transform = '';
-    sheet.style.opacity = '';
-    syncSheetState();
-  };
-  if (MOTION_REDUCED.matches) {
-    finish();
-    return;
-  }
-  sheet.getAnimations().forEach((animation) => animation.cancel());
-  const card = sheet.querySelector('.sheet-card');
-  const backdrop = sheet.querySelector('.sheet-backdrop');
-  if (backdrop) {
-    backdrop.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 150, easing: 'ease-out' });
-  }
-  let anim;
-  if (card) {
-    card.getAnimations().forEach((animation) => animation.cancel());
-    anim = card.animate(
-      [
-        { opacity: 1, transform: 'translateY(0) scale(1)' },
-        { opacity: 0.4, transform: 'translateY(10px) scale(0.99)' },
-      ],
-      { duration: 160, easing: 'ease-out' },
-    );
-  } else {
-    anim = sheet.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 150, easing: 'ease-out' });
-  }
-  anim.onfinish = finish;
 }
 
 // Close the topmost sheet without touching History — composed by the
@@ -5200,6 +5241,14 @@ async function refreshOnResume() {
 
 window.addEventListener('hashchange', route);
 window.addEventListener('focus', refreshOnResume);
+let noteSyncTimer = null;
+window.addEventListener('resize', () => {
+  clearTimeout(noteSyncTimer);
+  noteSyncTimer = setTimeout(() => {
+    syncNoteToggles();
+    if (dayPeekOpen) syncDayCardHeight($('#day-card'), false);
+  }, 120);
+});
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') refreshOnResume();
 });

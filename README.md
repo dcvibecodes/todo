@@ -2,6 +2,12 @@
 
 A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due dates, urgent flags, recurring reminders, natural-language quick add, smart lists, floating time zones, a token API for external agents, completed history, dark mode, and web push. No frontend framework and no build step.
 
+## What's New in v2.11.1
+
+- **Sheets close instantly again** - removed the v2.11.0 exit fade on the editor, list, Settings and other sheets that caused jitter when saving or cancelling. The opening motion is unchanged.
+- **"See more" for long notes** - notes still show a two-line preview with the usual ellipsis, but when the note overflows a quiet **See more** button appears. Tapping it expands the full note in place with a height animation; **See less** collapses it. Works in lists, search results, completed rows and the Home day card. The row still never opens the editor unless you use the pencil, and short notes get no button.
+- Service worker cache bumped to `todo-v2.11.1`.
+
 ## What's New in v2.11.0
 
 - **Fluid motion across the app** - completing or un-completing a task now glides the row between Open and Completed (with the old gap closing), rather than disappearing and reappearing. Added rows settle in, deleted rows collapse, and a list emptied by the last item fades to its empty state.

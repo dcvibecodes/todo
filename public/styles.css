@@ -378,6 +378,7 @@ button, a, input, select, textarea, [tabindex] { touch-action: manipulation; }
   .icon-btn::after,
   .back-btn::after,
   .check::after,
+  .note-more::after,
   .row-edit::after,
   .row-delete::after,
   .list-grip::after,
@@ -394,6 +395,7 @@ button, a, input, select, textarea, [tabindex] { touch-action: manipulation; }
   .history-undo { position: relative; }
   .history-undo::after { inset: -10px -6px; }
   .check::after { inset: -10px; }
+  .note-more::after { inset: -10px -6px; }
   .row-edit::after { inset: -5px; }
   .row-delete::after { inset: -5px; }
   .list-grip::after { inset: -11px; }
@@ -1344,6 +1346,32 @@ body.flipping .reminder-group { overflow: visible; }
   overflow-wrap: anywhere;
 }
 
+.reminder-notes.is-expanded {
+  display: block;
+  -webkit-line-clamp: unset;
+  overflow: visible;
+}
+
+.note-more {
+  position: relative;
+  align-self: flex-start;
+  justify-self: start;
+  margin-top: 1px;
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-2);
+  font-family: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.3;
+  min-height: 24px;
+  cursor: pointer;
+  transition: color 0.15s;
+}
+
+.note-more:hover { color: var(--text); text-decoration: underline; }
+
 .reminder-links {
   display: flex;
   flex-wrap: wrap;
@@ -1406,6 +1434,7 @@ body.flipping .reminder-group { overflow: visible; }
   .reminder-body > .reminder-title,
   .reminder-body > .reminder-meta,
   .reminder-body > .reminder-notes,
+  .reminder-body > .note-more,
   .reminder-body > .reminder-links { grid-column: 1; }
   /* One block holds Snooze and Reschedule: its top lines up with the
      title and its groups sit 8px apart, the same as the chip gap. */
