@@ -218,7 +218,7 @@ function applyDensity(animate = false) {
   const update = () => {
     const density = localStorage.getItem(DENSITY_KEY) === 'compact' ? 'compact' : 'comfortable';
     document.documentElement.dataset.density = density;
-    if (document.readyState !== 'loading') syncNoteToggles();
+    if (document.readyState !== 'loading') syncNoteExpanders();
   };
   if (animate) runViewTransition(update);
   else update();
@@ -987,6 +987,10 @@ function setShowCompleted(listId, value) {
 function route() {
   const view = parseRoute();
   const previousView = state.view;
+  if (view !== state.view) {
+    selectedNoteId = null;
+    expandedNoteId = null;
+  }
   // Search is global now, so navigating to a list or smart view leaves the
   // results behind unless the search itself caused the jump to All.
   if (state.search && view !== state.view) {
@@ -1928,7 +1932,7 @@ function renderDayPeek(options = {}) {
     list.append(el('p', { class: 'day-peek-empty', text: 'Nothing due' }));
   }
   scroll.replaceChildren(list);
-  syncNoteToggles();
+  syncNoteExpanders();
   if (options.crossfade) fadeDayPeekContent(true);
   syncDayCardHeight(card, true);
 }
@@ -2246,13 +2250,13 @@ function renderMain() {
 
   if (state.search) {
     renderSearchResults(content);
-    syncNoteToggles();
+    syncNoteExpanders();
     return;
   }
 
   if (view === 'home') {
     document.title = 'ToDo';
-    syncNoteToggles();
+    syncNoteExpanders();
     return;
   }
 
@@ -2312,7 +2316,7 @@ function renderMain() {
       onclick: () => openListSheet(null),
     }));
   }
-  syncNoteToggles();
+  syncNoteExpanders();
 }
 
 function emptyState(view) {
@@ -2561,33 +2565,50 @@ async function rescheduleRow(reminder, date) {
   }
 }
 
-const expandedNotes = new Set();
+let selectedNoteId = null;
+let expandedNoteId = null;
+let lastNoteScrollAt = 0;
 
-function setNoteButtonLabel(button, row, expanded) {
-  const title = row.querySelector('.reminder-title')?.textContent || 'item';
-  button.textContent = expanded ? 'See less' : 'See more';
-  button.setAttribute('aria-expanded', expanded ? 'true' : 'false');
-  button.setAttribute('aria-label', `${expanded ? 'See less' : 'See more'} note for ${title}`);
+function noteForId(id) {
+  let fallback = null;
+  for (const row of $$(`.reminder[data-reminder-id="${id}"]`)) {
+    const note = row.querySelector('.reminder-notes');
+    if (!note) continue;
+    const found = { row, note };
+    if (row.getClientRects().length) return found;
+    fallback = fallback || found;
+  }
+  return fallback;
 }
 
-function toggleNote(note, button) {
-  const row = button.closest('.reminder');
-  if (!row) return;
+function setNoteMeta(row, note) {
   const id = row.dataset.reminderId;
+  const expandable = row.classList.contains('has-long-note');
+  const expanded = expandedNoteId === id;
+  row.classList.toggle('note-selected', expandable && selectedNoteId === id);
+  const chevron = row.querySelector('.note-chevron');
+  if (!chevron) return;
+  const title = row.querySelector('.reminder-title')?.textContent || 'item';
+  chevron.hidden = !expandable;
+  chevron.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+  chevron.setAttribute('aria-label', `${expanded ? 'Collapse' : 'Show full'} note for ${title}`);
+  chevron.title = expanded ? 'Collapse note' : 'Show full note';
+}
+
+function syncNoteSelection() {
+  for (const row of $$('.reminder')) {
+    const note = row.querySelector('.reminder-notes');
+    if (note) setNoteMeta(row, note);
+  }
+}
+
+function animateNote(note, expand) {
   note.getAnimations().forEach((animation) => animation.cancel());
   note.style.height = '';
   note.style.overflow = '';
-  const expanded = !expandedNotes.has(id);
   const from = note.getBoundingClientRect().height;
-  if (expanded) {
-    expandedNotes.add(id);
-    note.classList.add('is-expanded');
-  } else {
-    expandedNotes.delete(id);
-    note.classList.remove('is-expanded');
-  }
+  note.classList.toggle('is-expanded', expand);
   const to = note.getBoundingClientRect().height;
-  setNoteButtonLabel(button, row, expanded);
   if (MOTION_REDUCED.matches || Math.abs(to - from) < 1) return;
   note.style.overflow = 'hidden';
   note.style.height = `${from}px`;
@@ -2603,26 +2624,71 @@ function toggleNote(note, button) {
   anim.oncancel = cleanup;
 }
 
-function syncNoteToggles() {
-  for (const button of $$('.note-more')) {
-    const row = button.closest('.reminder');
-    const note = row && row.querySelector('.reminder-notes');
-    if (!note) {
-      button.hidden = true;
-      continue;
-    }
+function collapseExpandedNote() {
+  if (!expandedNoteId) return;
+  const found = noteForId(expandedNoteId);
+  if (found) animateNote(found.note, false);
+  expandedNoteId = null;
+}
+
+function toggleSelectedNote(row, note) {
+  const id = row.dataset.reminderId;
+  if (expandedNoteId === id) {
+    expandedNoteId = null;
+    animateNote(note, false);
+  } else {
+    if (expandedNoteId) collapseExpandedNote();
+    expandedNoteId = id;
+    animateNote(note, true);
+  }
+  syncNoteSelection();
+}
+
+function selectNoteRow(row) {
+  const id = row.dataset.reminderId;
+  if (selectedNoteId === id) return false;
+  if (expandedNoteId) collapseExpandedNote();
+  selectedNoteId = id;
+  syncNoteSelection();
+  return true;
+}
+
+function handleNoteChevron(row, note) {
+  const id = row.dataset.reminderId;
+  if (row.classList.contains('swipe-open')) resetSwipe(row);
+  if (expandedNoteId === id) {
+    expandedNoteId = null;
+    animateNote(note, false);
+  } else {
+    if (expandedNoteId) collapseExpandedNote();
+    expandedNoteId = id;
+    animateNote(note, true);
+  }
+  selectedNoteId = id;
+  syncNoteSelection();
+}
+
+function syncNoteExpanders() {
+  let selectedSeen = false;
+  let expandedSeen = false;
+  for (const note of $$('.reminder-notes')) {
+    const row = note.closest('.reminder');
+    if (!row) continue;
     const id = row.dataset.reminderId;
-    const expanded = expandedNotes.has(id);
+    const expanded = expandedNoteId === id;
     note.classList.toggle('is-expanded', expanded);
-    let visible = expanded;
     if (!expanded) {
       note.style.height = '';
       note.style.overflow = '';
-      visible = note.scrollHeight > note.clientHeight + 1;
     }
-    button.hidden = !visible;
-    setNoteButtonLabel(button, row, expanded);
+    const expandable = expanded || note.scrollHeight > note.clientHeight + 1;
+    row.classList.toggle('has-long-note', expandable);
+    if (expandable && selectedNoteId === id) selectedSeen = true;
+    if (expandable && expanded) expandedSeen = true;
   }
+  if (selectedNoteId && !selectedSeen) selectedNoteId = null;
+  if (expandedNoteId && !expandedSeen) expandedNoteId = null;
+  syncNoteSelection();
 }
 
 function reminderRow(reminder, options = {}) {
@@ -2703,25 +2769,25 @@ function reminderRow(reminder, options = {}) {
   if (reminder.notes) {
     const parts = noteParts(reminder.notes);
     if (parts.text) {
-      const noteId = String(reminder.id);
-      const expanded = expandedNotes.has(noteId);
+      const expanded = expandedNoteId === String(reminder.id);
       const note = el('div', {
         class: 'reminder-notes' + (expanded ? ' is-expanded' : ''),
         text: parts.text,
       });
-      const more = el('button', {
+      const chevron = el('button', {
         type: 'button',
-        class: 'note-more',
-        text: expanded ? 'See less' : 'See more',
-        hidden: !expanded,
-        'aria-expanded': expanded ? 'true' : 'false',
-        'aria-label': `${expanded ? 'See less' : 'See more'} note for ${reminder.title}`,
+        class: 'note-chevron',
+        hidden: true,
+        'aria-expanded': 'false',
+        'aria-label': `Show full note for ${reminder.title}`,
+        title: 'Show full note',
+        html: ICON('chevron', 'ic'),
         onclick: (event) => {
           event.stopPropagation();
-          toggleNote(note, event.currentTarget);
+          handleNoteChevron(note.closest('.reminder'), note);
         },
       });
-      body.append(note, more);
+      body.append(el('div', { class: 'note-wrap' }, [note, chevron]));
     }
     if (parts.links.length) {
       const links = el('div', { class: 'reminder-links' });
@@ -2864,11 +2930,21 @@ function reminderRow(reminder, options = {}) {
     style: { '--c': color },
     'data-reminder-id': reminder.id,
     onclick: (event) => {
-      // A swipe that just ended must not immediately close the reveal.
+      // A swipe or scroll that just ended must not select/expand a note.
       if (Date.now() - lastSwipeEnd < 400) return;
+      if (Date.now() - lastNoteScrollAt < 250) return;
+      if (event.target.closest('a, button, input, textarea, select')) return;
       const row = event.currentTarget;
       // Tapping a parked row closes the reveal; it never opens the editor.
-      if (row.classList.contains('swipe-open')) resetSwipe(row);
+      if (row.classList.contains('swipe-open')) {
+        resetSwipe(row);
+        return;
+      }
+      if (!row.classList.contains('has-long-note')) return;
+      const note = row.querySelector('.reminder-notes');
+      if (!note) return;
+      if (selectedNoteId !== row.dataset.reminderId) selectNoteRow(row);
+      else toggleSelectedNote(row, note);
     },
   }, [background, content]);
 }
@@ -5010,7 +5086,12 @@ async function runSearch(query) {
 }
 
 function setSearch(value, source) {
+  const wasSearching = Boolean(state.search);
   state.search = value.trim();
+  if (Boolean(state.search) !== wasSearching) {
+    selectedNoteId = null;
+    expandedNoteId = null;
+  }
   if (source !== 'sidebar') $('#search').value = value;
   if (source !== 'main') $('#main-search').value = value;
   scheduleSearch();
@@ -5245,7 +5326,7 @@ let noteSyncTimer = null;
 window.addEventListener('resize', () => {
   clearTimeout(noteSyncTimer);
   noteSyncTimer = setTimeout(() => {
-    syncNoteToggles();
+    syncNoteExpanders();
     if (dayPeekOpen) syncDayCardHeight($('#day-card'), false);
   }, 120);
 });
@@ -5257,4 +5338,8 @@ applyDensity();
 syncMenuButtons();
 initPullToRefresh();
 initDayPeek();
+[$('.sidebar'), $('#content')].forEach((scroller) => {
+  if (!scroller) return;
+  scroller.addEventListener('scroll', () => { lastNoteScrollAt = Date.now(); }, { passive: true });
+});
 boot();

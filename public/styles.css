@@ -378,7 +378,7 @@ button, a, input, select, textarea, [tabindex] { touch-action: manipulation; }
   .icon-btn::after,
   .back-btn::after,
   .check::after,
-  .note-more::after,
+  .note-chevron::after,
   .row-edit::after,
   .row-delete::after,
   .list-grip::after,
@@ -395,7 +395,7 @@ button, a, input, select, textarea, [tabindex] { touch-action: manipulation; }
   .history-undo { position: relative; }
   .history-undo::after { inset: -10px -6px; }
   .check::after { inset: -10px; }
-  .note-more::after { inset: -10px -6px; }
+  .note-chevron::after { inset: -10px; }
   .row-edit::after { inset: -5px; }
   .row-delete::after { inset: -5px; }
   .list-grip::after { inset: -11px; }
@@ -1126,6 +1126,8 @@ body.flipping .reminder-group { overflow: visible; }
 
 .reminder:hover .swipe-content { background: var(--elev); }
 
+.reminder.has-long-note { cursor: pointer; }
+
 .check {
   position: relative;
   flex: none;
@@ -1352,25 +1354,40 @@ body.flipping .reminder-group { overflow: visible; }
   overflow: visible;
 }
 
-.note-more {
+.note-wrap {
   position: relative;
-  align-self: flex-start;
-  justify-self: start;
-  margin-top: 1px;
-  padding: 2px 0;
-  border: 0;
-  background: transparent;
-  color: var(--text-2);
-  font-family: inherit;
-  font-size: 0.75rem;
-  font-weight: 600;
-  line-height: 1.3;
-  min-height: 24px;
-  cursor: pointer;
-  transition: color 0.15s;
+  min-width: 0;
 }
 
-.note-more:hover { color: var(--text); text-decoration: underline; }
+.note-wrap .reminder-notes { padding-right: 22px; }
+
+.note-chevron {
+  position: absolute;
+  top: -2px;
+  right: -4px;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-3);
+  opacity: 0.62;
+  cursor: pointer;
+  transition: opacity 0.15s, background 0.15s, color 0.15s;
+}
+
+.note-chevron .ic {
+  width: 14px;
+  height: 14px;
+  transform: rotate(90deg);
+  transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.note-chevron[aria-expanded="true"] .ic { transform: rotate(270deg); }
+.note-chevron:hover { opacity: 1; background: var(--fill); color: var(--text); }
 
 .reminder-links {
   display: flex;
@@ -1433,8 +1450,7 @@ body.flipping .reminder-group { overflow: visible; }
   .reminder-body > .reminder-due,
   .reminder-body > .reminder-title,
   .reminder-body > .reminder-meta,
-  .reminder-body > .reminder-notes,
-  .reminder-body > .note-more,
+  .reminder-body > .note-wrap,
   .reminder-body > .reminder-links { grid-column: 1; }
   /* One block holds Snooze and Reschedule: its top lines up with the
      title and its groups sit 8px apart, the same as the chip gap. */
@@ -2898,4 +2914,11 @@ body.sheet-open .sidebar {
   .skel { animation: none; }
   .e-more { transition: none; }
   .e-more-toggle .ic { transition: none; }
+}
+
+/* Keep the selected long-note row tinted on touch, after the hover/active
+   overrides above. */
+.reminder.note-selected .swipe-content {
+  background: color-mix(in srgb, var(--accent) 6%, var(--surface));
+  box-shadow: inset 2px 0 0 var(--accent);
 }
