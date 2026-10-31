@@ -2,6 +2,11 @@
 
 A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due dates, urgent flags, recurring reminders, natural-language quick add, smart lists, floating time zones, a token API for external agents, completed history, dark mode, and web push. No frontend framework and no build step.
 
+## What's New in v2.13.3
+
+- **List-view polish** - phones no longer flash a pressed background when a row is touched; desktop still shows the mouse-hover background. The completed heading is now inline: **Completed · kept indefinitely · Edit**, with finite windows reading **kept 3 months** and so on. The Show Completed switch is smaller (24×14) to match the 12px label, and list-view note text is 13px (12px in Compact density). Titles still wrap fully with no ellipsis; only notes use the two-line preview.
+- Service worker cache bumped to `todo-v2.13.3`.
+
 ## What's New in v2.13.2
 
 - **Retention confirmation is now in-app** - shortening a list's completed retention shows a red warning inside Edit List instead of a browser pop-up. It names the exact number of completed items that will be deleted; if none are old enough, the list saves immediately with no destructive prompt. While the warning is open, Save is disabled and the choices are **Keep current** or **Delete and save**. Editing the name, color, or retention dismisses the warning.
@@ -15,7 +20,7 @@ A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due
 ## What's New in v2.13.0
 
 - **Completed retention is per list** - each list now has its own **Completed retention** choice in Edit List: 1 month, 3 months, 6 months, 1 year, or indefinitely (default). Every existing and new list starts at indefinitely; there is no global retention setting. Shortening a list's window asks first, in-app, and permanently deletes only that list's older completed one-off items; repeating-series history is kept.
-- **The completed section explains its window** - when Show Completed is on, the Completed heading says how long that list keeps finished items and offers an **Edit list** shortcut. The all-lists Completed view has a generic note because different lists can keep different windows.
+- **The completed section explains its window** - when Show Completed is on, the heading reads **Completed · kept indefinitely · Edit** (or **kept 3 months**), with **Edit** opening the list sheet. The all-lists Completed view has a generic note because different lists can keep different windows.
 - Service worker cache bumped to `todo-v2.13.0`.
 
 ## What's New in v2.12.1
@@ -35,7 +40,7 @@ A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due
 
 ## What's New in v2.11.3
 
-- **Long notes open with a single tap** - removed the persistent selected row and its gray fill/accent bar. A tap or click on a long-note card now expands its note immediately; another tap collapses it. Tapping a different long-note card collapses the previous note and opens the new one. The existing hover highlight on desktop and press highlight on touch are the only row highlights. The chevron still toggles directly, short/no-note cards stay inert, and scrolling/swiping never expands.
+- **Long notes open with a single tap** - removed the persistent selected row and its gray fill/accent bar. A tap or click on a long-note card now expands its note immediately; another tap collapses it. Tapping a different long-note card collapses the previous note and opens the new one. The existing hover highlight on desktop is the only row highlight; v2.13.3 removed the touch press highlight. The chevron still toggles directly, short/no-note cards stay inert, and scrolling/swiping never expands.
 - Service worker cache bumped to `todo-v2.11.3`.
 
 ## What's New in v2.11.2

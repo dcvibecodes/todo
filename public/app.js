@@ -2412,20 +2412,22 @@ function renderMain() {
 
   if (isList && state.showCompleted && completed.length) {
     const retention = listRetention(list);
+    const kept = retention === 'forever'
+      ? 'kept indefinitely'
+      : `kept ${retentionLabel(retention)}`;
     const group = el('div', { class: 'reminder-group' });
     for (const reminder of completed) group.append(reminderRow(reminder));
     content.append(el('div', { class: 'completed-section' }, [
-      el('h3', { class: 'group-title', text: 'Completed' }),
-      el('div', { class: 'completed-retention' }, [
-        el('span', {
-          text: retention === 'forever'
-            ? 'Completed items are kept indefinitely.'
-            : `Completed items are kept for ${retentionLabel(retention)}.`,
-        }),
+      el('div', { class: 'completed-heading' }, [
+        el('h3', { class: 'group-title', text: 'Completed' }),
+        el('span', { class: 'completed-heading-sep', 'aria-hidden': 'true', text: '·' }),
+        el('span', { class: 'completed-kept', text: kept }),
+        el('span', { class: 'completed-heading-sep', 'aria-hidden': 'true', text: '·' }),
         el('button', {
           type: 'button',
-          class: 'text-btn completed-retention-edit',
-          text: 'Edit list',
+          class: 'text-btn completed-heading-edit',
+          text: 'Edit',
+          'aria-label': 'Edit completed retention for this list',
           onclick: () => openListSheet(list),
         }),
       ]),
