@@ -2,6 +2,11 @@
 
 A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due dates, urgent flags, recurring reminders, natural-language quick add, smart lists, floating time zones, a token API for external agents, completed history, dark mode, and web push. No frontend framework and no build step.
 
+## What's New in v2.10.8
+
+- **Closing a swipe follows your finger** - after swiping left to reveal Delete, dragging right now slides the row back under the finger at the same pace instead of snapping shut on the first few pixels. Releasing before the close threshold returns it open; releasing past it closes it with the same 0.18s ease as opening. A parked row can still be closed with a tap.
+- Service worker cache bumped to `todo-v2.10.8`.
+
 ## What's New in v2.10.7
 
 - **Edit is an explicit button** - tapping or clicking a reminder row no longer opens it, so an accidental tap is harmless. Every row now has a pencil button on the right; only that button opens the editor. On desktop the pencil sits left of the hover delete ×; on mobile the × is hidden and swipe-left still reveals Delete. Checkboxes, Snooze/Reschedule, links and swipe behaviour are unchanged.

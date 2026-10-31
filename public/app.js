@@ -3972,6 +3972,7 @@ $('#content').addEventListener('pointerdown', (event) => {
     startX: event.clientX,
     startY: event.clientY,
     active: false,
+    fromOpen: row.classList.contains('swipe-open'),
   };
   try { row.setPointerCapture(event.pointerId); } catch { /* ignore */ }
 });
@@ -3993,10 +3994,10 @@ $('#content').addEventListener('pointermove', (event) => {
   const dy = event.clientY - swipe.startY;
   if (!swipe.active) {
     if (Math.abs(dx) < 10 || Math.abs(dx) <= Math.abs(dy) * 1.2) return;
-    // A rightward drag closes a parked row (revealed Delete) and otherwise
-    // is ignored; either way it must not become a click on release.
-    if (dx > 0) {
-      if (swipe.row.classList.contains('swipe-open')) resetSwipe(swipe.row);
+    // A closed row only opens with a leftward drag. From a parked-open row,
+    // either direction is a real gesture so the rightward drag can close it
+    // under the finger instead of snapping shut on the first few pixels.
+    if (!swipe.fromOpen && dx > 0) {
       lastSwipeEnd = Date.now();
       swipe = null;
       return;
@@ -4010,7 +4011,8 @@ $('#content').addEventListener('pointermove', (event) => {
   const content = swipeContentOf(swipe.row);
   if (!content) return;
   const max = Math.min(140, (swipe.row.offsetWidth || 300) * 0.45);
-  const clamped = Math.max(-max, Math.min(0, dx));
+  const base = swipe.fromOpen ? -max : 0;
+  const clamped = Math.max(-max, Math.min(0, base + dx));
   content.style.transform = clamped ? `translateX(${clamped}px)` : '';
 });
 
@@ -4030,6 +4032,16 @@ async function endSwipe(commit) {
   snapSwipeOpen(current.row);
 }
 
+function endSwipeFromOpen(close) {
+  const current = swipe;
+  swipe = null;
+  if (!current || !current.active) return;
+  lastSwipeEnd = Date.now();
+  releaseSwipePointer(current);
+  if (close) resetSwipe(current.row);
+  else snapSwipeOpen(current.row);
+}
+
 $('#content').addEventListener('pointerup', (event) => {
   if (event.pointerType === 'mouse') {
     mouseDrag = null;
@@ -4043,13 +4055,18 @@ $('#content').addEventListener('pointerup', (event) => {
   const dx = event.clientX - swipe.startX;
   const width = swipe.row.offsetWidth || 300;
   const threshold = Math.min(100, width * 0.35);
+  if (swipe.fromOpen) {
+    endSwipeFromOpen(dx >= threshold);
+    return;
+  }
   endSwipe(Math.abs(dx) < threshold ? 0 : dx);
 });
 
 $('#content').addEventListener('pointercancel', () => {
   mouseDrag = null;
   if (swipe && swipe.active) {
-    resetSwipe(swipe.row);
+    if (swipe.fromOpen) snapSwipeOpen(swipe.row);
+    else resetSwipe(swipe.row);
     releaseSwipePointer(swipe);
   }
   swipe = null;
