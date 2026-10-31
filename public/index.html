@@ -448,6 +448,13 @@
           </select>
         </label>
         <p class="notify-hint list-retention-hint">Applies to this list's completed items.</p>
+        <div id="l-retention-warn" class="list-retention-warn" role="alert" hidden>
+          <p class="list-retention-warn-text"></p>
+          <div class="list-retention-warn-actions">
+            <button type="button" id="l-retention-cancel" class="mini-btn">Keep current</button>
+            <button type="button" id="l-retention-confirm" class="mini-btn danger-mini">Delete and save</button>
+          </div>
+        </div>
         <button type="button" id="l-delete" class="danger-btn" hidden>Delete List</button>
       </div>
     </form>

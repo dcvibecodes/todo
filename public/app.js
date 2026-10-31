@@ -114,6 +114,7 @@ const LIST_PROGRESS_MODES = ['bar', 'ring', 'off'];
 const LIST_PROGRESS_RANGES = ['all', '30d'];
 const SETTINGS_PROGRESS_KEYS = ['list_progress', 'list_progress_range'];
 const RETENTION_ORDER = { '1m': 1, '3m': 3, '6m': 6, '12m': 12, forever: Infinity };
+const RETENTION_DAYS = { '1m': 30, '3m': 90, '6m': 180, '12m': 365 };
 const RETENTION_LABELS = { '1m': '1 month', '3m': '3 months', '6m': '6 months', '12m': '1 year', forever: 'indefinitely' };
 
 function listRetention(list) {
@@ -4151,9 +4152,10 @@ function nextListColor() {
 
 let listSnapshot = null;
 let listSaving = false;
+let listRetentionWarningOpen = false;
 
 function listCanSubmit() {
-  if (listSaving) return false;
+  if (listSaving || listRetentionWarningOpen) return false;
   const name = $('#l-name').value.trim();
   if (!name) return false;
   if (!listSnapshot) return true;
@@ -4167,9 +4169,51 @@ function syncListSubmit() {
   if (submit) submit.disabled = !listCanSubmit();
 }
 
+function completedOlderThan(list, retention) {
+  const days = RETENTION_DAYS[retention];
+  if (!days) return 0;
+  const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+  return state.reminders.filter((reminder) => (
+    reminder.list_id === list.id
+    && reminder.completed
+    && reminder.completed_at
+    && new Date(reminder.completed_at).getTime() < cutoff
+  )).length;
+}
+
+function hideListRetentionWarning({ focus = false } = {}) {
+  const warn = $('#l-retention-warn');
+  if (!warn) return;
+  if (warn.hidden) {
+    listRetentionWarningOpen = false;
+    return;
+  }
+  warn.hidden = true;
+  warn.querySelector('.list-retention-warn-text').textContent = '';
+  listRetentionWarningOpen = false;
+  syncListSubmit();
+  if (focus) $('#l-retention').focus();
+}
+
+function showListRetentionWarning(retention, count) {
+  const warn = $('#l-retention-warn');
+  const noun = count === 1 ? 'item' : 'items';
+  listRetentionWarningOpen = true;
+  warn.querySelector('.list-retention-warn-text').textContent =
+    `Changing completed retention to ${retentionLabel(retention)} will permanently delete ${count} completed ${noun} older than ${retentionLabel(retention)} in this list. This cannot be undone.`;
+  warn.hidden = false;
+  syncListSubmit();
+  warn.scrollIntoView({
+    block: 'nearest',
+    behavior: MOTION_REDUCED.matches ? 'auto' : 'smooth',
+  });
+  $('#l-retention-cancel').focus({ preventScroll: true });
+}
+
 function openListSheet(list) {
   const system = Boolean(list && list.is_system);
   const retention = list ? listRetention(list) : 'forever';
+  hideListRetentionWarning();
   state.editingListId = list ? list.id : null;
   state.selectedColor = list ? list.color : nextListColor();
   $('#list-heading').textContent = list ? (system ? 'Unlisted' : 'Edit List') : 'New List';
@@ -4199,6 +4243,7 @@ function renderSwatches() {
       style: { '--c': colorVar(color) },
       'aria-label': 'Color ' + color,
       onclick: () => {
+        hideListRetentionWarning();
         state.selectedColor = color;
         renderSwatches();
         syncListSubmit();
@@ -4207,9 +4252,11 @@ function renderSwatches() {
   }
 }
 
-async function saveList(event) {
-  event.preventDefault();
-  if (listSaving || $('#list-save').disabled) return;
+async function saveList(event, options = {}) {
+  if (event) event.preventDefault();
+  if (listSaving) return;
+  if (listRetentionWarningOpen && !options.retentionConfirmed) return;
+  if ($('#list-save').disabled && !options.retentionConfirmed) return;
   const existing = state.editingListId ? listById(state.editingListId) : null;
   const system = Boolean(existing && existing.is_system);
   const nameInput = $('#l-name');
@@ -4222,12 +4269,15 @@ async function saveList(event) {
 
   const retention = $('#l-retention').value || 'forever';
   const previousRetention = existing ? listRetention(existing) : 'forever';
-  if (existing && RETENTION_ORDER[retention] < RETENTION_ORDER[previousRetention]) {
-    const ok = window.confirm(
-      `Change completed retention to ${retentionLabel(retention)}? Completed items older than that in this list will be permanently deleted.`
-    );
-    if (!ok) return;
+  if (existing && RETENTION_ORDER[retention] < RETENTION_ORDER[previousRetention]
+    && !options.retentionConfirmed) {
+    const purgeCount = completedOlderThan(existing, retention);
+    if (purgeCount > 0) {
+      showListRetentionWarning(retention, purgeCount);
+      return;
+    }
   }
+  hideListRetentionWarning();
   const body = system
     ? { color: state.selectedColor, completed_retention: retention }
     : { name, color: state.selectedColor, completed_retention: retention };
@@ -5444,10 +5494,20 @@ $('#set-sort-field').addEventListener('change', () => {
 });
 $('#list-form').addEventListener('submit', saveList);
 $('#l-name').addEventListener('input', () => {
+  hideListRetentionWarning();
   clearFieldError($('#l-name'), $('#l-name-error'));
   syncListSubmit();
 });
-$('#l-retention').addEventListener('change', syncListSubmit);
+$('#l-retention').addEventListener('change', () => {
+  hideListRetentionWarning();
+  syncListSubmit();
+});
+$('#l-retention-cancel').addEventListener('click', () => {
+  hideListRetentionWarning({ focus: true });
+});
+$('#l-retention-confirm').addEventListener('click', () => {
+  saveList(null, { retentionConfirmed: true });
+});
 $('#l-name').addEventListener('keydown', (event) => {
   if (event.key !== 'Enter' || event.isComposing) return;
   if ($('#list-save').disabled) event.preventDefault();

@@ -2,6 +2,11 @@
 
 A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due dates, urgent flags, recurring reminders, natural-language quick add, smart lists, floating time zones, a token API for external agents, completed history, dark mode, and web push. No frontend framework and no build step.
 
+## What's New in v2.13.2
+
+- **Retention confirmation is now in-app** - shortening a list's completed retention shows a red warning inside Edit List instead of a browser pop-up. It names the exact number of completed items that will be deleted; if none are old enough, the list saves immediately with no destructive prompt. While the warning is open, Save is disabled and the choices are **Keep current** or **Delete and save**. Editing the name, color, or retention dismisses the warning.
+- Service worker cache bumped to `todo-v2.13.2`.
+
 ## What's New in v2.13.1
 
 - **Swipe-back no longer slides twice** - browser/hardware Back and the mobile edge-swipe gesture now skip the app's custom 260ms pop animation, leaving only the browser's native transition. The in-app Back icon still slides out. This also prevents a history-driven Back from cancelling or duplicating an in-progress screen transition; sheet Back behavior is unchanged.
@@ -9,7 +14,7 @@ A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due
 
 ## What's New in v2.13.0
 
-- **Completed retention is per list** - each list now has its own **Completed retention** choice in Edit List: 1 month, 3 months, 6 months, 1 year, or indefinitely (default). Every existing and new list starts at indefinitely; there is no global retention setting. Shortening a list's window asks first and permanently deletes only that list's older completed one-off items; repeating-series history is kept.
+- **Completed retention is per list** - each list now has its own **Completed retention** choice in Edit List: 1 month, 3 months, 6 months, 1 year, or indefinitely (default). Every existing and new list starts at indefinitely; there is no global retention setting. Shortening a list's window asks first, in-app, and permanently deletes only that list's older completed one-off items; repeating-series history is kept.
 - **The completed section explains its window** - when Show Completed is on, the Completed heading says how long that list keeps finished items and offers an **Edit list** shortcut. The all-lists Completed view has a generic note because different lists can keep different windows.
 - Service worker cache bumped to `todo-v2.13.0`.
 

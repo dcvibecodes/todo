@@ -1786,6 +1786,28 @@ body.sheet-open .sidebar {
 
 .list-retention-hint { margin: 8px 0 0; }
 
+.list-retention-warn {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--red) 40%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--red) 8%, transparent);
+}
+
+.list-retention-warn-text {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  color: var(--red);
+}
+
+.list-retention-warn-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
 .e-notes {
   border: 1px solid var(--line);
   background: var(--elev);

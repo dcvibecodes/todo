@@ -1,6 +1,6 @@
 {
   "name": "todo",
-  "version": "2.13.1",
+  "version": "2.13.2",
   "description": "A self-hosted, Apple Reminders-style task app",
   "main": "server.js",
   "scripts": {
