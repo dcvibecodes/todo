@@ -2,6 +2,11 @@
 
 A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due dates, urgent flags, recurring reminders, natural-language quick add, smart lists, floating time zones, a token API for external agents, completed history, dark mode, and web push. No frontend framework and no build step.
 
+## What's New in v2.13.5
+
+- **Long notes lose the chevron** - the two-line ellipsis is now the only indicator that a note can expand. Tapping or clicking the card still expands and collapses it, and long notes stay keyboard-accessible: tab to the note, then press Enter or Space. Short notes are not focusable. The note text now uses the full card width.
+- Service worker cache bumped to `todo-v2.13.5`.
+
 ## What's New in v2.13.4
 
 - **Completed section reverted** - restored the separate **“Completed items are kept indefinitely.”** message with the right-aligned **Edit list** button. The rest of the v2.13.3 polish remains: no touch press highlight, the smaller 24×14 switch, larger notes, and fully wrapping titles.
@@ -45,7 +50,7 @@ A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due
 
 ## What's New in v2.11.3
 
-- **Long notes open with a single tap** - removed the persistent selected row and its gray fill/accent bar. A tap or click on a long-note card now expands its note immediately; another tap collapses it. Tapping a different long-note card collapses the previous note and opens the new one. The existing hover highlight on desktop is the only row highlight; v2.13.3 removed the touch press highlight. The chevron still toggles directly, short/no-note cards stay inert, and scrolling/swiping never expands.
+- **Long notes open with a single tap** - removed the persistent selected row and its gray fill/accent bar. A tap or click on a long-note card now expands its note immediately; another tap collapses it. Tapping a different long-note card collapses the previous note and opens the new one. The existing hover highlight on desktop is the only row highlight; v2.13.3 removed the touch press highlight. Since v2.13.5 the chevron is gone; the ellipsis is the expand indicator, and keyboard users can focus the note and press Enter or Space. Short/no-note cards stay inert, and scrolling/swiping never expands.
 - Service worker cache bumped to `todo-v2.11.3`.
 
 ## What's New in v2.11.2

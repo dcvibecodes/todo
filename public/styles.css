@@ -378,7 +378,6 @@ button, a, input, select, textarea, [tabindex] { touch-action: manipulation; }
   .icon-btn::after,
   .back-btn::after,
   .check::after,
-  .note-chevron::after,
   .row-edit::after,
   .row-delete::after,
   .list-grip::after,
@@ -395,7 +394,6 @@ button, a, input, select, textarea, [tabindex] { touch-action: manipulation; }
   .history-undo { position: relative; }
   .history-undo::after { inset: -10px -6px; }
   .check::after { inset: -10px; }
-  .note-chevron::after { inset: -10px; }
   .row-edit::after { inset: -5px; }
   .row-delete::after { inset: -5px; }
   .list-grip::after { inset: -11px; }
@@ -1458,35 +1456,11 @@ body.flipping .reminder-group { overflow: visible; }
   min-width: 0;
 }
 
-.note-wrap .reminder-notes { padding-right: 22px; }
-
-.note-chevron {
-  position: absolute;
-  top: -2px;
-  right: -4px;
-  width: 24px;
-  height: 24px;
-  padding: 0;
-  display: grid;
-  place-items: center;
-  border: 0;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--text-3);
-  opacity: 0.62;
-  cursor: pointer;
-  transition: opacity 0.15s, background 0.15s, color 0.15s;
+.note-wrap:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
 }
-
-.note-chevron .ic {
-  width: 14px;
-  height: 14px;
-  transform: rotate(90deg);
-  transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.note-chevron[aria-expanded="true"] .ic { transform: rotate(270deg); }
-.note-chevron:hover { opacity: 1; background: var(--fill); color: var(--text); }
 
 .reminder-links {
   display: flex;

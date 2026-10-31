@@ -2717,23 +2717,24 @@ function noteForId(id) {
   return fallback;
 }
 
-function setNoteMeta(row) {
-  const id = row.dataset.reminderId;
-  const expandable = row.classList.contains('has-long-note');
-  const expanded = expandedNoteId === id;
-  const chevron = row.querySelector('.note-chevron');
-  if (!chevron) return;
-  const title = row.querySelector('.reminder-title')?.textContent || 'item';
-  chevron.hidden = !expandable;
-  chevron.setAttribute('aria-expanded', expanded ? 'true' : 'false');
-  chevron.setAttribute('aria-label', `${expanded ? 'Collapse' : 'Show full'} note for ${title}`);
-  chevron.title = expanded ? 'Collapse note' : 'Show full note';
-}
-
-function syncNoteChevrons() {
-  for (const row of $$('.reminder')) {
-    if (row.querySelector('.reminder-notes')) setNoteMeta(row);
+function syncNoteToggleMeta(row, expandable) {
+  const wrap = row.querySelector('.note-wrap');
+  if (!wrap) return;
+  if (!expandable) {
+    wrap.removeAttribute('tabindex');
+    wrap.removeAttribute('role');
+    wrap.removeAttribute('aria-expanded');
+    wrap.removeAttribute('aria-label');
+    wrap.removeAttribute('title');
+    return;
   }
+  const expanded = expandedNoteId === row.dataset.reminderId;
+  const title = row.querySelector('.reminder-title')?.textContent || 'item';
+  wrap.tabIndex = 0;
+  wrap.setAttribute('role', 'button');
+  wrap.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+  wrap.setAttribute('aria-label', `${expanded ? 'Collapse' : 'Show full'} note for ${title}`);
+  wrap.title = expanded ? 'Collapse note' : 'Show full note';
 }
 
 function ensureNoteRowVisible(row) {
@@ -2784,8 +2785,11 @@ function animateNote(note, expand, onDone) {
 function collapseExpandedNote() {
   if (!expandedNoteId) return;
   const found = noteForId(expandedNoteId);
-  if (found) animateNote(found.note, false);
   expandedNoteId = null;
+  if (found) {
+    animateNote(found.note, false);
+    syncNoteToggleMeta(found.row, found.row.classList.contains('has-long-note'));
+  }
 }
 
 function toggleNoteForRow(row, note) {
@@ -2798,12 +2802,7 @@ function toggleNoteForRow(row, note) {
     expandedNoteId = id;
     animateNote(note, true);
   }
-  syncNoteChevrons();
-}
-
-function handleNoteChevron(row, note) {
-  if (row.classList.contains('swipe-open')) resetSwipe(row);
-  toggleNoteForRow(row, note);
+  syncNoteToggleMeta(row, row.classList.contains('has-long-note'));
 }
 
 function syncNoteExpanders() {
@@ -2820,10 +2819,10 @@ function syncNoteExpanders() {
     }
     const expandable = expanded || note.scrollHeight > note.clientHeight + 1;
     row.classList.toggle('has-long-note', expandable);
+    syncNoteToggleMeta(row, expandable);
     if (expandable && expanded) expandedSeen = true;
   }
   if (expandedNoteId && !expandedSeen) expandedNoteId = null;
-  syncNoteChevrons();
 }
 
 function reminderRow(reminder, options = {}) {
@@ -2909,20 +2908,17 @@ function reminderRow(reminder, options = {}) {
         class: 'reminder-notes' + (expanded ? ' is-expanded' : ''),
         text: parts.text,
       });
-      const chevron = el('button', {
-        type: 'button',
-        class: 'note-chevron',
-        hidden: true,
-        'aria-expanded': 'false',
-        'aria-label': `Show full note for ${reminder.title}`,
-        title: 'Show full note',
-        html: ICON('chevron', 'ic'),
-        onclick: (event) => {
-          event.stopPropagation();
-          handleNoteChevron(note.closest('.reminder'), note);
+      body.append(el('div', {
+        class: 'note-wrap',
+        onkeydown: (event) => {
+          if (event.repeat) return;
+          if (event.key !== 'Enter' && event.key !== ' ') return;
+          const row = note.closest('.reminder');
+          if (!row || !row.classList.contains('has-long-note')) return;
+          event.preventDefault();
+          toggleNoteForRow(row, note);
         },
-      });
-      body.append(el('div', { class: 'note-wrap' }, [note, chevron]));
+      }, [note]));
     }
     if (parts.links.length) {
       const links = el('div', { class: 'reminder-links' });
