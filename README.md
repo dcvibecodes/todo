@@ -2,6 +2,11 @@
 
 A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due dates, urgent flags, recurring reminders, natural-language quick add, smart lists, floating time zones, a token API for external agents, completed history, dark mode, and web push. No frontend framework and no build step.
 
+## What's New in v2.10.9
+
+- **A clearer completion control** - the empty ring now carries a faint check at rest, so it reads as a checkbox rather than a radio button. Hover/focus tints the ring and check with the list colour and adds a light wash; completing fills the circle, shows the full check, pops it gently with a short ring pulse, then strikes the title. The 24px control and 44px touch target are unchanged.
+- Service worker cache bumped to `todo-v2.10.9`.
+
 ## What's New in v2.10.8
 
 - **Closing a swipe follows your finger** - after swiping left to reveal Delete, dragging right now slides the row back under the finger at the same pace instead of snapping shut on the first few pixels. Releasing before the close threshold returns it open; releasing past it closes it with the same 0.18s ease as opening. A parked row can still be closed with a tap.

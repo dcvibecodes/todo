@@ -1077,16 +1077,31 @@ body.list-dragging .list-grip { cursor: grabbing; }
   height: 24px;
   margin-top: 1px;
   padding: 0;
-  border: 1.6px solid var(--text-3);
+  border: 1.5px solid var(--text-3);
   border-radius: 50%;
   background: transparent;
-  color: var(--accent-contrast);
+  color: var(--text-3);
   display: grid;
   place-items: center;
-  transition: all 0.15s;
+  transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.15s;
 }
 
-.reminder:hover .check { border-color: var(--c); }
+.check .ic {
+  width: 13px;
+  height: 13px;
+  opacity: 0.24;
+  transition: opacity 0.15s;
+}
+
+.reminder:hover .check,
+.check:focus-visible {
+  border-color: var(--c);
+  background: color-mix(in srgb, var(--c) 10%, transparent);
+  color: var(--c);
+}
+
+.reminder:hover .check .ic,
+.check:focus-visible .ic { opacity: 0.55; }
 
 .row-tools {
   display: flex;
@@ -1200,8 +1215,11 @@ body.list-dragging .list-grip { cursor: grabbing; }
   .row-delete { display: none; }
 }
 
-.check .ic { width: 13px; height: 13px; opacity: 0; }
-.reminder.done .check { background: var(--c); border-color: var(--c); }
+.reminder.done .check {
+  background: var(--c);
+  border-color: var(--c);
+  color: var(--accent-contrast);
+}
 .reminder.done .check .ic { opacity: 1; }
 .reminder.done .reminder-title { text-decoration: line-through; color: var(--text-3); }
 
@@ -2749,7 +2767,11 @@ body.sheet-open .sidebar {
 
 /* New rows ease into place; completing a row fills its check immediately
    (the request fires at the same time - nothing waits on the animation). */
-.reminder.completing .check { background: var(--c); border-color: var(--c); }
+.reminder.completing .check {
+  background: var(--c);
+  border-color: var(--c);
+  color: var(--accent-contrast);
+}
 .reminder.completing .check .ic { opacity: 1; }
 .reminder.completing .reminder-title { text-decoration: line-through; color: var(--text-3); }
 
@@ -2761,6 +2783,21 @@ body.sheet-open .sidebar {
   .reminder.completing .check {
     animation: check-pop 0.18s ease-out;
   }
+
+  .reminder.completing .check::before {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    border-radius: 50%;
+    border: 1.5px solid var(--c);
+    pointer-events: none;
+    animation: check-halo 0.32s ease-out;
+  }
+}
+
+@keyframes check-halo {
+  from { opacity: 0.65; transform: scale(0.9); }
+  to { opacity: 0; transform: scale(1.5); }
 }
 
 @keyframes row-enter {
