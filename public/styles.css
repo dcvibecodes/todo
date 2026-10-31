@@ -959,15 +959,34 @@ body.list-dragging .list-grip { cursor: grabbing; }
 .sort-control select {
   width: auto;
   max-width: 150px;
-  min-height: 40px;
+  height: var(--control-height);
+  min-height: var(--control-height);
   border: 0;
   background: transparent;
   color: var(--text-2);
   font-size: 0.75rem;
-  padding: 0 2px;
+  line-height: var(--control-height);
+  padding: 0 14px 0 2px;
+  -webkit-appearance: none;
+  appearance: none;
 }
 
 .sort-control select:focus { outline: none; color: var(--text); }
+
+.sort-select-control { position: relative; }
+
+.sort-select-control::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  width: 7px;
+  height: 7px;
+  border-right: 1.5px solid var(--text-2);
+  border-bottom: 1.5px solid var(--text-2);
+  transform: translateY(-65%) rotate(45deg);
+  pointer-events: none;
+}
 
 /* Completed filter: a compact check + count at the far right of the sort bar. */
 .sort-completed-filter {
@@ -2708,14 +2727,17 @@ body.sheet-open .sidebar {
   }
 
   .sort-control {
-    gap: 2px;
+    gap: 4px;
     min-width: 0;
   }
 
   .sort-control select {
+    height: var(--control-height-touch);
+    min-height: var(--control-height-touch);
     max-width: 130px;
     min-width: 0;
     font-size: 0.71875rem;
+    line-height: var(--control-height-touch);
   }
 
   .main-search .search-ic { left: 10px; width: 16px; height: 16px; }
