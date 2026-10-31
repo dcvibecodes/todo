@@ -105,6 +105,14 @@
 
 * { box-sizing: border-box; }
 
+::view-transition-old(root),
+::view-transition-new(root) { animation-duration: 180ms; }
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) { animation-duration: 0s; }
+}
+
 html, body {
   height: 100%;
   margin: 0;
@@ -561,6 +569,13 @@ button, a, input, select, textarea, [tabindex] { touch-action: manipulation; }
 
 @media (prefers-reduced-motion: reduce) {
   .day-cell { transition: none; }
+  .badge.value-pop,
+  .view-count.value-pop,
+  .day-indicator.value-pop,
+  .day-strip.rolling .day-cell,
+  .empty { animation: none; }
+  .list-progress-fill,
+  .list-ring { transition: none; }
 }
 
 .nav { display: flex; flex-direction: column; gap: 1px; }
@@ -696,6 +711,7 @@ button, a, input, select, textarea, [tabindex] { touch-action: manipulation; }
   height: 100%;
   border-radius: 2px;
   background: var(--c);
+  transition: width 0.28s ease;
 }
 
 .list-progress-counts {
@@ -706,8 +722,15 @@ button, a, input, select, textarea, [tabindex] { touch-action: manipulation; }
   font-variant-numeric: tabular-nums;
 }
 
+@property --p {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0;
+}
+
 .list-ring {
   position: relative;
+  transition: --p 0.28s ease;
   flex: none;
   width: 22px;
   height: 22px;
@@ -991,6 +1014,37 @@ body.list-dragging .list-grip { cursor: grabbing; }
 .sheet-card::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
 .content::-webkit-scrollbar-thumb:hover,
 .sheet-card::-webkit-scrollbar-thumb:hover { background: var(--text-3); }
+
+/* ---------- Motion shared ---------- */
+
+body.flipping .reminder-group { overflow: visible; }
+
+.completed-section { display: flow-root; }
+
+.flip-moving { position: relative; z-index: 2; }
+
+@keyframes value-pop {
+  from { opacity: 0.35; transform: translateY(-2px); }
+  to { opacity: 1; transform: none; }
+}
+
+.badge.value-pop,
+.view-count.value-pop,
+.day-indicator.value-pop { animation: value-pop 0.22s ease-out; }
+
+@keyframes day-cell-roll {
+  from { opacity: 0.25; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+
+.day-strip.rolling .day-cell { animation: day-cell-roll 0.24s ease-out both; }
+
+@keyframes empty-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+
+.empty { animation: empty-in 0.22s ease-out; }
 
 /* ---------- Reminders ---------- */
 
@@ -1974,6 +2028,7 @@ body.sheet-open .sidebar {
   gap: 10px;
   font-size: 0.8125rem;
   color: var(--text-2);
+  transition: opacity 0.15s ease, background 0.15s ease;
 }
 
 .history-status { font-weight: 600; min-width: 74px; }
@@ -2186,6 +2241,7 @@ body.sheet-open .sidebar {
   flex-wrap: wrap;
   gap: 8px 10px;
   font-size: 0.8125rem;
+  transition: opacity 0.18s ease, transform 0.18s ease;
 }
 
 .token-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 550; }
@@ -2297,6 +2353,7 @@ body.sheet-open .sidebar {
 .account-menu {
   position: fixed;
   top: calc(62px + env(safe-area-inset-top));
+  transform-origin: top right;
   right: 12px;
   z-index: 70;
   min-width: 210px;

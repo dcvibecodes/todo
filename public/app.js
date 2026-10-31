@@ -195,10 +195,33 @@ async function syncListProgressWithServer() {
   }
 }
 
-function applyDensity() {
-  const density = localStorage.getItem(DENSITY_KEY) === 'compact' ? 'compact' : 'comfortable';
-  document.documentElement.dataset.density = density;
-  return density;
+let activeViewTransition = null;
+
+function runViewTransition(update) {
+  if (MOTION_REDUCED.matches || typeof document.startViewTransition !== 'function' || activeViewTransition) {
+    update();
+    return;
+  }
+  try {
+    const transition = document.startViewTransition(update);
+    activeViewTransition = transition;
+    transition.ready.catch(() => {});
+    transition.finished.catch(() => {}).finally(() => {
+      if (activeViewTransition === transition) activeViewTransition = null;
+    });
+  } catch {
+    update();
+  }
+}
+
+function applyDensity(animate = false) {
+  const update = () => {
+    const density = localStorage.getItem(DENSITY_KEY) === 'compact' ? 'compact' : 'comfortable';
+    document.documentElement.dataset.density = density;
+  };
+  if (animate) runViewTransition(update);
+  else update();
+  return localStorage.getItem(DENSITY_KEY) === 'compact' ? 'compact' : 'comfortable';
 }
 
 function updateBadge() {
@@ -377,26 +400,50 @@ async function api(path, options = {}) {
 }
 
 let toastTimer = null;
+
+function hideToast(instant = false) {
+  const node = $('#toast');
+  if (!node || node.hidden) return;
+  clearTimeout(toastTimer);
+  node.getAnimations().forEach((animation) => animation.cancel());
+  if (instant || MOTION_REDUCED.matches) {
+    node.hidden = true;
+    return;
+  }
+  const anim = node.animate(
+    [{ opacity: 1, transform: 'translate(-50%, 0)' }, { opacity: 0, transform: 'translate(-50%, 6px)' }],
+    { duration: 150, easing: 'ease-out' },
+  );
+  anim.onfinish = () => { node.hidden = true; };
+}
+
 function toast(message, actionLabel, action) {
   const node = $('#toast');
+  clearTimeout(toastTimer);
+  node.getAnimations().forEach((animation) => animation.cancel());
   node.replaceChildren(el('span', { text: message }));
   if (actionLabel && action) {
     const button = el('button', { type: 'button', class: 'toast-action', text: actionLabel });
     button.addEventListener('click', () => {
-      node.hidden = true;
-      clearTimeout(toastTimer);
+      hideToast(true);
       action();
     });
     node.append(button);
   }
   node.hidden = false;
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { node.hidden = true; }, action ? 10000 : 3200);
+  toastTimer = setTimeout(() => hideToast(), action ? 10000 : 3200);
 }
 
 function showFieldError(input, messageNode, message) {
   messageNode.textContent = message;
   messageNode.hidden = false;
+  if (!MOTION_REDUCED.matches) {
+    messageNode.getAnimations().forEach((animation) => animation.cancel());
+    messageNode.animate(
+      [{ opacity: 0, transform: 'translateY(-2px)' }, { opacity: 1, transform: 'none' }],
+      { duration: 160, easing: 'ease-out' },
+    );
+  }
   input.setAttribute('aria-invalid', 'true');
   input.focus();
 }
@@ -588,6 +635,15 @@ function showApp() {
   $('#auth').hidden = true;
   $('#shell').hidden = false;
   route();
+  if (!MOTION_REDUCED.matches) {
+    [$('#content'), $('#lists')].forEach((node) => {
+      if (!node) return;
+      node.animate(
+        [{ opacity: 0.35 }, { opacity: 1 }],
+        { duration: 200, easing: 'ease-out' },
+      );
+    });
+  }
 }
 
 /* Skeletons: placeholder rows shaped like the real list, shown only while
@@ -692,6 +748,7 @@ async function refreshState() {
    itself is never transformed, so sticky headers and scrolling stay intact. */
 
 const PULL_MEDIA = window.matchMedia('(max-width: 899px) and (pointer: coarse)');
+const MOTION_REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)');
 const PULL_THRESHOLD = 56;
 const PULL_MAX = 90;
 const PULL_RESISTANCE = 0.7;
@@ -928,6 +985,7 @@ function setShowCompleted(listId, value) {
 
 function route() {
   const view = parseRoute();
+  const previousView = state.view;
   // Search is global now, so navigating to a list or smart view leaves the
   // results behind unless the search itself caused the jump to All.
   if (state.search && view !== state.view) {
@@ -950,6 +1008,15 @@ function route() {
   state.view = view;
   document.body.dataset.screen = view === 'home' ? 'home' : 'detail';
   render();
+  if (previousView !== view && view !== 'home' && !state.search && !MOTION_REDUCED.matches) {
+    const content = $('#content');
+    if (content) {
+      content.animate(
+        [{ opacity: 0.55, transform: 'translateY(4px)' }, { opacity: 1, transform: 'none' }],
+        { duration: 180, easing: 'ease-out' },
+      );
+    }
+  }
   if (searching) {
     // The old screen (and its search box) may now be hidden; keep focus on a
     // visible search box so the keyboard stays up.
@@ -1255,10 +1322,126 @@ function findReminder(id) {
     || null;
 }
 
+function pulseValue(node) {
+  if (!node || MOTION_REDUCED.matches) return;
+  node.classList.remove('value-pop');
+  void node.offsetWidth;
+  node.classList.add('value-pop');
+}
+
+function setPulseText(node, text) {
+  if (!node) return;
+  const value = String(text == null ? '' : text);
+  if (node.textContent === value) return;
+  node.textContent = value;
+  pulseValue(node);
+}
+
+let animateNextRender = false;
+let animateNextSidebar = false;
+let flipWindowTimer = null;
+
+function requestRowAnimation() { animateNextRender = true; }
+function requestListAnimation() { animateNextSidebar = true; }
+
+function beginFlipWindow() {
+  if (MOTION_REDUCED.matches) return;
+  document.body.classList.add('flipping');
+  clearTimeout(flipWindowTimer);
+  flipWindowTimer = setTimeout(() => document.body.classList.remove('flipping'), 340);
+}
+
+function captureRects(selector, key) {
+  const map = new Map();
+  for (const node of $$(selector)) {
+    if (!node.offsetParent) continue;
+    const id = key(node);
+    if (!id) continue;
+    const rect = node.getBoundingClientRect();
+    if (rect.width < 2 || rect.height < 2) continue;
+    if (rect.bottom < -240 || rect.top > window.innerHeight + 240) continue;
+    map.set(id, rect);
+  }
+  return map;
+}
+
+function animateRowRects(before) {
+  if (!before || !before.size || MOTION_REDUCED.matches) return;
+  let animated = false;
+  for (const node of $$('#content .reminder[data-reminder-id]')) {
+    if (!node.offsetParent) continue;
+    const id = node.dataset.reminderId;
+    const prev = before.get(id);
+    if (!prev) {
+      if (node.classList.contains('entering')) continue;
+      const rect = node.getBoundingClientRect();
+      if (rect.bottom < 0 || rect.top > window.innerHeight) continue;
+      node.animate(
+        [{ opacity: 0, transform: 'translateY(6px)' }, { opacity: 1, transform: 'none' }],
+        { duration: 180, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' },
+      );
+      animated = true;
+      continue;
+    }
+    const rect = node.getBoundingClientRect();
+    const dx = prev.left - rect.left;
+    const dy = prev.top - rect.top;
+    if (Math.abs(dx) < 1 && Math.abs(dy) < 1) continue;
+    if (Math.abs(dy) > window.innerHeight * 1.25 || Math.abs(dx) > window.innerWidth) continue;
+    node.classList.add('flip-moving');
+    const anim = node.animate(
+      [{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'none' }],
+      { duration: 220, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' },
+    );
+    const cleanup = () => node.classList.remove('flip-moving');
+    anim.onfinish = cleanup;
+    anim.oncancel = cleanup;
+    animated = true;
+  }
+  if (animated) beginFlipWindow();
+}
+
+function animateListRects(before) {
+  if (!before || !before.size || MOTION_REDUCED.matches) return;
+  let animated = false;
+  for (const node of $$('#lists .list-row[data-list-id]')) {
+    const id = node.dataset.listId;
+    if (!id) continue;
+    const prev = before.get(id);
+    if (!prev) {
+      node.animate(
+        [{ opacity: 0, transform: 'translateY(5px)' }, { opacity: 1, transform: 'none' }],
+        { duration: 180, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' },
+      );
+      animated = true;
+      continue;
+    }
+    const rect = node.getBoundingClientRect();
+    const dx = prev.left - rect.left;
+    const dy = prev.top - rect.top;
+    if (Math.abs(dx) < 1 && Math.abs(dy) < 1) continue;
+    node.classList.add('flip-moving');
+    const anim = node.animate(
+      [{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'none' }],
+      { duration: 220, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' },
+    );
+    const cleanup = () => node.classList.remove('flip-moving');
+    anim.onfinish = cleanup;
+    anim.oncancel = cleanup;
+    animated = true;
+  }
+  if (animated) beginFlipWindow();
+}
+
 function render() {
+  const flip = animateNextRender
+    ? captureRects('#content .reminder[data-reminder-id]', (node) => node.dataset.reminderId)
+    : null;
+  animateNextRender = false;
   renderSidebar();
   renderMain();
   updateBadge();
+  if (flip) animateRowRects(flip);
   state.justAddedId = null;
 }
 
@@ -1280,14 +1463,41 @@ function syncMenuButtons() {
 function toggleAccountMenu() {
   const menu = getAccountMenu();
   if (!menu) return;
-  menu.hidden = !menu.hidden;
+  if (menu.hidden) {
+    menu.getAnimations().forEach((animation) => animation.cancel());
+    menu.hidden = false;
+    if (!MOTION_REDUCED.matches) {
+      menu.animate(
+        [{ opacity: 0, transform: 'translateY(-4px) scale(0.98)' }, { opacity: 1, transform: 'none' }],
+        { duration: 160, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' },
+      );
+    }
+  } else {
+    closeAccountMenu();
+    return;
+  }
   syncMenuButtons();
 }
 
 function closeAccountMenu() {
   const menu = getAccountMenu();
-  if (menu) menu.hidden = true;
+  if (!menu || menu.hidden) return;
+  menu.getAnimations().forEach((animation) => animation.cancel());
   syncMenuButtons();
+  if (MOTION_REDUCED.matches) {
+    menu.hidden = true;
+    return;
+  }
+  const anim = menu.animate(
+    [{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'translateY(-4px) scale(0.98)' }],
+    { duration: 130, easing: 'ease-out' },
+  );
+  anim.onfinish = () => {
+    menu.hidden = true;
+    menu.style.transform = '';
+    menu.style.opacity = '';
+    syncMenuButtons();
+  };
 }
 
 function handleMenuButton() {
@@ -1378,6 +1588,7 @@ function startListDrag(event, list, row, grip) {
     if (!changed) return;
 
     state.lists = ids.map((id) => state.lists.find((item) => item.id === id));
+    requestListAnimation();
     renderSidebar();
     persistListOrder(ids);
   };
@@ -1417,6 +1628,7 @@ function moveListKeyboard(listId, direction) {
   const [moved] = ids.splice(from, 1);
   ids.splice(to, 0, moved);
   state.lists = ids.map((id) => state.lists.find((item) => item.id === id));
+  requestListAnimation();
   renderSidebar();
   persistListOrder(ids);
   const list = listById(listId);
@@ -1574,7 +1786,8 @@ function updateDayStrip() {
   }
   const dates = dayPeekDates();
   const signature = dates.map((date) => localDateValue(date)).join('|');
-  if (strip.dataset.days !== signature) {
+  const previousDays = strip.dataset.days;
+  if (previousDays !== signature) {
     strip.dataset.days = signature;
     strip.replaceChildren();
     for (const date of dates) {
@@ -1593,6 +1806,10 @@ function updateDayStrip() {
       cell.addEventListener('click', () => toggleDayPeek(key));
       strip.append(cell);
     }
+    if (previousDays && !MOTION_REDUCED.matches) {
+      strip.classList.add('rolling');
+      setTimeout(() => strip.classList.remove('rolling'), 300);
+    }
   }
   const counts = dayPeekCounts();
   for (const cell of $$('#day-strip .day-cell')) {
@@ -1600,9 +1817,13 @@ function updateDayStrip() {
     const count = counts.get(key) || 0;
     const countText = String(count);
     if (cell.dataset.count !== countText) {
+      const hadCount = cell.dataset.count !== undefined;
       cell.dataset.count = countText;
       const indicator = cell.querySelector('.day-indicator');
-      if (indicator) fillDayIndicator(indicator, count);
+      if (indicator) {
+        fillDayIndicator(indicator, count);
+        if (hadCount) pulseValue(indicator);
+      }
     }
     const isToday = dayKeyDiff(key) === 0;
     const isSelected = dayPeekOpen && key === dayPeekSelected;
@@ -1798,6 +2019,10 @@ function initDayPeek() {
 
 function renderSidebar() {
   updateDayStrip();
+  const listFlip = animateNextSidebar
+    ? captureRects('#lists .list-row[data-list-id]', (node) => node.dataset.listId)
+    : null;
+  animateNextSidebar = false;
   const todayLimit = endOfToday();
   const incomplete = incompleteReminders();
   const todayCount = incomplete
@@ -1822,6 +2047,11 @@ function renderSidebar() {
       el('span', { class: 'badge-overdue', text: `${overdueCount} overdue` }),
     );
   }
+  const todaySignature = todayBadge.textContent;
+  if (todayBadge.dataset.signature !== undefined && todayBadge.dataset.signature !== todaySignature) {
+    pulseValue(todayBadge);
+  }
+  todayBadge.dataset.signature = todaySignature;
   const todayRow = $('#smart-nav .nav-row[data-view="today"]');
   if (todayRow) {
     const itemWord = todayCount === 1 ? 'item' : 'items';
@@ -1829,9 +2059,9 @@ function renderSidebar() {
       ? `Today, ${todayCount} ${itemWord}${overdueCount ? `, ${overdueCount} overdue` : ''}`
       : 'Today, nothing due');
   }
-  $('#count-scheduled').textContent = scheduledCount ? String(scheduledCount) : '';
-  $('#count-all').textContent = allCount ? String(allCount) : '';
-  $('#count-flagged').textContent = flaggedCount ? String(flaggedCount) : '';
+  setPulseText($('#count-scheduled'), scheduledCount ? String(scheduledCount) : '');
+  setPulseText($('#count-all'), allCount ? String(allCount) : '');
+  setPulseText($('#count-flagged'), flaggedCount ? String(flaggedCount) : '');
 
   $$('#smart-nav .nav-row').forEach((row) => {
     row.classList.toggle('active', row.dataset.view === state.view);
@@ -1916,6 +2146,7 @@ function renderSidebar() {
   }
 
   $('#notifications-label').textContent = state.subscription ? 'Notifications On' : 'Notifications';
+  if (listFlip) animateListRects(listFlip);
   renderDayPeek();
 }
 
@@ -1924,7 +2155,7 @@ function renderSearchResults(content) {
   $('#view-title').textContent = 'Search';
   const totals = state.searchTotals || { open: 0, completed: 0 };
   const total = totals.open + totals.completed;
-  $('#view-count').textContent = total ? String(total) : '';
+  setPulseText($('#view-count'), total ? String(total) : '');
   $('#view-menu').hidden = true;
 
   const open = sortItems(state.searchOpen || [], effectiveSort(state.view));
@@ -2039,7 +2270,7 @@ function renderMain() {
   const shownCount = typeof view === 'number'
     ? items.length + (state.showCompleted && !state.search ? completed.length : 0)
     : items.length;
-  $('#view-count').textContent = shownCount ? String(shownCount) : '';
+  setPulseText($('#view-count'), shownCount ? String(shownCount) : '');
   if (typeof view === 'number') {
     $('#view-menu').hidden = false;
     $('#view-menu').onclick = () => openListSheet(list);
@@ -2062,10 +2293,12 @@ function renderMain() {
   }
 
   if (isList && state.showCompleted && completed.length) {
-    content.append(el('h3', { class: 'group-title', text: 'Completed' }));
     const group = el('div', { class: 'reminder-group' });
     for (const reminder of completed) group.append(reminderRow(reminder));
-    content.append(group);
+    content.append(el('div', { class: 'completed-section' }, [
+      el('h3', { class: 'group-title', text: 'Completed' }),
+      group,
+    ]));
   }
 
   if (!state.lists.length) {
@@ -2287,6 +2520,7 @@ async function snoozeRow(reminder, hours = 1) {
       body: { hours },
     });
     await loadState();
+    requestRowAnimation();
     render();
     toast(`Snoozed until ${new Date(result.snoozedUntil).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}`);
   } catch (err) {
@@ -2298,6 +2532,7 @@ async function skipToNext(reminder) {
   try {
     const result = await api('/api/reminders/' + reminder.id + '/skip', { method: 'POST' });
     await loadState();
+    requestRowAnimation();
     render();
     const next = new Date(result.nextDue);
     toast(`Snoozed until next occurrence: ${next.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}`);
@@ -2313,6 +2548,7 @@ async function rescheduleRow(reminder, date) {
       body: { date },
     });
     await loadState();
+    requestRowAnimation();
     render();
     toast(date === 'today' ? 'Due today' : 'Due tomorrow');
   } catch (err) {
@@ -2664,6 +2900,7 @@ function deleteReminderInline(reminder, row) {
     try {
       await api('/api/reminders/' + reminder.id, { method: 'DELETE' });
       await loadState();
+      requestRowAnimation();
       render();
       toast('Item deleted');
     } catch (err) {
@@ -2701,6 +2938,7 @@ async function toggleCompleted(reminder, row) {
       body: { completed: !reminder.completed },
     });
     await loadState();
+    requestRowAnimation();
     render();
     if (result && result.advanced && result.nextDue) {
       const next = new Date(result.nextDue);
@@ -2718,6 +2956,48 @@ async function toggleCompleted(reminder, row) {
 
 /* ---------------- Editor ---------------- */
 
+function revealRow(node, visible) {
+  if (!node) return;
+  node.getAnimations().forEach((animation) => animation.cancel());
+  node.style.overflow = '';
+  node.style.height = '';
+  const currentlyVisible = !node.hidden;
+  if (currentlyVisible === visible) {
+    node.hidden = !visible;
+    return;
+  }
+  if (visible) {
+    node.hidden = false;
+    if (MOTION_REDUCED.matches || !node.offsetParent) return;
+    const height = node.offsetHeight;
+    node.style.overflow = 'hidden';
+    const anim = node.animate(
+      [{ height: '0px', opacity: 0 }, { height: `${height}px`, opacity: 1 }],
+      { duration: 180, easing: 'ease-out' },
+    );
+    anim.onfinish = () => {
+      node.style.overflow = '';
+      node.style.height = '';
+    };
+    return;
+  }
+  if (MOTION_REDUCED.matches || !node.offsetParent) {
+    node.hidden = true;
+    return;
+  }
+  const height = node.offsetHeight;
+  node.style.overflow = 'hidden';
+  const anim = node.animate(
+    [{ height: `${height}px`, opacity: 1 }, { height: '0px', opacity: 0 }],
+    { duration: 150, easing: 'ease-out' },
+  );
+  anim.onfinish = () => {
+    node.hidden = true;
+    node.style.overflow = '';
+    node.style.height = '';
+  };
+}
+
 function syncDateTimeRows() {
   if ($('#e-time-on').checked) $('#e-date-on').checked = true;
   if (!$('#e-date-on').checked) $('#e-time-on').checked = false;
@@ -2725,8 +3005,8 @@ function syncDateTimeRows() {
   if ($('#e-time-on').checked && !$('#e-time').value) {
     $('#e-time').value = (state.settings && state.settings.default_time) || '09:00';
   }
-  $('#e-date-row').hidden = !$('#e-date-on').checked;
-  $('#e-time-row').hidden = !$('#e-time-on').checked;
+  revealRow($('#e-date-row'), $('#e-date-on').checked);
+  revealRow($('#e-time-row'), $('#e-time-on').checked);
   syncModelRows();
 }
 
@@ -2747,14 +3027,14 @@ function setScope(scope) {
 
 function syncRepeatRows() {
   const value = $('#e-repeat').value;
-  $('#e-repeat-custom').hidden = value !== 'custom';
+  revealRow($('#e-repeat-custom'), value === 'custom');
   $('#e-repeat-value').textContent = value === 'custom'
     ? `Every ${Math.max(1, Number($('#e-repeat-interval').value) || 1)} ${$('#e-repeat-unit').value}`
     : repeatLabel({ type: value, interval: 1 });
   const editing = Boolean(state.editingId);
   const recurring = value !== 'none';
-  $('#completed-row').hidden = !editing || recurring;
-  $('#series-section').hidden = !editing || !recurring;
+  revealRow($('#completed-row'), editing && !recurring);
+  revealRow($('#series-section'), editing && recurring);
 }
 
 function syncRecordRows() {
@@ -2762,12 +3042,12 @@ function syncRecordRows() {
     ? findReminder(state.editingId)
     : null;
   const added = reminder ? formatRecordDate(reminder.created_at) : '';
-  $('#e-added-row').hidden = !added;
+  revealRow($('#e-added-row'), Boolean(added));
   $('#e-added-value').textContent = added;
   const completed = reminder && reminder.completed && $('#e-completed').checked
     ? formatRecordDate(reminder.completed_at)
     : '';
-  $('#e-completed-date-row').hidden = !completed;
+  revealRow($('#e-completed-date-row'), Boolean(completed));
   $('#e-completed-value').textContent = completed;
 }
 
@@ -2813,8 +3093,8 @@ function syncModelRows() {
   // The time model only matters once a clock time exists; a date-only item
   // just asks for a date, so the choice stays out of the way.
   const timeOn = $('#e-time-on').checked;
-  $('#e-model-row').hidden = !timeOn;
-  $('#e-zone-row').hidden = !timeOn || model !== 'anchored';
+  revealRow($('#e-model-row'), timeOn);
+  revealRow($('#e-zone-row'), timeOn && model === 'anchored');
   const hint = $('#e-model-hint');
   if (!timeOn) {
     hint.hidden = true;
@@ -3396,6 +3676,7 @@ async function saveEditor(event) {
     await settleSubmit(startedAt);
     closeSheet('#editor');
     await loadState();
+    requestRowAnimation();
     render();
   } catch (err) {
     // Sheet stays open with the fields intact, so nothing typed is lost.
@@ -3554,6 +3835,7 @@ async function deleteReminder() {
     await api('/api/reminders/' + state.editingId, { method: 'DELETE' });
     closeSheet('#editor');
     await loadState();
+    requestRowAnimation();
     render();
   } catch (err) {
     toast(err.message);
@@ -3660,7 +3942,10 @@ async function saveList(event) {
     closeSheet('#list-sheet');
     await loadState();
     if (!system && !state.editingListId) go('list/' + created.id);
-    else render();
+    else {
+      requestListAnimation();
+      render();
+    }
   } catch (err) {
     toast(err.message);
   } finally {
@@ -3679,8 +3964,13 @@ async function deleteList() {
     await api('/api/lists/' + id, { method: 'DELETE' });
     closeSheet('#list-sheet');
     await loadState();
-    if (state.view === id) go('home');
-    else render();
+    if (state.view === id) {
+      requestListAnimation();
+      go('home');
+    } else {
+      requestListAnimation();
+      render();
+    }
   } catch (err) {
     toast(err.message);
   }
@@ -3825,11 +4115,25 @@ function syncSheetState() {
 // sheet with the same cancel semantics as Escape.
 let sheetPopGuard = false;
 
+const closingSheets = new WeakSet();
+
 function openSheet(selector) {
   if (!$$('.sheet').some((sheet) => !sheet.hidden)) {
     lastFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   }
-  $(selector).hidden = false;
+  const sheet = $(selector);
+  closingSheets.delete(sheet);
+  sheet.getAnimations().forEach((animation) => animation.cancel());
+  sheet.querySelectorAll('.sheet-card, .sheet-backdrop').forEach((node) => {
+    node.getAnimations().forEach((animation) => animation.cancel());
+  });
+  sheet.hidden = false;
+  if (!MOTION_REDUCED.matches) {
+    const backdrop = sheet.querySelector('.sheet-backdrop');
+    if (backdrop) {
+      backdrop.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 180, easing: 'ease-out' });
+    }
+  }
   try {
     const depth = (history.state && history.state.todoSheet || 0) + 1;
     history.pushState({ todoSheet: depth }, '', location.href);
@@ -3847,9 +4151,47 @@ function consumeSheetMarker() {
 }
 
 function closeSheet(selector) {
-  $(selector).hidden = true;
-  syncSheetState();
+  const sheet = $(selector);
+  if (!sheet || sheet.hidden || closingSheets.has(sheet)) {
+    if (sheet && sheet.hidden) {
+      consumeSheetMarker();
+      syncSheetState();
+    }
+    return;
+  }
+  closingSheets.add(sheet);
   consumeSheetMarker();
+  const finish = () => {
+    closingSheets.delete(sheet);
+    sheet.hidden = true;
+    sheet.style.transform = '';
+    sheet.style.opacity = '';
+    syncSheetState();
+  };
+  if (MOTION_REDUCED.matches) {
+    finish();
+    return;
+  }
+  sheet.getAnimations().forEach((animation) => animation.cancel());
+  const card = sheet.querySelector('.sheet-card');
+  const backdrop = sheet.querySelector('.sheet-backdrop');
+  if (backdrop) {
+    backdrop.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 150, easing: 'ease-out' });
+  }
+  let anim;
+  if (card) {
+    card.getAnimations().forEach((animation) => animation.cancel());
+    anim = card.animate(
+      [
+        { opacity: 1, transform: 'translateY(0) scale(1)' },
+        { opacity: 0.4, transform: 'translateY(10px) scale(0.99)' },
+      ],
+      { duration: 160, easing: 'ease-out' },
+    );
+  } else {
+    anim = sheet.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 150, easing: 'ease-out' });
+  }
+  anim.onfinish = finish;
 }
 
 // Close the topmost sheet without touching History — composed by the
@@ -3867,9 +4209,12 @@ function closeTopSheetInPlace() {
 }
 
 function closeTopSheet() {
-  const closed = closeTopSheetInPlace();
-  if (closed) consumeSheetMarker();
-  return closed;
+  const open = $$('.sheet').filter((sheet) => !sheet.hidden);
+  if (!open.length) return false;
+  const sheet = open[open.length - 1];
+  if (sheet.id === 'settings-sheet') revertSettingsPreview();
+  closeSheet('#' + sheet.id);
+  return true;
 }
 
 function focusableIn(sheet) {
@@ -4080,17 +4425,21 @@ const darkQuery = window.matchMedia('(prefers-color-scheme: dark)');
 let themePreference = localStorage.getItem(THEME_PREF_KEY) || 'auto';
 
 function applyTheme(pref, persist = true) {
-  themePreference = ['auto', 'light', 'dark'].includes(pref) ? pref : 'auto';
-  if (persist) localStorage.setItem(THEME_PREF_KEY, themePreference);
-  const dark = themePreference === 'dark' || (themePreference === 'auto' && darkQuery.matches);
-  document.documentElement.dataset.theme = dark ? 'dark' : 'light';
-  const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) meta.setAttribute('content', dark ? '#000000' : '#f5efe6');
-  $$('.theme-option-btn').forEach((btn) => {
-    const active = btn.dataset.themePref === themePreference;
-    btn.classList.toggle('active', active);
-    btn.setAttribute('aria-pressed', active ? 'true' : 'false');
-  });
+  const update = () => {
+    themePreference = ['auto', 'light', 'dark'].includes(pref) ? pref : 'auto';
+    if (persist) localStorage.setItem(THEME_PREF_KEY, themePreference);
+    const dark = themePreference === 'dark' || (themePreference === 'auto' && darkQuery.matches);
+    document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', dark ? '#000000' : '#f5efe6');
+    $$('.theme-option-btn').forEach((btn) => {
+      const active = btn.dataset.themePref === themePreference;
+      btn.classList.toggle('active', active);
+      btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+    });
+  };
+  if (persist) runViewTransition(update);
+  else update();
 }
 
 function renderDeviceZoneRow() {
@@ -4132,7 +4481,7 @@ function revertSettingsAppearance() {
   if (current.theme !== appearanceSnapshot.theme) applyTheme(appearanceSnapshot.theme);
   if (current.density !== appearanceSnapshot.density) {
     localStorage.setItem(DENSITY_KEY, appearanceSnapshot.density);
-    applyDensity();
+    applyDensity(true);
   }
   appearanceSnapshot = null;
 }
@@ -4516,7 +4865,7 @@ $('#settings-sheet').addEventListener('change', () => updateSettingsDirty());
 $('#set-density').addEventListener('change', () => {
   const density = $('#set-density').value === 'compact' ? 'compact' : 'comfortable';
   localStorage.setItem(DENSITY_KEY, density);
-  applyDensity();
+  applyDensity(true);
 });
 $('#set-list-progress').addEventListener('change', () => {
   previewListProgress($('#set-list-progress').value);
@@ -4707,20 +5056,63 @@ $('#sort-field').addEventListener('change', (event) => {
   const patch = { field };
   if (field === 'due') patch.dir = 'asc';
   setViewSort(state.view, patch);
+  requestRowAnimation();
   render();
 });
 $('#sort-dir').addEventListener('change', (event) => {
   setViewSort(state.view, { dir: event.target.value });
+  requestRowAnimation();
   render();
 });
 // Same outcome as the old "Show N Completed" link: reveal this list's
 // completed items and remember the choice per list (localStorage), so every
 // visit to that list restores it.
+let completedToggleToken = 0;
+
+function animateCompletedSectionOpen() {
+  const section = $('.completed-section');
+  if (!section || MOTION_REDUCED.matches) return;
+  section.getAnimations().forEach((animation) => animation.cancel());
+  const height = section.getBoundingClientRect().height;
+  section.style.overflow = 'hidden';
+  const anim = section.animate(
+    [{ height: '0px', opacity: 0 }, { height: `${height}px`, opacity: 1 }],
+    { duration: 220, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' },
+  );
+  anim.onfinish = () => {
+    section.style.overflow = '';
+    section.style.height = '';
+  };
+}
+
+function animateCompletedSectionClose(done) {
+  const section = $('.completed-section');
+  if (!section || MOTION_REDUCED.matches) { done(); return; }
+  section.getAnimations().forEach((animation) => animation.cancel());
+  const rect = section.getBoundingClientRect();
+  if (rect.bottom < 0 || rect.top > window.innerHeight) { done(); return; }
+  const height = rect.height;
+  section.style.overflow = 'hidden';
+  const anim = section.animate(
+    [{ height: `${height}px`, opacity: 1 }, { height: '0px', opacity: 0 }],
+    { duration: 180, easing: 'ease-out' },
+  );
+  anim.onfinish = done;
+}
+
 $('#sort-completed').addEventListener('change', (event) => {
   if (typeof state.view !== 'number') return;
+  const token = ++completedToggleToken;
   state.showCompleted = event.target.checked;
   setShowCompleted(state.view, state.showCompleted);
-  renderMain();
+  if (state.showCompleted) {
+    renderMain();
+    animateCompletedSectionOpen();
+    return;
+  }
+  animateCompletedSectionClose(() => {
+    if (token === completedToggleToken && $('.completed-section')) renderMain();
+  });
 });
 $('#set-sort-field').addEventListener('change', () => {
   if ($('#set-sort-field').value === 'due') $('#set-sort-dir').value = 'asc';
@@ -4743,9 +5135,7 @@ document.addEventListener('click', (event) => {
     const sheet = closer.closest('.sheet');
     if (sheet) {
       if (sheet.id === 'settings-sheet') revertSettingsPreview();
-      sheet.hidden = true;
-      syncSheetState();
-      consumeSheetMarker();
+      closeSheet('#' + sheet.id);
     }
   }
 });

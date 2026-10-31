@@ -2,6 +2,16 @@
 
 A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due dates, urgent flags, recurring reminders, natural-language quick add, smart lists, floating time zones, a token API for external agents, completed history, dark mode, and web push. No frontend framework and no build step.
 
+## What's New in v2.11.0
+
+- **Fluid motion across the app** - completing or un-completing a task now glides the row between Open and Completed (with the old gap closing), rather than disappearing and reappearing. Added rows settle in, deleted rows collapse, and a list emptied by the last item fades to its empty state.
+- **Sorting and date changes move the rows** - changing Sort/Order, rescheduling, snoozing, skipping or advancing a repeating item now slides rows to their new position/group instead of teleporting. Dragging or keyboard-moving a list settles it into its new order.
+- **Show Completed opens and closes** - the completed section expands and collapses with a height/opacity transition instead of swapping instantly.
+- **Navigation surfaces** - sheets keep their card visible during a short exit animation, the account menu fades/scales, toasts fade out, and list/view content fades in on navigation and after the initial skeleton.
+- **Micro feedback** - editor date/time/model/repeat/history rows expand and collapse, field errors slide in, nav and day-strip counts pulse, the seven-day strip rolls at midnight, and list progress bars/rings animate. Theme and density changes use a View Transition where supported.
+- **Reduced motion** still turns all of the above into instant state changes.
+- Service worker cache bumped to `todo-v2.11.0`.
+
 ## What's New in v2.10.10
 
 - **Completion ring stays empty at rest** - removed the faint tick inside the circle on incomplete items. The polished hover/focus ring and light list-colour wash remain, and a completed item still fills with its full-contrast check and the short completion halo.
