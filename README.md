@@ -2,6 +2,16 @@
 
 A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due dates, urgent flags, recurring reminders, natural-language quick add, smart lists, floating time zones, a token API for external agents, completed history, dark mode, and web push. No frontend framework and no build step.
 
+## What's New in v2.12.0
+
+- **Long-note collapse keeps your place** - after expanding a very long note and scrolling through it, collapsing now brings that same item back into view instead of leaving you on the later rows that were underneath. Expanded notes also keep their paragraph breaks instead of joining into one block.
+- **Rapid deletes work through the toast** - the "Item deleted" toast is now click-through (only an action button is tappable) and dismisses as soon as you start another row action, so confirming item 2 immediately after item 1 is not swallowed.
+- **Mobile list push/pop** - opening a list slides it in from the right over Home; Back (button or browser Back) slides it out to the right. Desktop keeps its instant navigation.
+- **Completed retention** - Settings → Completed items can keep completed items for 1 month, 3 months, 6 months, 1 year, or indefinitely (default). Shortening the window permanently deletes older completed one-off items and asks first; repeating-series history is kept. State, search, list counts, the Completed view and its empty copy all follow the chosen window.
+- **Show Completed is a switch** - the sort bar uses a proper toggle switch. Showing completed preserves your scroll position; hiding it collapses the section without jumping to the top, landing near the end of the active items.
+- **Bottom-sheet transitions on phones** - New Item, Edit Item, Settings, the list sheet and other sheets slide up from the bottom and slide back down on Save/Cancel/backdrop/Escape. Desktop keeps its centered modal.
+- Service worker cache bumped to `todo-v2.12.0`.
+
 ## What's New in v2.11.3
 
 - **Long notes open with a single tap** - removed the persistent selected row and its gray fill/accent bar. A tap or click on a long-note card now expands its note immediately; another tap collapses it. Tapping a different long-note card collapses the previous note and opens the new one. The existing hover highlight on desktop and press highlight on touch are the only row highlights. The chevron still toggles directly, short/no-note cards stay inert, and scrolling/swiping never expands.
@@ -394,9 +404,9 @@ A correctness release — no new screens, several bugs no longer possible.
 - Time models: floating wall-clock (default; follows the device's last-synced zone) or zone-anchored (with a styled Time zone picker in the editor). The choice appears once an item has a clock time; date-only items just take a date. Settings has a default model and default zone; changing them affects new reminders only, never existing ones.
 - Snooze (in-app button + notification actions where supported). Due rows group their actions under a clear **Snooze until** label: 1 hour, Today/Tomorrow, or Next occurrence for repeating reminders. Opt-in re-push with quiet hours.
 - Token API so external agents can list, add, and complete reminders without a browser.
-- Completed reminders remain visible for 30 days in the UI and `GET /api/state`; older records stay in SQLite and are still returned by `GET /api/reminders` (including the complete-snapshot mode). Per-list Show/Hide-completed choice is remembered.
+- Completed reminders follow Settings → Completed items: 1 month, 3 months, 6 months, 1 year, or indefinitely (default). Retention is permanent for completed one-off items; repeating-series occurrence history is kept. `GET /api/state` loads completed items within the chosen window, search is scoped to retained items, and the per-list Show Completed switch is remembered.
 - Deleting is inline (no browser dialogs): on touch, swipe any row left — including completed rows — to reveal the red Delete action (centered label), tap it once for “Confirm?”, tap again to delete; swipe right closes the reveal. On the web there is no swipe; hover the row and click the ×, then “Confirm?”. The card slides away when deleted.
-- Search across active reminders.
+- Search across active reminders and retained completed history.
 - Desktop uses a centered 60vw column (max 1100px) with one Home panel; reminders fill the column with a fixed FAB. There is no permanent sidebar.
 - Mobile home is a full-screen panel: search, Today/Scheduled/All/Flagged/Completed, My Lists, then the lists with drag/long-press reordering. The hamburger holds only Notifications, Settings, and Log out and stays at the same top-right position on Home and inside a list; back returns to the lists. Default time model on a phone is floating.
 - Installable PWA with web push notifications. iOS requires 16.4+ and the app installed to the Home Screen.

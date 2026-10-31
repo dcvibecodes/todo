@@ -251,8 +251,9 @@
           </select>
         </label>
         <label class="sort-control sort-toggle" id="sort-completed-wrap" hidden>
-          <input type="checkbox" id="sort-completed" aria-label="Show completed items">
           <span id="sort-completed-text">Completed</span>
+          <input type="checkbox" id="sort-completed" role="switch" aria-label="Show completed items">
+          <span class="sort-switch" aria-hidden="true"></span>
         </label>
       </div>
 
@@ -515,6 +516,20 @@
             </select>
           </label>
           <p class="notify-hint">Bar and ring compare each list's open items with its completed ones — all time, or the last 30 days. Previews instantly — Save to sync these choices to your other devices, Cancel to undo.</p>
+        </div>
+        <div class="settings-group">
+          <h3>Completed items</h3>
+          <label class="settings-row" for="set-completed-retention">
+            <span>Keep completed items</span>
+            <select id="set-completed-retention">
+              <option value="1m">1 month</option>
+              <option value="3m">3 months</option>
+              <option value="6m">6 months</option>
+              <option value="12m">1 year</option>
+              <option value="forever">Indefinitely</option>
+            </select>
+          </label>
+          <p class="notify-hint">Older completed items are permanently deleted. Repeating-series history is kept.</p>
         </div>
         <div class="settings-group">
           <h3>New items</h3>

@@ -972,22 +972,67 @@ body.list-dragging .list-grip { cursor: grabbing; }
 /* "Show completed" toggle: a compact checkbox that reads as part of the sort
    bar (same text size/colour as the Sort and Order labels). Disabled when the
    list has nothing completed — dimmed, never a layout jump. */
-.sort-toggle { cursor: pointer; }
+.sort-toggle {
+  position: relative;
+  gap: 8px;
+  cursor: pointer;
+}
 
 .sort-toggle input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
-  flex: none;
+  position: absolute;
+  right: 0;
+  width: 30px;
+  height: 18px;
   margin: 0;
+  opacity: 0;
   cursor: pointer;
-  accent-color: var(--accent);
 }
 
 .sort-toggle > span { color: var(--text-2); }
 
+.sort-switch {
+  position: relative;
+  flex: none;
+  width: 30px;
+  height: 18px;
+  border-radius: 999px;
+  background: var(--fill);
+  border: 1px solid var(--line);
+  pointer-events: none;
+  transition: background 0.18s ease, border-color 0.18s ease;
+}
+
+.sort-switch::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--text-2);
+  transition: transform 0.18s ease, background 0.18s ease;
+}
+
+.sort-toggle input:checked + .sort-switch {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.sort-toggle input:checked + .sort-switch::after {
+  transform: translateX(12px);
+  background: var(--accent-contrast);
+}
+
+.sort-toggle input:focus-visible + .sort-switch {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .sort-toggle.is-disabled { cursor: default; }
 .sort-toggle.is-disabled input[type="checkbox"],
-.sort-toggle.is-disabled > span { opacity: 0.45; }
+.sort-toggle.is-disabled > span,
+.sort-toggle.is-disabled .sort-switch { opacity: 0.45; }
 .sort-toggle.is-disabled input[type="checkbox"] { cursor: default; }
 
 .content {
@@ -1016,6 +1061,33 @@ body.list-dragging .list-grip { cursor: grabbing; }
 .sheet-card::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
 .content::-webkit-scrollbar-thumb:hover,
 .sheet-card::-webkit-scrollbar-thumb:hover { background: var(--text-3); }
+
+/* ---------- Mobile screen transition ---------- */
+
+.nav-snapshot {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--surface);
+  pointer-events: none;
+}
+
+.nav-snapshot.sidebar,
+.nav-snapshot.main { display: flex !important; }
+
+.nav-snapshot.sidebar {
+  width: 100%;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.nav-snapshot.sidebar::-webkit-scrollbar { display: none; }
+
+.main.nav-incoming { position: relative; z-index: 30; }
+
+body.nav-animating .shell { pointer-events: none; }
 
 /* ---------- Motion shared ---------- */
 
@@ -1352,6 +1424,7 @@ body.flipping .reminder-group { overflow: visible; }
   display: block;
   -webkit-line-clamp: unset;
   overflow: visible;
+  white-space: pre-line;
 }
 
 .note-wrap {
@@ -2372,9 +2445,11 @@ body.sheet-open .sidebar {
   display: flex;
   align-items: center;
   gap: 12px;
+  pointer-events: none;
 }
 
 .toast-action {
+  pointer-events: auto;
   border: 0;
   background: transparent;
   padding: 0;
@@ -2683,13 +2758,20 @@ body.sheet-open .sidebar {
     max-height: 92dvh;
     border-radius: var(--radius) var(--radius) 0 0;
     border-bottom: 0;
-    animation: slide-up 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+    transform: translateY(100%);
+    transition: transform 0.26s cubic-bezier(0.22, 1, 0.36, 1);
+    animation: none;
+    will-change: transform;
   }
 
-  @keyframes slide-up {
-    from { transform: translateY(20px); opacity: 0.7; }
-    to { transform: none; opacity: 1; }
+  .sheet.is-visible .sheet-card { transform: translateY(0); }
+
+  .sheet-backdrop {
+    opacity: 0;
+    transition: opacity 0.2s ease;
   }
+
+  .sheet.is-visible .sheet-backdrop { opacity: 1; }
 
   .toast { bottom: calc(80px + env(safe-area-inset-bottom)); }
 
@@ -2725,7 +2807,8 @@ body.sheet-open .sidebar {
 }
 
 @media (max-width: 899px) and (prefers-reduced-motion: reduce) {
-  .sheet-card, .toast { animation: none; }
+  .sheet-card, .toast { animation: none; transition: none; }
+  .sheet-backdrop { transition: none; }
 }
 
 @media (hover: none) {

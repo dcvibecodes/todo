@@ -127,6 +127,9 @@ const SETTING_DEFAULTS = {
   // 'bar' | 'ring' | 'off', and 'all' | '30d' for what the counts cover.
   list_progress: 'bar',
   list_progress_range: 'all',
+  // How long completed one-off reminders are kept. 'forever' disables the
+  // purge; the other values are permanent retention windows.
+  completed_retention: 'forever',
   // Per-view sorting, synced across devices. JSON string:
   // { default: {field, dir} | null, overrides: { "list:5": {field, dir},
   // "today": {...}, ... } }. Empty means no device has seeded it yet; the
@@ -149,6 +152,25 @@ async function getSettings() {
     if (row.key in out) out[row.key] = row.value;
   }
   return out;
+}
+
+const COMPLETED_RETENTION_DAYS = { '1m': 30, '3m': 90, '6m': 180, '12m': 365 };
+
+function retentionCutoff(settings) {
+  const days = COMPLETED_RETENTION_DAYS[settings.completed_retention];
+  return days ? new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString() : null;
+}
+
+async function purgeCompletedRetention() {
+  const settings = await getSettings();
+  const cutoff = retentionCutoff(settings);
+  if (!cutoff) return 0;
+  const result = await db.run(
+    `DELETE FROM reminders
+     WHERE completed = 1 AND completed_at IS NOT NULL AND completed_at < ?`,
+    [cutoff]
+  );
+  return result.changes || 0;
 }
 
 // Only these keys may be written through the settings endpoint. Anything
@@ -191,6 +213,11 @@ function validateSetting(key, value) {
       return null;
     case 'list_progress_range':
       if (!['all', '30d'].includes(value)) return 'Must be all or 30d';
+      return null;
+    case 'completed_retention':
+      if (!['1m', '3m', '6m', '12m', 'forever'].includes(value)) {
+        return 'Must be 1m, 3m, 6m, 12m, or forever';
+      }
       return null;
     default:
       return 'Unknown setting';
@@ -1186,7 +1213,9 @@ async function main() {
       }
       await db.setSetting('device_zone_updated_at', new Date().toISOString());
     }
-    res.json({ ok: true, settings: await getSettings(), floatingMoved: moved, moved: movedItems });
+    let purged = 0;
+    if ('completed_retention' in updates) purged = await purgeCompletedRetention();
+    res.json({ ok: true, settings: await getSettings(), floatingMoved: moved, moved: movedItems, purged });
   });
 
   const SORT_FIELDS = ['due', 'created', 'name'];
@@ -1840,7 +1869,9 @@ async function main() {
   }
 
   app.get('/api/state', async (req, res) => {
-    const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const settings = await getSettings();
+    const thirtyDayCutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const retention = retentionCutoff(settings);
     const lists = await db.all(`
       SELECT l.id, l.name, l.color, l.sort_order, l.created_at, l.is_system,
         (SELECT COUNT(*) FROM reminders r WHERE r.list_id = l.id AND r.completed = 0) AS count,
@@ -1850,14 +1881,19 @@ async function main() {
            AND r.completed_at IS NOT NULL AND r.completed_at >= ?)
         AS done_count_30d
       FROM lists l ORDER BY l.sort_order, l.id
-    `, [cutoff]);
-    const reminders = await db.all(`
-      SELECT ${REMINDER_COLUMNS} FROM reminders
-      WHERE completed = 0 OR completed_at IS NULL OR completed_at >= ?
-      ORDER BY sort_order, id
-    `, [cutoff]);
+    `, [thirtyDayCutoff]);
+    const reminders = retention
+      ? await db.all(`
+          SELECT ${REMINDER_COLUMNS} FROM reminders
+          WHERE completed = 0 OR completed_at IS NULL OR completed_at >= ?
+          ORDER BY sort_order, id
+        `, [retention])
+      : await db.all(`
+          SELECT ${REMINDER_COLUMNS} FROM reminders
+          ORDER BY sort_order, id
+        `);
     await applyOccurrenceOverrides(reminders);
-    res.json({ lists, reminders, settings: await getSettings(), now: new Date().toISOString(), store_epoch: await getStoreEpoch() });
+    res.json({ lists, reminders, settings, now: new Date().toISOString(), store_epoch: await getStoreEpoch() });
   });
 
   // Full-history search for the UI: /api/state only carries 30 days of
@@ -1879,6 +1915,11 @@ async function main() {
     const pattern = `%${query.replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
     const match = "(title LIKE ? ESCAPE '\\' OR notes LIKE ? ESCAPE '\\')";
     const params = [pattern, pattern];
+    const retention = retentionCutoff(await getSettings());
+    const completedFilter = retention
+      ? `${match} AND completed = 1 AND (completed_at IS NULL OR completed_at >= ?)`
+      : `${match} AND completed = 1`;
+    const completedParams = retention ? [...params, retention] : params;
     const [open, completed, openCount, completedCount, storeEpoch] = await Promise.all([
       db.all(
         `SELECT ${REMINDER_COLUMNS} FROM reminders
@@ -1888,12 +1929,12 @@ async function main() {
       ),
       db.all(
         `SELECT ${REMINDER_COLUMNS} FROM reminders
-         WHERE ${match} AND completed = 1
+         WHERE ${completedFilter}
          ORDER BY completed_at DESC, id DESC LIMIT ?`,
-        [...params, limit]
+        [...completedParams, limit]
       ),
       db.get(`SELECT COUNT(*) AS n FROM reminders WHERE ${match} AND completed = 0`, params),
-      db.get(`SELECT COUNT(*) AS n FROM reminders WHERE ${match} AND completed = 1`, params),
+      db.get(`SELECT COUNT(*) AS n FROM reminders WHERE ${completedFilter}`, completedParams),
       getStoreEpoch(),
     ]);
     await applyOccurrenceOverrides(open);
@@ -2932,6 +2973,14 @@ async function main() {
 
   checkDueReminders();
   setInterval(checkDueReminders, 15 * 1000);
+
+  const purgeOldCompleted = () => purgeCompletedRetention().then((count) => {
+    if (count) console.log(`Removed ${count} completed item(s) outside retention`);
+  }).catch((err) => {
+    console.error('Completed retention purge failed:', err.message);
+  });
+  purgeOldCompleted();
+  setInterval(purgeOldCompleted, 24 * 60 * 60 * 1000);
 }
 
 main().catch((err) => {

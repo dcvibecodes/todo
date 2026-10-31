@@ -113,6 +113,18 @@ const LIST_PROGRESS_SYNCED_KEY = 'todo.listProgressSynced';
 const LIST_PROGRESS_MODES = ['bar', 'ring', 'off'];
 const LIST_PROGRESS_RANGES = ['all', '30d'];
 const SETTINGS_PROGRESS_KEYS = ['list_progress', 'list_progress_range'];
+const SETTINGS_RETENTION_KEYS = ['completed_retention'];
+const RETENTION_ORDER = { '1m': 1, '3m': 3, '6m': 6, '12m': 12, forever: Infinity };
+const RETENTION_LABELS = { '1m': '1 month', '3m': '3 months', '6m': '6 months', '12m': '1 year', forever: 'indefinitely' };
+
+function retentionValue() {
+  const value = state.settings.completed_retention;
+  return value in RETENTION_ORDER ? value : 'forever';
+}
+
+function retentionLabel(value = retentionValue()) {
+  return RETENTION_LABELS[value] || RETENTION_LABELS.forever;
+}
 
 // Sidebar list progress display: 'bar' (bar with counts), 'ring' (ring on
 // the dot) or 'off'. Synced through settings; localStorage is only an
@@ -984,9 +996,85 @@ function setShowCompleted(listId, value) {
   localStorage.setItem(SHOW_COMPLETED_KEY, JSON.stringify(prefs));
 }
 
+const NAV_MOBILE = window.matchMedia('(max-width: 899px)');
+let activeNavSnapshot = null;
+
+function finishNavAnimation() {
+  if (!activeNavSnapshot) return;
+  activeNavSnapshot.getAnimations().forEach((animation) => animation.cancel());
+  activeNavSnapshot.remove();
+  activeNavSnapshot = null;
+  document.body.classList.remove('nav-animating');
+  const main = $('.main');
+  if (main) {
+    main.getAnimations().forEach((animation) => animation.cancel());
+    main.classList.remove('nav-incoming');
+    main.style.transform = '';
+  }
+}
+
+function screenSnapshot(selector, zIndex) {
+  const source = $(selector);
+  if (!source) return null;
+  const clone = source.cloneNode(true);
+  clone.querySelectorAll('[id]').forEach((node) => node.removeAttribute('id'));
+  clone.classList.add('nav-snapshot');
+  clone.removeAttribute('hidden');
+  clone.inert = true;
+  clone.setAttribute('aria-hidden', 'true');
+  clone.style.display = 'flex';
+  clone.style.zIndex = String(zIndex);
+  document.body.append(clone);
+  if (selector === '.sidebar') {
+    clone.scrollTop = source.scrollTop;
+  } else {
+    const from = source.querySelector('.content');
+    const to = clone.querySelector('.content');
+    if (from && to) to.scrollTop = from.scrollTop;
+  }
+  return clone;
+}
+
+function animateScreenTransition(push, snapshot) {
+  const duration = 260;
+  const easing = 'cubic-bezier(0.22, 1, 0.36, 1)';
+  document.body.classList.add('nav-animating');
+  activeNavSnapshot = snapshot;
+  let animation;
+  if (push) {
+    const main = $('.main');
+    if (!main) { finishNavAnimation(); return; }
+    main.classList.add('nav-incoming');
+    animation = main.animate(
+      [{ transform: 'translateX(100%)' }, { transform: 'none' }],
+      { duration, easing },
+    );
+  } else {
+    animation = snapshot.animate(
+      [{ transform: 'none' }, { transform: 'translateX(100%)' }],
+      { duration, easing },
+    );
+  }
+  const finish = () => finishNavAnimation();
+  animation.onfinish = finish;
+  animation.oncancel = finish;
+}
+
 function route() {
+  finishNavAnimation();
   const view = parseRoute();
   const previousView = state.view;
+  const previousScreen = document.body.dataset.screen;
+  const slidePush = previousView === 'home' && previousScreen === 'home'
+    && view !== 'home' && !state.search;
+  const slidePop = previousView !== 'home' && previousScreen === 'detail'
+    && view === 'home' && !state.search;
+  const canSlide = (slidePush || slidePop) && NAV_MOBILE.matches
+    && !MOTION_REDUCED.matches
+    && !$$('.sheet').some((sheet) => !sheet.hidden);
+  const snapshot = canSlide
+    ? screenSnapshot(slidePush ? '.sidebar' : '.main', slidePush ? 20 : 35)
+    : null;
   if (view !== state.view) {
     expandedNoteId = null;
   }
@@ -1012,7 +1100,9 @@ function route() {
   state.view = view;
   document.body.dataset.screen = view === 'home' ? 'home' : 'detail';
   render();
-  if (previousView !== view && view !== 'home' && !state.search && !MOTION_REDUCED.matches) {
+  if (snapshot) {
+    animateScreenTransition(slidePush, snapshot);
+  } else if (previousView !== view && view !== 'home' && !state.search && !MOTION_REDUCED.matches) {
     const content = $('#content');
     if (content) {
       content.animate(
@@ -2325,7 +2415,13 @@ function emptyState(view) {
     scheduled: { icon: 'clock', heading: 'Nothing scheduled', message: 'Give an item a date and it will show up here, grouped by when it is due.' },
     all: { icon: 'all', heading: 'A fresh start', message: 'No items yet. Capture the first thing on your mind.' },
     flagged: { icon: 'flag', heading: 'Nothing flagged', message: 'Mark an item urgent and it will wait for you here.' },
-    completed: { icon: 'done', heading: 'No history yet', message: 'Finished items land here for the next 30 days.' },
+    completed: {
+      icon: 'done',
+      heading: 'No history yet',
+      message: retentionValue() === 'forever'
+        ? 'Finished items are kept indefinitely.'
+        : `Finished items are kept for ${retentionLabel()}.`,
+    },
   }[view] || { icon: 'all', heading: 'Nothing here', message: 'No items in this list yet.' };
   const children = [
     el('span', { html: ICON(copy.icon) }),
@@ -2474,12 +2570,21 @@ function noteParts(value) {
     let value = segment.value;
     const previous = segments[index - 1];
     const next = segments[index + 1];
-    if (previous && previous.type === 'link') value = value.replace(/^[\s,;:!?.]+/, '');
-    if (next && next.type === 'link') value = value.replace(/[\s,;:!?.]+$/, '');
-    value = value.replace(/\s+/g, ' ').trim();
+    if (previous && previous.type === 'link') value = value.replace(/^[ \t,;:!?.]+/, '');
+    if (next && next.type === 'link') value = value.replace(/[ \t,;:!?.]+$/, '');
+    value = value
+      .replace(/[^\S\n]+/g, ' ')
+      .replace(/ *\n */g, '\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
     if (value) prose.push(value);
   });
-  return { text: prose.join(' ').replace(/\s{2,}/g, ' ').trim(), links };
+  const proseText = prose.join(' ')
+    .replace(/[^\S\n]+/g, ' ')
+    .replace(/ *\n */g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+  return { text: proseText, links };
 }
 
 function renderEditorLinks() {
@@ -2598,14 +2703,37 @@ function syncNoteChevrons() {
   }
 }
 
-function animateNote(note, expand) {
+function ensureNoteRowVisible(row) {
+  if (!row) return;
+  const scroller = row.closest('#content') || row.closest('.sidebar');
+  if (!scroller) return;
+  const scrollerRect = scroller.getBoundingClientRect();
+  const sticky = scroller.classList.contains('sidebar') ? scroller.querySelector('.sidebar-top') : null;
+  let top = scrollerRect.top + 8;
+  if (sticky && sticky.getBoundingClientRect().bottom > scrollerRect.top) {
+    top = sticky.getBoundingClientRect().bottom + 8;
+  }
+  const bottom = scrollerRect.bottom - 8;
+  const rect = row.getBoundingClientRect();
+  if (rect.top >= top && rect.bottom <= bottom) return;
+  const delta = rect.top < top ? rect.top - top : rect.bottom - bottom;
+  scroller.scrollTo({
+    top: Math.max(0, scroller.scrollTop + delta),
+    behavior: MOTION_REDUCED.matches ? 'auto' : 'smooth',
+  });
+}
+
+function animateNote(note, expand, onDone) {
   note.getAnimations().forEach((animation) => animation.cancel());
   note.style.height = '';
   note.style.overflow = '';
   const from = note.getBoundingClientRect().height;
   note.classList.toggle('is-expanded', expand);
   const to = note.getBoundingClientRect().height;
-  if (MOTION_REDUCED.matches || Math.abs(to - from) < 1) return;
+  if (MOTION_REDUCED.matches || Math.abs(to - from) < 1) {
+    if (onDone) onDone();
+    return;
+  }
   note.style.overflow = 'hidden';
   note.style.height = `${from}px`;
   const anim = note.animate(
@@ -2616,7 +2744,7 @@ function animateNote(note, expand) {
     note.style.height = '';
     note.style.overflow = '';
   };
-  anim.onfinish = cleanup;
+  anim.onfinish = () => { cleanup(); if (onDone) onDone(); };
   anim.oncancel = cleanup;
 }
 
@@ -2631,7 +2759,7 @@ function toggleNoteForRow(row, note) {
   const id = row.dataset.reminderId;
   if (expandedNoteId === id) {
     expandedNoteId = null;
-    animateNote(note, false);
+    animateNote(note, false, () => ensureNoteRowVisible(row));
   } else {
     if (expandedNoteId) collapseExpandedNote();
     expandedNoteId = id;
@@ -4251,16 +4379,37 @@ function syncSheetState() {
 // sheet with the same cancel semantics as Escape.
 let sheetPopGuard = false;
 
+const closingSheets = new WeakSet();
+const sheetCloseTimers = new WeakMap();
+const SHEET_MOBILE = window.matchMedia('(max-width: 899px)');
+
+function finishSheetClose(sheet) {
+  const timer = sheetCloseTimers.get(sheet);
+  if (timer) clearTimeout(timer);
+  sheetCloseTimers.delete(sheet);
+  closingSheets.delete(sheet);
+  sheet.hidden = true;
+  sheet.classList.remove('is-visible');
+  syncSheetState();
+}
+
 function openSheet(selector) {
   if (!$$('.sheet').some((sheet) => !sheet.hidden)) {
     lastFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   }
   const sheet = $(selector);
-  sheet.getAnimations().forEach((animation) => animation.cancel());
-  sheet.querySelectorAll('.sheet-card, .sheet-backdrop').forEach((node) => {
-    node.getAnimations().forEach((animation) => animation.cancel());
-  });
+  const timer = sheetCloseTimers.get(sheet);
+  if (timer) clearTimeout(timer);
+  sheetCloseTimers.delete(sheet);
+  closingSheets.delete(sheet);
   sheet.hidden = false;
+  if (MOTION_REDUCED.matches || !SHEET_MOBILE.matches) {
+    sheet.classList.add('is-visible');
+  } else {
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      if (!sheet.hidden) sheet.classList.add('is-visible');
+    }));
+  }
   try {
     const depth = (history.state && history.state.todoSheet || 0) + 1;
     history.pushState({ todoSheet: depth }, '', location.href);
@@ -4279,9 +4428,21 @@ function consumeSheetMarker() {
 
 function closeSheet(selector) {
   const sheet = $(selector);
-  if (sheet) sheet.hidden = true;
-  syncSheetState();
+  if (!sheet) return;
+  if (sheet.hidden) {
+    consumeSheetMarker();
+    syncSheetState();
+    return;
+  }
+  if (closingSheets.has(sheet)) return;
+  closingSheets.add(sheet);
   consumeSheetMarker();
+  if (MOTION_REDUCED.matches || !SHEET_MOBILE.matches) {
+    finishSheetClose(sheet);
+    return;
+  }
+  sheet.classList.remove('is-visible');
+  sheetCloseTimers.set(sheet, setTimeout(() => finishSheetClose(sheet), 280));
 }
 
 // Close the topmost sheet without touching History — composed by the
@@ -4292,7 +4453,12 @@ function closeTopSheetInPlace() {
   if (open.length) {
     const sheet = open[open.length - 1];
     if (sheet.id === 'settings-sheet') revertSettingsPreview();
+    const timer = sheetCloseTimers.get(sheet);
+    if (timer) clearTimeout(timer);
+    sheetCloseTimers.delete(sheet);
+    closingSheets.delete(sheet);
     sheet.hidden = true;
+    sheet.classList.remove('is-visible');
   }
   syncSheetState();
   return open.length > 0;
@@ -4603,6 +4769,7 @@ function settingsValues() {
     quiet_end: $('#set-quiet-end').value,
     list_progress: $('#set-list-progress').value,
     list_progress_range: $('#set-list-progress-range').value,
+    completed_retention: $('#set-completed-retention').value,
   };
 }
 
@@ -4652,6 +4819,7 @@ async function openSettings() {
   $('#set-quiet-end').value = s.quiet_end || '07:00';
   $('#set-list-progress').value = getListProgress();
   $('#set-list-progress-range').value = getListProgressRange();
+  $('#set-completed-retention').value = retentionValue();
   $('#set-sort-field').value = state.sortDefault.field;
   $('#set-sort-dir').value = state.sortDefault.dir;
   syncSortDirLabels($('#set-sort-field'), $('#set-sort-dir'));
@@ -4683,9 +4851,19 @@ async function saveAppSettings() {
   const defaultsChanged = changed(SETTINGS_DEFAULT_KEYS);
   const notifyChanged = changed(SETTINGS_NOTIFY_KEYS);
   const progressChanged = changed(SETTINGS_PROGRESS_KEYS);
+  const retentionChanged = changed(SETTINGS_RETENTION_KEYS);
   const appearanceDirty = appearanceIsDirty();
   const sortChanged = sortIsDirty();
-  if (!defaultsChanged && !notifyChanged && !progressChanged && !appearanceDirty && !sortChanged) return;
+  if (!defaultsChanged && !notifyChanged && !progressChanged && !retentionChanged && !appearanceDirty && !sortChanged) return;
+
+  if (retentionChanged) {
+    const before = previous.completed_retention || 'forever';
+    const after = current.completed_retention || 'forever';
+    if (RETENTION_ORDER[after] < RETENTION_ORDER[before]) {
+      const ok = window.confirm(`Permanently delete completed items older than ${retentionLabel(after)}? This cannot be undone.`);
+      if (!ok) return;
+    }
+  }
 
   const saveBtn = $('#settings-save');
   const startedAt = Date.now();
@@ -4695,7 +4873,7 @@ async function saveAppSettings() {
   $('#settings-sheet').setAttribute('aria-busy', 'true');
   try {
     let message = '';
-    if (defaultsChanged || notifyChanged || progressChanged) {
+    if (defaultsChanged || notifyChanged || progressChanged || retentionChanged) {
       try {
         const result = await api('/api/settings', {
           method: 'POST',
@@ -4705,7 +4883,14 @@ async function saveAppSettings() {
         settingsSnapshot = current;
         cacheListProgress();
         renderSidebar();
-        if (defaultsChanged && notifyChanged) {
+        if (retentionChanged) {
+          await loadState();
+          render();
+          const purged = result.purged || 0;
+          message = purged
+            ? `Saved — ${purged} old completed item${purged === 1 ? '' : 's'} deleted.`
+            : 'Saved — completed retention updated.';
+        } else if (defaultsChanged && notifyChanged) {
           message = 'Saved. New item defaults apply to new items only; notification changes apply to all items from now on.';
         } else if (notifyChanged) {
           message = 'Saved — applies to how all items notify from now on.';
@@ -5194,18 +5379,33 @@ function animateCompletedSectionClose(done) {
   anim.onfinish = done;
 }
 
+function preserveContentScroll(action, mode = 'keep') {
+  const scroller = $('#content');
+  if (!scroller) { action(); return; }
+  const top = scroller.scrollTop;
+  action();
+  scroller.scrollTop = mode === 'clamp'
+    ? Math.min(top, Math.max(0, scroller.scrollHeight - scroller.clientHeight))
+    : top;
+}
+
 $('#sort-completed').addEventListener('change', (event) => {
   if (typeof state.view !== 'number') return;
   const token = ++completedToggleToken;
   state.showCompleted = event.target.checked;
   setShowCompleted(state.view, state.showCompleted);
   if (state.showCompleted) {
-    renderMain();
+    preserveContentScroll(() => renderMain());
     animateCompletedSectionOpen();
     return;
   }
+  const previousScroll = $('#content') ? $('#content').scrollTop : 0;
   animateCompletedSectionClose(() => {
-    if (token === completedToggleToken && $('.completed-section')) renderMain();
+    if (token === completedToggleToken && $('.completed-section')) {
+      renderMain();
+      const scroller = $('#content');
+      if (scroller) scroller.scrollTop = Math.min(previousScroll, Math.max(0, scroller.scrollHeight - scroller.clientHeight));
+    }
   });
 });
 $('#set-sort-field').addEventListener('change', () => {
@@ -5256,6 +5456,8 @@ document.addEventListener('pointerdown', (event) => {
   $$('.row-delete.confirming').forEach((button) => {
     if (!button.contains(event.target)) resetRowDelete(button);
   });
+  const toast = $('#toast');
+  if (toast && !toast.hidden && !event.target.closest('.toast-action')) hideToast(true);
 }, true);
 
 document.addEventListener('keydown', (event) => {
