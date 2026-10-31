@@ -1095,41 +1095,30 @@ body.flipping .reminder-group { overflow: visible; }
 
 .completed-section { display: flow-root; }
 
-.completed-heading {
+.completed-retention {
   display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin: 22px 0 10px;
-}
-
-.completed-heading .group-title { margin: 0; }
-
-.completed-heading-sep,
-.completed-kept {
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 0 10px;
   font-size: 0.8125rem;
   line-height: 1.4;
-  color: var(--text-3);
+  color: var(--text-2);
 }
 
-.completed-heading-edit {
+.completed-retention.generic { justify-content: flex-start; margin-top: 0; }
+
+.completed-retention-edit {
   flex: none;
   padding: 2px 0;
   font-size: 0.8125rem;
   color: var(--accent);
 }
 
-.completed-heading-edit:hover {
+.completed-retention-edit:hover {
   background: transparent;
   color: var(--accent);
   text-decoration: underline;
-}
-
-.completed-retention {
-  margin: 0 0 10px;
-  font-size: 0.8125rem;
-  line-height: 1.4;
-  color: var(--text-2);
 }
 
 .flip-moving { position: relative; z-index: 2; }
@@ -2664,7 +2653,6 @@ body.sheet-open .sidebar {
 [data-density="compact"] .check { width: 20px; height: 20px; }
 [data-density="compact"] .content { padding-top: 10px; }
 [data-density="compact"] .group-title { margin-top: 14px; }
-[data-density="compact"] .completed-heading { margin-top: 14px; }
 
 @media (max-width: 899px) {
   .sidebar {

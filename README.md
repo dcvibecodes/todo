@@ -2,9 +2,14 @@
 
 A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due dates, urgent flags, recurring reminders, natural-language quick add, smart lists, floating time zones, a token API for external agents, completed history, dark mode, and web push. No frontend framework and no build step.
 
+## What's New in v2.13.4
+
+- **Completed section reverted** - restored the separate **“Completed items are kept indefinitely.”** message with the right-aligned **Edit list** button. The rest of the v2.13.3 polish remains: no touch press highlight, the smaller 24×14 switch, larger notes, and fully wrapping titles.
+- Service worker cache bumped to `todo-v2.13.4`.
+
 ## What's New in v2.13.3
 
-- **List-view polish** - phones no longer flash a pressed background when a row is touched; desktop still shows the mouse-hover background. The completed heading is now inline: **Completed · kept indefinitely · Edit**, with finite windows reading **kept 3 months** and so on. The Show Completed switch is smaller (24×14) to match the 12px label, and list-view note text is 13px (12px in Compact density). Titles still wrap fully with no ellipsis; only notes use the two-line preview.
+- **List-view polish** - phones no longer flash a pressed background when a row is touched; desktop still shows the mouse-hover background. The Show Completed switch is smaller (24×14) to match the 12px label, and list-view note text is 13px (12px in Compact density). Titles still wrap fully with no ellipsis; only notes use the two-line preview.
 - Service worker cache bumped to `todo-v2.13.3`.
 
 ## What's New in v2.13.2
@@ -20,7 +25,7 @@ A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due
 ## What's New in v2.13.0
 
 - **Completed retention is per list** - each list now has its own **Completed retention** choice in Edit List: 1 month, 3 months, 6 months, 1 year, or indefinitely (default). Every existing and new list starts at indefinitely; there is no global retention setting. Shortening a list's window asks first, in-app, and permanently deletes only that list's older completed one-off items; repeating-series history is kept.
-- **The completed section explains its window** - when Show Completed is on, the heading reads **Completed · kept indefinitely · Edit** (or **kept 3 months**), with **Edit** opening the list sheet. The all-lists Completed view has a generic note because different lists can keep different windows.
+- **The completed section explains its window** - when Show Completed is on, the Completed heading says how long that list keeps finished items and offers an **Edit list** shortcut. The all-lists Completed view has a generic note because different lists can keep different windows.
 - Service worker cache bumped to `todo-v2.13.0`.
 
 ## What's New in v2.12.1
