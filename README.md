@@ -2,10 +2,15 @@
 
 A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due dates, urgent flags, recurring reminders, natural-language quick add, smart lists, floating time zones, a token API for external agents, completed history, dark mode, and web push. No frontend framework and no build step.
 
+## What's New in v2.13.7
+
+- **Completed is now a compact check + count** - the sort bar shows **✓ N** at the far right, where N is the number of completed items in that list. Tap it to show or hide them; the pill fills with the accent colour while active and is dimmed when the list has none. Sort and Order labels stay visible at every width, and the row remains a single line down to 320px.
+- Service worker cache bumped to `todo-v2.13.7`.
+
 ## What's New in v2.13.6
 
 - **Long notes are click/tap only** - removed the keyboard focus and Enter/Space toggle added in v2.13.5. The ellipsis remains the expand indicator, and the card still expands on tap/click.
-- **Sort bar stays on one row** - the phone layout no longer wraps Completed onto a second line. Controls tighten below 380px, where the **Sort** and **Order** labels hide while their selected values remain; spacing tightens again below 340px.
+- **Sort bar stays on one row** - the phone layout no longer wraps Completed onto a second line. Labels now stay visible; v2.13.7 replaced the switch with the compact **✓ N** filter.
 - Service worker cache bumped to `todo-v2.13.6`.
 
 ## What's New in v2.13.5
@@ -50,7 +55,7 @@ A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due
 - **Rapid deletes work through the toast** - the "Item deleted" toast is now click-through (only an action button is tappable) and dismisses as soon as you start another row action, so confirming item 2 immediately after item 1 is not swallowed.
 - **Mobile list push/pop** - opening a list slides it in from the right over Home; Back (button or browser Back) slides it out to the right. Desktop keeps its instant navigation. Since v2.13.1 browser/hardware Back uses the browser’s own transition instead of a second custom pop.
 - **Completed retention** - Settings → Completed items can keep completed items for 1 month, 3 months, 6 months, 1 year, or indefinitely (default). Shortening the window permanently deletes older completed one-off items and asks first; repeating-series history is kept. State, search, list counts, the Completed view and its empty copy all follow the chosen window.
-- **Show Completed is a switch** - the sort bar uses a proper toggle switch and stays on one row on phones, including when it shows a count. Showing completed preserves your scroll position; hiding it collapses the section without jumping to the top, landing near the end of the active items.
+- **Show Completed is a compact filter** - the sort bar shows **✓ N** at the far right, where N is the completed count. Tapping it shows or hides completed items; it is accent-filled while active and dimmed when there are none. It stays on one row with Sort and Order at every phone width. Showing completed preserves your scroll position; hiding it collapses the section without jumping to the top, landing near the end of the active items.
 - **Bottom-sheet transitions on phones** - New Item, Edit Item, Settings, the list sheet and other sheets slide up from the bottom and slide back down on Save/Cancel/backdrop/Escape. Desktop keeps its centered modal.
 - Service worker cache bumped to `todo-v2.12.0`.
 

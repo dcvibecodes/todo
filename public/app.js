@@ -2340,16 +2340,19 @@ function renderMain() {
     ? state.reminders.filter((reminder) => reminder.list_id === view && reminder.completed).length
     : 0;
   const showCompletedToggle = isList && !state.search;
-  const completedWrap = $('#sort-completed-wrap');
-  completedWrap.hidden = !showCompletedToggle;
+  const completedFilter = $('#sort-completed');
+  completedFilter.hidden = !showCompletedToggle;
   if (showCompletedToggle) {
-    const box = $('#sort-completed');
-    box.checked = Boolean(state.showCompleted);
-    box.disabled = completeCount === 0;
-    completedWrap.classList.toggle('is-disabled', completeCount === 0);
-    $('#sort-completed-text').textContent = completeCount
-      ? `Completed (${completeCount})`
-      : 'Completed';
+    const noun = completeCount === 1 ? 'item' : 'items';
+    completedFilter.disabled = completeCount === 0;
+    completedFilter.setAttribute('aria-pressed', state.showCompleted ? 'true' : 'false');
+    completedFilter.setAttribute('aria-label', completeCount
+      ? `${state.showCompleted ? 'Hide' : 'Show'} ${completeCount} completed ${noun}`
+      : 'No completed items');
+    completedFilter.title = completeCount
+      ? `${state.showCompleted ? 'Hide' : 'Show'} completed ${noun}`
+      : 'No completed items';
+    $('#sort-completed-count').textContent = String(completeCount);
   }
 
   if (state.search) {
@@ -5430,11 +5433,12 @@ function preserveContentScroll(action, mode = 'keep') {
     : top;
 }
 
-$('#sort-completed').addEventListener('change', (event) => {
-  if (typeof state.view !== 'number') return;
+$('#sort-completed').addEventListener('click', (event) => {
+  if (typeof state.view !== 'number' || event.currentTarget.disabled) return;
   const token = ++completedToggleToken;
-  state.showCompleted = event.target.checked;
+  state.showCompleted = !state.showCompleted;
   setShowCompleted(state.view, state.showCompleted);
+  event.currentTarget.setAttribute('aria-pressed', state.showCompleted ? 'true' : 'false');
   if (state.showCompleted) {
     preserveContentScroll(() => renderMain());
     animateCompletedSectionOpen();
