@@ -2,6 +2,10 @@
 
 A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due dates, urgent flags, recurring reminders, natural-language quick add, smart lists, floating time zones, a token API for external agents, completed history, dark mode, and web push. No frontend framework and no build step.
 
+## What's New in v2.13.14
+
+- **New List is now a plus button** - the `Lists` section header uses a bare 22px plus instead of the "New List" text. Its right edge and centre line up exactly with the drag grips below it on both phone and desktop, and the touch target stays 44px. Service worker cache bumped to `todo-v2.13.14`.
+
 ## What's New in v2.13.13
 
 - **Typo-tolerant search** - search now finds reminders even when the query is misspelled or the word order differs. Every query word must match somewhere in the title or notes, with one typo allowed for 3–7 letter words and two for longer ones; accents are ignored and transposed letters count as one edit. Results are grouped Open then Completed as before, but each group is now best-match first, so the Sort/Order bar is hidden while searching. Offline fallback uses the same matcher. Service worker cache bumped to `todo-v2.13.13`.

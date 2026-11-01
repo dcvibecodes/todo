@@ -381,6 +381,7 @@ button, a, input, select, textarea, [tabindex] { touch-action: manipulation; }
   .row-edit::after,
   .row-delete::after,
   .list-grip::after,
+  .new-list-btn::after,
   .history-undo::after,
   .sort-completed-filter::after,
   .swatch::after {
@@ -399,6 +400,7 @@ button, a, input, select, textarea, [tabindex] { touch-action: manipulation; }
   .row-edit::after { inset: -5px; }
   .row-delete::after { inset: -5px; }
   .list-grip::after { inset: -11px; }
+  .new-list-btn::after { inset: -11px; }
   .swatch::after { inset: -5px; }
 }
 
@@ -634,25 +636,32 @@ button, a, input, select, textarea, [tabindex] { touch-action: manipulation; }
 
 .badge-overdue { color: var(--red); font-weight: 600; }
 
+/* A bare plus matching the list grips: same 22px box and right edge. */
 .new-list-btn {
+  position: relative;
+  width: 22px;
+  height: 22px;
+  flex: none;
+  display: grid;
+  place-items: center;
   border: 0;
+  border-radius: 5px;
   background: transparent;
-  padding: 3px 2px;
-  color: var(--text-2);
-  font-family: inherit;
-  font-size: 0.75rem;
-  font-weight: 550;
-  text-transform: none;
-  letter-spacing: 0;
+  color: var(--text-3);
+  opacity: 0.55;
+  transition: opacity 0.15s, background 0.15s, color 0.15s;
 }
 
-.new-list-btn:hover { color: var(--text); }
+.new-list-btn .ic { width: 15px; height: 15px; }
+.new-list-btn:hover,
+.new-list-btn:focus-visible { background: var(--fill); color: var(--text); opacity: 0.9; }
 
 .section-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 6px 0 0;
+  /* 8px matches .list-row's right padding so the plus lines up with the grips. */
+  padding: 0 8px 0 0;
   margin-top: 2px;
   font-size: 0.72rem;
   font-weight: 600;
