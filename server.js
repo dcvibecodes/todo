@@ -12,6 +12,7 @@ const db = require('./db');
 const push = require('./push');
 const SQLiteSessionStore = require('./session-store');
 const recurrence = require('./recurrence');
+const fuzzy = require('./public/fuzzy-search');
 const chrono = require('chrono-node');
 
 const PORT = Number(process.env.PORT) || 3006;
@@ -888,7 +889,7 @@ async function main() {
   app.use(express.static(PUBLIC_DIR, {
     maxAge: '1d',
     setHeaders(res, filePath) {
-      if (/(?:sw\.js|index\.html|manifest\.webmanifest|app\.js|styles\.css)$/.test(filePath)) {
+      if (/(?:sw\.js|index\.html|manifest\.webmanifest|fuzzy-search\.js|app\.js|styles\.css)$/.test(filePath)) {
         res.setHeader('Cache-Control', 'no-cache');
       }
     },
@@ -1907,8 +1908,9 @@ async function main() {
 
   // Full-history search for the UI: /api/state only carries each list's
   // retained completed items, so older matches have to come from the database.
-  // Open matches are returned first; each group is capped independently so a
-  // long completed history cannot crowd out active items.
+  // Matching is typo-tolerant (public/fuzzy-search.js); candidates are scored
+  // in JS, then each group is capped independently so a long completed history
+  // cannot crowd out active items.
   app.get('/api/search', async (req, res) => {
     if (req.token) return denyToken(res);
     const query = text(req.query.q, 200);
@@ -1920,47 +1922,37 @@ async function main() {
         return res.status(400).json({ error: 'limit must be 1 to 500' });
       }
     }
-    // Treat %, _ and \ as literal characters instead of LIKE wildcards.
-    const pattern = `%${query.replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
-    const match = "(r.title LIKE ? ESCAPE '\\' OR r.notes LIKE ? ESCAPE '\\')";
-    const params = [pattern, pattern];
     const cutoffs = retentionCutoffs();
-    const completedFilter = `${match} AND r.completed = 1 AND (r.completed_at IS NULL OR r.completed_at >=
-      CASE l.completed_retention
-        WHEN '1m' THEN ? WHEN '3m' THEN ? WHEN '6m' THEN ? WHEN '12m' THEN ?
-        ELSE '0000-01-01T00:00:00.000Z'
-      END)`;
-    const completedParams = [
-      ...params, cutoffs['1m'], cutoffs['3m'], cutoffs['6m'], cutoffs['12m'],
-    ];
-    const [open, completed, openCount, completedCount, storeEpoch] = await Promise.all([
+    const [openRows, completedRows, storeEpoch] = await Promise.all([
       db.all(
         `SELECT r.* FROM reminders r
-         WHERE ${match} AND r.completed = 0
-         ORDER BY r.sort_order, r.id LIMIT ?`,
-        [...params, limit]
+         WHERE r.completed = 0
+         ORDER BY r.sort_order, r.id`
       ),
       db.all(
         `SELECT r.* FROM reminders r JOIN lists l ON l.id = r.list_id
-         WHERE ${completedFilter}
-         ORDER BY r.completed_at DESC, r.id DESC LIMIT ?`,
-        [...completedParams, limit]
-      ),
-      db.get(`SELECT COUNT(*) AS n FROM reminders r WHERE ${match} AND r.completed = 0`, params),
-      db.get(
-        `SELECT COUNT(*) AS n FROM reminders r JOIN lists l ON l.id = r.list_id
-         WHERE ${completedFilter}`,
-        completedParams
+         WHERE r.completed = 1 AND (r.completed_at IS NULL OR r.completed_at >=
+           CASE l.completed_retention
+             WHEN '1m' THEN ? WHEN '3m' THEN ? WHEN '6m' THEN ? WHEN '12m' THEN ?
+             ELSE '0000-01-01T00:00:00.000Z'
+           END)
+         ORDER BY r.completed_at DESC, r.id DESC`,
+        [cutoffs['1m'], cutoffs['3m'], cutoffs['6m'], cutoffs['12m']]
       ),
       getStoreEpoch(),
     ]);
+    // rank() is stable for equal scores, so the SQL ordering above is the tie-break.
+    const openMatches = fuzzy.rank(openRows, query);
+    const completedMatches = fuzzy.rank(completedRows, query);
+    const open = openMatches.slice(0, limit).map((entry) => entry.reminder);
+    const completed = completedMatches.slice(0, limit).map((entry) => entry.reminder);
     await applyOccurrenceOverrides(open);
     res.json({
       query,
       open,
       completed,
-      totals: { open: openCount.n, completed: completedCount.n },
-      truncated: openCount.n > open.length || completedCount.n > completed.length,
+      totals: { open: openMatches.length, completed: completedMatches.length },
+      truncated: openMatches.length > open.length || completedMatches.length > completed.length,
       store_epoch: storeEpoch,
     });
   });

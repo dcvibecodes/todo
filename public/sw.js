@@ -1,10 +1,11 @@
 'use strict';
 
-const CACHE = 'todo-v2.13.11';
+const CACHE = 'todo-v2.13.13';
 const ASSETS = [
   '/',
   '/index.html',
   '/styles.css',
+  '/fuzzy-search.js',
   '/app.js',
   '/fonts/fraunces-latin-600.woff2',
   '/fonts/outfit-latin-var.woff2',

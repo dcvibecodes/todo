@@ -1187,6 +1187,8 @@ function incompleteReminders() {
 
 function matchesSearch(reminder) {
   if (!state.search) return true;
+  if (window.TodoFuzzy) return window.TodoFuzzy.matchOne(reminder, state.search) != null;
+  // Fallback for a stale cached app.js whose fuzzy-search.js has not arrived.
   const needle = state.search.toLowerCase();
   return reminder.title.toLowerCase().includes(needle)
     || (reminder.notes || '').toLowerCase().includes(needle);
@@ -2305,12 +2307,10 @@ function renderSearchResults(content) {
   setPulseText($('#view-count'), total ? String(total) : '');
   $('#view-menu').hidden = true;
 
-  const open = sortItems(state.searchOpen || [], effectiveSort(state.view));
-  const completed = [...(state.searchCompleted || [])].sort((a, b) => {
-    const av = new Date(a.completed_at || 0).getTime();
-    const bv = new Date(b.completed_at || 0).getTime();
-    return bv - av;
-  });
+  // /api/search returns both groups in relevance order; offline results are
+  // ranked the same way locally, so never re-sort them here.
+  const open = state.searchOpen || [];
+  const completed = state.searchCompleted || [];
 
   if (state.searchLoading && state.searchQuery !== state.search) {
     content.append(el('p', { class: 'search-status', text: 'Searching…' }));
@@ -2360,7 +2360,8 @@ function renderMain() {
   content.replaceChildren();
   $('#view-menu').hidden = true;
   const sortBar = $('#sort-bar');
-  sortBar.hidden = view === 'home';
+  // Relevance-ranked search owns the order, so the Sort/Order bar steps aside.
+  sortBar.hidden = view === 'home' || Boolean(state.search);
   if (!sortBar.hidden) {
     const sort = effectiveSort(view);
     $('#sort-field').value = sort.field;
@@ -5328,11 +5329,11 @@ async function runSearch(query) {
   } catch {
     if (seq !== state.searchSeq || query !== state.search) return false;
     state.searchQuery = query;
-    const local = state.reminders.filter(matchesSearch);
-    state.searchOpen = sortItems(local.filter((reminder) => !reminder.completed));
-    state.searchCompleted = local
-      .filter((reminder) => reminder.completed)
-      .sort((a, b) => new Date(b.completed_at || 0) - new Date(a.completed_at || 0));
+    const local = window.TodoFuzzy
+      ? window.TodoFuzzy.rank(state.reminders, state.search).map((entry) => entry.reminder)
+      : sortItems(state.reminders.filter(matchesSearch), effectiveSort(state.view));
+    state.searchOpen = local.filter((reminder) => !reminder.completed);
+    state.searchCompleted = local.filter((reminder) => reminder.completed);
     state.searchTotals = {
       open: state.searchOpen.length,
       completed: state.searchCompleted.length,
