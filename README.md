@@ -2,6 +2,10 @@
 
 A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due dates, urgent flags, recurring reminders, natural-language quick add, smart lists, floating time zones, a token API for external agents, completed history, dark mode, and web push. No frontend framework and no build step.
 
+## What's New in v2.13.15
+
+- **New List plus stays a bare glyph** - removed the filled/dark hover and focus state so the plus no longer turns into a boxed button (and iOS cannot leave it stuck after a tap). It keeps the quiet grip colour, the "New List" tooltip and accessible name, and its exact alignment with the drag grips. Service worker cache bumped to `todo-v2.13.15`.
+
 ## What's New in v2.13.14
 
 - **New List is now a plus button** - the `Lists` section header uses a bare 22px plus instead of the "New List" text. Its right edge and centre line up exactly with the drag grips below it on both phone and desktop, and the touch target stays 44px. Service worker cache bumped to `todo-v2.13.14`.
