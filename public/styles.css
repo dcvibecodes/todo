@@ -2623,16 +2623,21 @@ body.sheet-open .sidebar {
   body[data-screen="detail"] .sidebar { display: none; }
   body[data-screen="detail"] .main { display: flex; }
 
-  /* Only the header + search stay frozen; everything below scrolls as one
-     page (no nested list scroller). The top padding lives on the sticky
-     wrapper so stuck and unstuck geometry match exactly. */
-  .sidebar-top {
+  /* The header + search stay pinned; everything below scrolls (as one page
+     on touch phones). The top padding lives on the sticky wrapper so stuck
+     and unstuck geometry match exactly. */
+  .sidebar-top,
+  .main-top {
     position: sticky;
     top: 0;
     z-index: 5;
     background: var(--surface);
     padding-top: calc(14px + env(safe-area-inset-top));
   }
+
+  /* The main header already owns that top padding, so the wrapper only
+     supplies the pinned surface. */
+  .main-top { padding-top: 0; }
 
   .sidebar .sidebar-foot { display: none; }
 
@@ -2811,6 +2816,30 @@ body.sheet-open .sidebar {
   .settings-group input { height: var(--control-height-touch); }
   #token-generate, #token-copy { min-height: var(--control-height-touch); }
   .sidebar-head, .main-head { min-height: var(--icon-size-touch); }
+}
+
+/* Touch phones scroll the document itself. iOS only applies the status-bar
+   tap-to-top gesture to the root scroller, so neither screen may live in a
+   nested overflow container there. A narrow desktop window keeps the nested
+   scrollers (and its scrollbars) exactly as before. */
+@media (max-width: 899px) and (pointer: coarse) {
+  html, body { height: auto; }
+  /* The rubber-band gap around the whole document shows the body canvas, so
+     keep it the same surface colour as both screens. */
+  body { background: var(--surface); overflow: visible; overscroll-behavior-y: contain; }
+
+  .shell { height: auto; min-height: 100dvh; }
+  .sidebar { height: auto; overflow: visible; }
+  .main { height: auto; }
+
+  .content {
+    flex: 0 0 auto;
+    overflow: visible;
+  }
+
+  /* The screen-transition clone is a fixed overlay, so it must scroll like
+     the real document does or the snapshot would be pinned at the top. */
+  .nav-snapshot.nav-snapshot-page { height: 100%; overflow-y: auto; }
 }
 
 @media (max-width: 899px) and (prefers-reduced-motion: reduce) {

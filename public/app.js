@@ -762,6 +762,18 @@ async function refreshState() {
 
 const PULL_MEDIA = window.matchMedia('(max-width: 899px) and (pointer: coarse)');
 const MOTION_REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)');
+// On touch phones the document itself is the scroller (so iOS status-bar
+// tap-to-top works); desktop and narrow desktop windows keep the nested
+// .content / .sidebar scrollers.
+const PAGE_SCROLL_MEDIA = window.matchMedia('(max-width: 899px) and (pointer: coarse)');
+
+function pageScroller() {
+  return document.scrollingElement || document.documentElement;
+}
+
+function screenScroller() {
+  return PAGE_SCROLL_MEDIA.matches ? pageScroller() : $('#content');
+}
 const PULL_THRESHOLD = 56;
 const PULL_MAX = 90;
 const PULL_RESISTANCE = 0.7;
@@ -802,10 +814,10 @@ function paintPullIndicator(distance, gesture) {
 // Walk from the touch target up to the page scroller and remember every
 // vertical scroller in the chain. Refresh only arms when the whole chain is at
 // its top; otherwise the gesture belongs to scrolling.
-function pullScrollChain(target, scroller) {
+function pullScrollChain(target, root) {
   const chain = [];
   let node = target instanceof Element ? target : null;
-  while (node && node !== scroller) {
+  while (node && node !== root) {
     if (node instanceof HTMLElement) {
       const style = getComputedStyle(node);
       if (/(auto|scroll)/.test(style.overflowY) && node.scrollHeight > node.clientHeight + 1) {
@@ -814,7 +826,9 @@ function pullScrollChain(target, scroller) {
     }
     node = node.parentElement;
   }
-  chain.push(scroller);
+  // On phones the root is not a scroller — the document is — so guard on the
+  // document position instead of the element's always-zero scrollTop.
+  chain.push(PAGE_SCROLL_MEDIA.matches ? pageScroller() : root);
   return chain;
 }
 
@@ -1000,6 +1014,18 @@ function setShowCompleted(listId, value) {
 }
 
 const NAV_MOBILE = window.matchMedia('(max-width: 899px)');
+// On phones both screens share the document scroller, so keep one position
+// per screen (the old nested scrollers each remembered their own).
+const screenScroll = { home: 0, detail: 0 };
+
+function recordScreenScroll() {
+  const screen = document.body.dataset.screen;
+  if (!screen) return;
+  const scroller = PAGE_SCROLL_MEDIA.matches
+    ? pageScroller()
+    : (screen === 'home' ? $('.sidebar') : $('#content'));
+  if (scroller) screenScroll[screen] = scroller.scrollTop;
+}
 let activeNavSnapshot = null;
 let historyBackHash = null;
 let lastRenderedHash = location.hash;
@@ -1032,7 +1058,12 @@ function screenSnapshot(selector, zIndex) {
   clone.style.display = 'flex';
   clone.style.zIndex = String(zIndex);
   document.body.append(clone);
-  if (selector === '.sidebar') {
+  if (PAGE_SCROLL_MEDIA.matches) {
+    // The phone layout scrolls the document, so the clone is its own page
+    // scroller pinned to the same position as the real screen.
+    clone.classList.add('nav-snapshot-page');
+    clone.scrollTop = pageScroller().scrollTop;
+  } else if (selector === '.sidebar') {
     clone.scrollTop = source.scrollTop;
   } else {
     const from = source.querySelector('.content');
@@ -1079,6 +1110,9 @@ function route() {
   const view = parseRoute();
   const previousView = state.view;
   const previousScreen = document.body.dataset.screen;
+  if (PAGE_SCROLL_MEDIA.matches && previousScreen) {
+    screenScroll[previousScreen] = pageScroller().scrollTop;
+  }
   const slidePush = previousView === 'home' && previousScreen === 'home'
     && view !== 'home' && !state.search;
   const slidePop = previousView !== 'home' && previousScreen === 'detail'
@@ -1114,6 +1148,9 @@ function route() {
   state.view = view;
   document.body.dataset.screen = view === 'home' ? 'home' : 'detail';
   render();
+  if (PAGE_SCROLL_MEDIA.matches) {
+    pageScroller().scrollTop = screenScroll[document.body.dataset.screen] || 0;
+  }
   if (snapshot) {
     animateScreenTransition(slidePush, snapshot);
   } else if (previousView !== view && view !== 'home' && !state.search && !MOTION_REDUCED.matches) {
@@ -2722,15 +2759,20 @@ function noteForId(id) {
 
 function ensureNoteRowVisible(row) {
   if (!row) return;
-  const scroller = row.closest('#content') || row.closest('.sidebar');
+  const pageScroll = PAGE_SCROLL_MEDIA.matches;
+  const scroller = pageScroll
+    ? pageScroller()
+    : (row.closest('#content') || row.closest('.sidebar'));
   if (!scroller) return;
   const scrollerRect = scroller.getBoundingClientRect();
-  const sticky = scroller.classList.contains('sidebar') ? scroller.querySelector('.sidebar-top') : null;
-  let top = scrollerRect.top + 8;
-  if (sticky && sticky.getBoundingClientRect().bottom > scrollerRect.top) {
+  const sticky = pageScroll
+    ? (document.body.dataset.screen === 'home' ? $('.sidebar-top') : $('.main-top'))
+    : (scroller.classList.contains('sidebar') ? scroller.querySelector('.sidebar-top') : null);
+  let top = (pageScroll ? 0 : scrollerRect.top) + 8;
+  if (sticky && sticky.getBoundingClientRect().bottom > (pageScroll ? 0 : scrollerRect.top)) {
     top = sticky.getBoundingClientRect().bottom + 8;
   }
-  const bottom = scrollerRect.bottom - 8;
+  const bottom = pageScroll ? document.documentElement.clientHeight - 8 : scrollerRect.bottom - 8;
   const rect = row.getBoundingClientRect();
   if (rect.top >= top && rect.bottom <= bottom) return;
   const delta = rect.top < top ? rect.top - top : rect.bottom - bottom;
@@ -4426,10 +4468,25 @@ async function sendTestNotification() {
 /* ---------------- Sheets ---------------- */
 
 let lastFocused = null;
+// The page-behind lock fixes <body>; on phones the document is the scroller,
+// so keep the background visually in place while the sheet is open and put
+// the page back where it was on close.
+let sheetPageScroll = null;
 
 function syncSheetState() {
   const anyOpen = $$('.sheet').some((sheet) => !sheet.hidden);
+  const wasOpen = document.body.classList.contains('sheet-open');
+  if (PAGE_SCROLL_MEDIA.matches && anyOpen && !wasOpen) {
+    sheetPageScroll = pageScroller().scrollTop;
+    document.body.style.top = `-${sheetPageScroll}px`;
+  }
   document.body.classList.toggle('sheet-open', anyOpen);
+  if (!anyOpen && wasOpen) {
+    const restore = sheetPageScroll;
+    sheetPageScroll = null;
+    document.body.style.top = '';
+    if (restore != null) pageScroller().scrollTop = restore;
+  }
   if (!anyOpen && lastFocused && document.contains(lastFocused)) {
     try { lastFocused.focus({ preventScroll: true }); } catch { /* ignore */ }
     lastFocused = null;
@@ -5424,7 +5481,7 @@ function animateCompletedSectionClose(done) {
 }
 
 function preserveContentScroll(action, mode = 'keep') {
-  const scroller = $('#content');
+  const scroller = screenScroller();
   if (!scroller) { action(); return; }
   const top = scroller.scrollTop;
   action();
@@ -5444,11 +5501,12 @@ $('#sort-completed').addEventListener('click', (event) => {
     animateCompletedSectionOpen();
     return;
   }
-  const previousScroll = $('#content') ? $('#content').scrollTop : 0;
+  const previous = screenScroller();
+  const previousScroll = previous ? previous.scrollTop : 0;
   animateCompletedSectionClose(() => {
     if (token === completedToggleToken && $('.completed-section')) {
       renderMain();
-      const scroller = $('#content');
+      const scroller = screenScroller();
       if (scroller) scroller.scrollTop = Math.min(previousScroll, Math.max(0, scroller.scrollHeight - scroller.clientHeight));
     }
   });
@@ -5580,8 +5638,37 @@ applyDensity();
 syncMenuButtons();
 initPullToRefresh();
 initDayPeek();
+function onScrollActivity() {
+  lastNoteScrollAt = Date.now();
+}
+
+// Only trust the scroller that belongs to the current layout: when a resize
+// swaps scrollers, the old one clamps to 0 and would otherwise overwrite the
+// saved position with that clamp.
 [$('.sidebar'), $('#content')].forEach((scroller) => {
   if (!scroller) return;
-  scroller.addEventListener('scroll', () => { lastNoteScrollAt = Date.now(); }, { passive: true });
+  scroller.addEventListener('scroll', () => {
+    onScrollActivity();
+    if (!PAGE_SCROLL_MEDIA.matches) recordScreenScroll();
+  }, { passive: true });
 });
+// The phone layout scrolls the document rather than those elements.
+window.addEventListener('scroll', () => {
+  onScrollActivity();
+  if (PAGE_SCROLL_MEDIA.matches) recordScreenScroll();
+}, { passive: true });
+
+// Crossing the layout breakpoint (e.g. rotating a large iPhone) swaps which
+// element scrolls; carry the position across once the new styles settle.
+PAGE_SCROLL_MEDIA.addEventListener('change', () => {
+  requestAnimationFrame(() => {
+    const screen = document.body.dataset.screen;
+    if (!screen) return;
+    const scroller = PAGE_SCROLL_MEDIA.matches
+      ? pageScroller()
+      : (screen === 'home' ? $('.sidebar') : $('#content'));
+    if (scroller) scroller.scrollTop = screenScroll[screen] || 0;
+  });
+});
+
 boot();
