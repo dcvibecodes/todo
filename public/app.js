@@ -2622,38 +2622,28 @@ function linkChip(url) {
 // shows stray commas between chips.
 function noteParts(value) {
   const text = String(value || '');
-  const segments = [];
+  const links = [];
+  // Keep a marker where each URL was so removing the link cannot also remove
+  // the line breaks around it. Joining the remaining text with spaces (the
+  // old behaviour) collapsed an inline URL's paragraph break into a space.
+  const MARK = '\u0000';
+  let prose = '';
   let last = 0;
   for (const match of text.matchAll(URL_PATTERN)) {
     const raw = match[0];
     const url = cleanUrl(raw);
     if (!url) continue;
-    if (match.index > last) segments.push({ type: 'text', value: text.slice(last, match.index) });
-    segments.push({ type: 'link', value: url });
+    prose += text.slice(last, match.index) + MARK;
     last = match.index + raw.length;
+    const href = toHref(url);
+    if (!links.includes(href)) links.push(href);
   }
-  if (last < text.length) segments.push({ type: 'text', value: text.slice(last) });
-  const prose = [];
-  const links = [];
-  segments.forEach((segment, index) => {
-    if (segment.type === 'link') {
-      const href = toHref(segment.value);
-      if (!links.includes(href)) links.push(href);
-      return;
-    }
-    let value = segment.value;
-    const previous = segments[index - 1];
-    const next = segments[index + 1];
-    if (previous && previous.type === 'link') value = value.replace(/^[ \t,;:!?.]+/, '');
-    if (next && next.type === 'link') value = value.replace(/[ \t,;:!?.]+$/, '');
-    value = value
-      .replace(/[^\S\n]+/g, ' ')
-      .replace(/ *\n */g, '\n')
-      .replace(/\n{3,}/g, '\n\n')
-      .trim();
-    if (value) prose.push(value);
-  });
-  const proseText = prose.join(' ')
+  prose += text.slice(last);
+  const proseText = prose
+    // Punctuation/space that merely joined the link goes with it, but never
+    // a nearby newline.
+    .replace(/[ \t]*[,;:!?.]*[ \t]*\u0000[ \t]*[,;:!?.]*[ \t]*/g, MARK)
+    .replace(/\u0000/g, ' ')
     .replace(/[^\S\n]+/g, ' ')
     .replace(/ *\n */g, '\n')
     .replace(/\n{3,}/g, '\n\n')
@@ -3422,6 +3412,8 @@ function syncModelRows() {
 // natural-language autofill: your edits are never overwritten.
 function markScheduleManual() {
   scheduleLocked = true;
+  parseSuggestion = null;
+  parseAppliedSnapshot = null;
   hideParseChip();
 }
 
@@ -3804,7 +3796,8 @@ function openEditor(id) {
 
   clearTimeout(parseTimer);
   scheduleLocked = false;
-  parseSnapshot = null;
+  parseSuggestion = null;
+  parseAppliedSnapshot = null;
   hideParseChip();
 
   state.editingId = reminder ? reminder.id : null;
@@ -3994,7 +3987,8 @@ async function saveEditor(event) {
 
 let parseTimer = null;
 let parseSeq = 0;
-let parseSnapshot = null;
+let parseSuggestion = null;
+let parseAppliedSnapshot = null;
 let scheduleLocked = false;
 
 function hideParseChip() {
@@ -4008,16 +4002,26 @@ function scheduleParse() {
 
 async function runParse() {
   const text = $('#e-title').value;
-  if ($('#editor').hidden || scheduleLocked || text.trim().length < 3) return;
+  if ($('#editor').hidden || scheduleLocked) return;
+  if (text.trim().length < 3) {
+    parseSuggestion = null;
+    parseAppliedSnapshot = null;
+    hideParseChip();
+    return;
+  }
   const seq = ++parseSeq;
   let result;
   try {
     result = await api('/api/parse', { method: 'POST', body: { text, timeZone: deviceZone() } });
   } catch {
-    return; // offline: the title still saves verbatim
+    // Offline: clear a stale suggestion rather than showing one for old text.
+    parseSuggestion = null;
+    parseAppliedSnapshot = null;
+    hideParseChip();
+    return;
   }
   if (seq !== parseSeq || $('#editor').hidden || scheduleLocked) return;
-  applyParse(result);
+  showParseSuggestion(result);
 }
 
 function chipDateLabel(dateStr, timeStr) {
@@ -4031,41 +4035,57 @@ function chipDateLabel(dateStr, timeStr) {
   return `${label} · ${time}`;
 }
 
-function applyParse(result) {
-  if ((!result.date) && (!result.repeat || result.repeat === 'none')) {
-    // Nothing left to autofill: if an earlier keystroke turned fields on and
-    // the user hasn't touched them since, put everything back how it was.
-    // Without this, toggles flipped on by a half-typed phrase stick on
-    // forever (e.g. type "friday", delete it, date stays on).
-    if (parseSnapshot && !scheduleLocked) {
-      $('#e-date-on').checked = parseSnapshot.dateOn;
-      $('#e-time-on').checked = parseSnapshot.timeOn;
-      $('#e-date').value = parseSnapshot.date;
-      $('#e-time').value = parseSnapshot.time;
-      $('#e-repeat').value = parseSnapshot.repeat;
-      $('#e-repeat-interval').value = parseSnapshot.interval;
-      $('#e-repeat-unit').value = parseSnapshot.unit;
-      syncDateTimeRows();
-      syncRepeatRows();
-    }
-    parseSnapshot = null;
+function parseLabel(result) {
+  const parts = [];
+  if (result.date) parts.push(chipDateLabel(result.date, result.time));
+  if (result.repeat && result.repeat !== 'none') parts.push(repeatLabel(result.repeat));
+  return parts.join(' · ');
+}
+
+function scheduleSnapshot() {
+  return {
+    dateOn: $('#e-date-on').checked,
+    timeOn: $('#e-time-on').checked,
+    date: $('#e-date').value,
+    time: $('#e-time').value,
+    repeat: $('#e-repeat').value,
+    interval: $('#e-repeat-interval').value,
+    unit: $('#e-repeat-unit').value,
+  };
+}
+
+function restoreSchedule(snapshot) {
+  if (!snapshot) return;
+  $('#e-date-on').checked = snapshot.dateOn;
+  $('#e-time-on').checked = snapshot.timeOn;
+  $('#e-date').value = snapshot.date;
+  $('#e-time').value = snapshot.time;
+  $('#e-repeat').value = snapshot.repeat;
+  $('#e-repeat-interval').value = snapshot.interval;
+  $('#e-repeat-unit').value = snapshot.unit;
+  syncDateTimeRows();
+  syncRepeatRows();
+  syncEditorSubmit();
+}
+
+// Natural language never writes the form by itself: it offers a chip ("Use
+// Tomorrow · 9:00 AM") and only the user's tap applies it. This keeps a
+// quick-add from silently becoming dated.
+function showParseSuggestion(result) {
+  const label = parseLabel(result);
+  parseSuggestion = label ? result : null;
+  parseAppliedSnapshot = null;
+  if (!label) {
     hideParseChip();
-    syncEditorSubmit();
     return;
   }
-  // Capture the pre-autofill baseline only once: later keystrokes must not
-  // overwrite it, or reverting would restore a half-autofilled state.
-  if (!parseSnapshot) {
-    parseSnapshot = {
-      dateOn: $('#e-date-on').checked,
-      timeOn: $('#e-time-on').checked,
-      date: $('#e-date').value,
-      time: $('#e-time').value,
-      repeat: $('#e-repeat').value,
-      interval: $('#e-repeat-interval').value,
-      unit: $('#e-repeat-unit').value,
-    };
-  }
+  $('#e-parse-text').textContent = `Use ${label}`;
+  $('#e-parse-icon').setAttribute('href', '#i-plus');
+  $('#e-parse-chip').setAttribute('aria-label', `Use suggested schedule: ${label}`);
+  $('#e-parse-chip').hidden = false;
+}
+
+function applyParseToForm(result) {
   if (result.date) {
     $('#e-date-on').checked = true;
     $('#e-date').value = result.date;
@@ -4087,30 +4107,30 @@ function applyParse(result) {
     }
     onRepeatChange(false);
   }
-  const parts = [];
-  if (result.date) parts.push(chipDateLabel(result.date, result.time));
-  if (result.repeat && result.repeat !== 'none') parts.push(repeatLabel(result.repeat));
-  $('#e-parse-text').textContent = parts.join(' · ') || 'Parsed';
-  $('#e-parse-chip').hidden = false;
   syncEditorSubmit();
 }
 
-function clearParse() {
-  if (parseSnapshot) {
-    $('#e-date-on').checked = parseSnapshot.dateOn;
-    $('#e-time-on').checked = parseSnapshot.timeOn;
-    $('#e-date').value = parseSnapshot.date;
-    $('#e-time').value = parseSnapshot.time;
-    $('#e-repeat').value = parseSnapshot.repeat;
-    $('#e-repeat-interval').value = parseSnapshot.interval;
-    $('#e-repeat-unit').value = parseSnapshot.unit;
-    syncDateTimeRows();
-    syncRepeatRows();
+function toggleParseSuggestion() {
+  const result = parseSuggestion;
+  if (!result) return;
+  const label = parseLabel(result);
+  if (parseAppliedSnapshot) {
+    restoreSchedule(parseAppliedSnapshot);
+    parseAppliedSnapshot = null;
+    scheduleLocked = false;
+    $('#e-parse-text').textContent = `Use ${label}`;
+    $('#e-parse-icon').setAttribute('href', '#i-plus');
+    $('#e-parse-chip').setAttribute('aria-label', `Use suggested schedule: ${label}`);
+    return;
   }
-  parseSnapshot = null;
+  parseAppliedSnapshot = scheduleSnapshot();
+  applyParseToForm(result);
+  // Freeze further parsing while the applied values are in place; editing the
+  // title again must not silently replace what the user just accepted.
   scheduleLocked = true;
-  hideParseChip();
-  syncEditorSubmit();
+  $('#e-parse-text').textContent = label;
+  $('#e-parse-icon').setAttribute('href', '#i-x');
+  $('#e-parse-chip').setAttribute('aria-label', `Remove suggested schedule: ${label}`);
 }
 
 let deleteArmed = false; // second tap confirms a recurring-series delete
@@ -5388,7 +5408,7 @@ $('#e-zone').addEventListener('change', () => { updateZoneVisual(); syncModelRow
 $('#e-snooze-btn').addEventListener('click', toggleEditorSnooze);$('#e-skip-btn').addEventListener('click', skipCurrentOccurrence);
 $('#scope-occurrence').addEventListener('click', () => setScope('occurrence'));
 $('#scope-series').addEventListener('click', () => setScope('series'));
-$('#e-parse-chip').addEventListener('click', clearParse);
+$('#e-parse-chip').addEventListener('click', toggleParseSuggestion);
 $('#e-date').addEventListener('change', () => {
   if (!$('#e-date').value) {
     $('#e-date-on').checked = false;

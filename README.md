@@ -2,6 +2,12 @@
 
 A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due dates, urgent flags, recurring reminders, natural-language quick add, smart lists, floating time zones, a token API for external agents, completed history, dark mode, and web push. No frontend framework and no build step.
 
+## What's New in v2.13.16
+
+- **Note line breaks survive link chips** - URLs are still moved into chips, but the newlines around them are preserved even when the URL sits on its own line. A standalone Notebook or YouTube link no longer merges the paragraphs on either side in the expanded note.
+- **Natural-language dates are suggestions, not autofill** - typing a date/time/repeat now shows a **Use …** chip and changes nothing by default. Tap it to apply; the chip then turns into a remove (×) action. Ignoring it saves the item undated, and manual schedule edits lock the suggestion. This keeps quick-add from silently becoming dated.
+- Service worker cache bumped to `todo-v2.13.16`.
+
 ## What's New in v2.13.15
 
 - **New List plus stays a bare glyph** - removed the filled/dark hover and focus state so the plus no longer turns into a boxed button (and iOS cannot leave it stuck after a tap). It keeps the quiet grip colour, the "New List" tooltip and accessible name, and its exact alignment with the drag grips. Service worker cache bumped to `todo-v2.13.15`.
