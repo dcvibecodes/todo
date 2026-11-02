@@ -1342,8 +1342,29 @@ async function syncSortWithServer() {
 const SORT_DIR_LABELS = {
   due: { asc: 'Soonest on top', desc: 'Latest on top' },
   created: { asc: 'Oldest on top', desc: 'Newest on top' },
+  completed: { asc: 'Oldest on top', desc: 'Newest on top' },
   name: { asc: 'A–Z', desc: 'Z–A' },
 };
+
+// "Date completed" is only meaningful in the Completed view, so the option is
+// inserted there and removed everywhere else instead of haunting open lists.
+function syncSortFieldOptions(view) {
+  const select = $('#sort-field');
+  if (!select) return;
+  let option = select.querySelector('option[value="completed"]');
+  if (view === 'completed') {
+    if (!option) {
+      option = document.createElement('option');
+      option.value = 'completed';
+      option.textContent = 'Date completed';
+      const created = select.querySelector('option[value="created"]');
+      if (created) created.after(option);
+      else select.append(option);
+    }
+  } else if (option) {
+    option.remove();
+  }
+}
 
 function syncSortDirLabels(fieldSelect, dirSelect) {
   const labels = SORT_DIR_LABELS[fieldSelect.value] || SORT_DIR_LABELS.due;
@@ -1362,8 +1383,10 @@ function viewSortKey(view) {
 }
 
 const DATED_VIEW_SORT = { field: 'due', dir: 'asc' };
+const COMPLETED_VIEW_SORT = { field: 'completed', dir: 'desc' };
 
 function defaultSortFor(view) {
+  if (view === 'completed') return COMPLETED_VIEW_SORT;
   return view === 'today' || view === 'scheduled' ? DATED_VIEW_SORT : state.sortDefault;
 }
 
@@ -1402,6 +1425,15 @@ function compareReminders(a, b, sort) {
   if (sort.field === 'name') {
     const cmp = a.title.localeCompare(b.title, undefined, { sensitivity: 'base', numeric: true });
     return cmp ? direction * cmp : fallback;
+  }
+  if (sort.field === 'completed') {
+    const av = a.completed_at ? new Date(a.completed_at).getTime() : null;
+    const bv = b.completed_at ? new Date(b.completed_at).getTime() : null;
+    // Legacy completed rows without a stamp stay last in either direction.
+    if (av === null && bv === null) return fallback;
+    if (av === null) return 1;
+    if (bv === null) return -1;
+    return av === bv ? fallback : direction * (av - bv);
   }
   if (sort.field === 'created') {
     const av = new Date(a.created_at || 0).getTime();
@@ -1455,10 +1487,15 @@ function viewItems() {
   return sortItems(items, effectiveSort(view));
 }
 
+function sortCompleted(items) {
+  return sortItems(items, { field: 'completed', dir: 'desc' });
+}
+
 function completedInList(listId) {
-  return sortItems(state.reminders
-    .filter((reminder) => reminder.list_id === listId && reminder.completed),
-    effectiveSort(listId));
+  // Completed history always reads newest completion first, independent of
+  // the list's sort for active items.
+  return sortCompleted(state.reminders
+    .filter((reminder) => reminder.list_id === listId && reminder.completed));
 }
 
 // A search result can be older than the 30-day completed window that
@@ -2362,6 +2399,7 @@ function renderMain() {
   const sortBar = $('#sort-bar');
   // Relevance-ranked search owns the order, so the Sort/Order bar steps aside.
   sortBar.hidden = view === 'home' || Boolean(state.search);
+  syncSortFieldOptions(view);
   if (!sortBar.hidden) {
     const sort = effectiveSort(view);
     $('#sort-field').value = sort.field;
@@ -5456,6 +5494,7 @@ $('#sort-field').addEventListener('change', (event) => {
   const field = event.target.value;
   const patch = { field };
   if (field === 'due') patch.dir = 'asc';
+  else if (field === 'completed') patch.dir = 'desc';
   setViewSort(state.view, patch);
   requestRowAnimation();
   render();

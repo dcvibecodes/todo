@@ -1228,7 +1228,7 @@ async function main() {
     res.json({ ok: true, settings: await getSettings(), floatingMoved: moved, moved: movedItems });
   });
 
-  const SORT_FIELDS = ['due', 'created', 'name'];
+  const SORT_FIELDS = ['due', 'created', 'completed', 'name'];
   const SORT_DIRS = ['asc', 'desc'];
   const SORT_VIEW_KEY = /^(today|scheduled|all|flagged|completed|list:\d{1,10})$/;
   const SORT_MAX_OVERRIDES = 200;

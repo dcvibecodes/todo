@@ -1357,7 +1357,9 @@ body.flipping .reminder-group { overflow: visible; }
   color: var(--accent-contrast);
 }
 .reminder.done .check .ic { opacity: 1; }
-.reminder.done .reminder-title { text-decoration: line-through; color: var(--text-3); }
+/* Completed titles stay readable for reference; the filled check is the
+   completion marker, not a strike-through. */
+.reminder.done .reminder-title { color: var(--text-3); }
 
 .reminder-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 
@@ -3000,7 +3002,7 @@ body.sheet-open .sidebar {
   color: var(--accent-contrast);
 }
 .reminder.completing .check .ic { opacity: 1; }
-.reminder.completing .reminder-title { text-decoration: line-through; color: var(--text-3); }
+.reminder.completing .reminder-title { color: var(--text-3); }
 
 @media (prefers-reduced-motion: no-preference) {
   .reminder.entering {

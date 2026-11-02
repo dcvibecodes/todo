@@ -2,6 +2,12 @@
 
 A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due dates, urgent flags, recurring reminders, natural-language quick add, smart lists, floating time zones, a token API for external agents, completed history, dark mode, and web push. No frontend framework and no build step.
 
+## What's New in v2.13.17
+
+- **Completed titles no longer have a strike-through** - finished items keep the muted grey title but are no longer crossed out (including during the completion animation), so saved completed items stay readable for reference. The filled check remains the completion marker.
+- **Completed history is newest-completed first** - the Completed view now defaults to **Date completed / Newest on top**; the new Date completed option appears only there, and Date added / Due date / Name are still selectable. Each list's Completed section always shows the most recently completed item first, even if that list sorts its open items another way. Un-completing and re-completing an item moves it back to the top.
+- Service worker cache bumped to `todo-v2.13.17`.
+
 ## What's New in v2.13.16
 
 - **Note line breaks survive link chips** - URLs are still moved into chips, but the newlines around them are preserved even when the URL sits on its own line. A standalone Notebook or YouTube link no longer merges the paragraphs on either side in the expanded note.
