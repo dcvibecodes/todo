@@ -1357,16 +1357,13 @@ body.flipping .reminder-group { overflow: visible; }
   color: var(--accent-contrast);
 }
 .reminder.done .check .ic { opacity: 1; }
-/* Completed rows step down one visual level: the title takes the list-note
-   style, and every secondary line drops to the muted level. The completing
-   state mirrors this while the check request is in flight, so nothing jumps
-   when the row re-renders. The filled check remains the completion marker. */
+/* Completed rows keep the normal title size and step down by colour: the
+   title takes the list-note colour, and every secondary line drops to the
+   muted level. The completing state mirrors this while the check request is
+   in flight, so nothing jumps when the row re-renders. The filled check
+   remains the completion marker. */
 .reminder.done .reminder-title,
-.reminder.completing .reminder-title {
-  font-size: 0.8125rem;
-  line-height: 1.4;
-  color: var(--text-2);
-}
+.reminder.completing .reminder-title { color: var(--text-2); }
 .reminder.done .reminder-notes,
 .reminder.completing .reminder-notes { color: var(--text-3); }
 .reminder.done .link-chip,
@@ -2618,9 +2615,6 @@ body.sheet-open .sidebar {
 [data-density="compact"] .swipe-content { min-height: 0; padding: 8px 12px; gap: 10px; }
 [data-density="compact"] .reminder-due { font-size: 0.7rem; }
 [data-density="compact"] .reminder-title { font-size: 0.875rem; }
-/* Compact completed titles track the compact note size (12px), not 14px. */
-[data-density="compact"] .reminder.done .reminder-title,
-[data-density="compact"] .reminder.completing .reminder-title { font-size: 0.75rem; }
 [data-density="compact"] .reminder-meta { font-size: 0.7rem; gap: 8px; }
 [data-density="compact"] .reminder-notes { font-size: 0.75rem; }
 [data-density="compact"] .check { width: 20px; height: 20px; }
