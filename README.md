@@ -2,6 +2,11 @@
 
 A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due dates, urgent flags, recurring reminders, natural-language quick add, smart lists, floating time zones, a token API for external agents, completed history, dark mode, and web push. No frontend framework and no build step.
 
+## What's New in v2.13.19
+
+- **The search bar stays visible when the iPhone keyboard opens** - focusing either search field on a touch phone now brings the current screen to the top and compensates for iOS's keyboard viewport offset on the sticky header. The search field stays on screen and results begin at the first hit instead of deep in the old list position. Blur restores the header; desktop scroll positions are untouched.
+- Service worker cache bumped to `todo-v2.13.19`.
+
 ## What's New in v2.13.18
 
 - **Completed rows use a clear three-level hierarchy** - the completed title now takes the list-note style (13px, line-height 1.4, `--text-2`; 12px in Compact), while the note, link chips, due line, completion date and metadata drop to the muted `--text-3` level. Link chips use weight 500 and the due line is no longer bold. Open rows are unchanged, and completed titles still have no strike-through.

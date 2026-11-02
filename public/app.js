@@ -5731,4 +5731,69 @@ PAGE_SCROLL_MEDIA.addEventListener('change', () => {
   });
 });
 
+/* iOS keeps sticky elements on the layout viewport, so opening the keyboard
+   can push a focused search bar above what the user can see (and leave search
+   results starting at an old list position). Bring the screen to its top when
+   search is focused, then nudge the active sticky header down if the visual
+   viewport is still offset. */
+function searchHasFocus() {
+  const active = document.activeElement;
+  return active === $('#search') || active === $('#main-search');
+}
+
+function activeTopBar() {
+  return document.body.dataset.screen === 'home' ? $('.sidebar-top') : $('.main-top');
+}
+
+function resetTopBarTransforms() {
+  for (const bar of [$('.sidebar-top'), $('.main-top')]) {
+    if (bar) bar.style.transform = '';
+  }
+}
+
+let searchHeaderFrame = 0;
+function syncSearchHeaderShift() {
+  if (searchHeaderFrame) return;
+  searchHeaderFrame = requestAnimationFrame(() => {
+    searchHeaderFrame = 0;
+    resetTopBarTransforms();
+    if (!PAGE_SCROLL_MEDIA.matches || !searchHasFocus()) return;
+    const bar = activeTopBar();
+    if (!bar) return;
+    const viewport = window.visualViewport;
+    const shift = Math.max(
+      0,
+      -bar.getBoundingClientRect().top,
+      viewport ? viewport.offsetTop : 0,
+    );
+    if (shift > 0.5) bar.style.transform = `translateY(${shift}px)`;
+  });
+}
+
+function bringSearchToTop() {
+  if (!PAGE_SCROLL_MEDIA.matches) return;
+  pageScroller().scrollTop = 0;
+  syncSearchHeaderShift();
+}
+
+document.addEventListener('focusin', (event) => {
+  if (event.target === $('#search') || event.target === $('#main-search')) {
+    bringSearchToTop();
+    // The keyboard animation reports its viewport after focus; re-check once.
+    setTimeout(syncSearchHeaderShift, 300);
+  }
+});
+
+document.addEventListener('focusout', (event) => {
+  if (event.target === $('#search') || event.target === $('#main-search')) {
+    setTimeout(syncSearchHeaderShift, 0);
+  }
+});
+
+window.addEventListener('scroll', syncSearchHeaderShift, { passive: true });
+if (window.visualViewport) {
+  window.visualViewport.addEventListener('resize', syncSearchHeaderShift);
+  window.visualViewport.addEventListener('scroll', syncSearchHeaderShift);
+}
+
 boot();
