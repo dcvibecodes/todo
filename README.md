@@ -2,6 +2,11 @@
 
 A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due dates, urgent flags, recurring reminders, natural-language quick add, smart lists, floating time zones, a token API for external agents, completed history, dark mode, and web push. No frontend framework and no build step.
 
+## What's New in v2.13.18
+
+- **Completed rows use a clear three-level hierarchy** - the completed title now takes the list-note style (13px, line-height 1.4, `--text-2`; 12px in Compact), while the note, link chips, due line, completion date and metadata drop to the muted `--text-3` level. Link chips use weight 500 and the due line is no longer bold. Open rows are unchanged, and completed titles still have no strike-through.
+- Service worker cache bumped to `todo-v2.13.18`.
+
 ## What's New in v2.13.17
 
 - **Completed titles no longer have a strike-through** - finished items keep the muted grey title but are no longer crossed out (including during the completion animation), so saved completed items stay readable for reference. The filled check remains the completion marker.
