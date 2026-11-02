@@ -1373,6 +1373,15 @@ body.flipping .reminder-group { overflow: visible; }
 .reminder.done .reminder-due,
 .reminder.completing .reminder-due { color: var(--text-3); font-weight: 400; }
 
+/* Un-completing previews the empty ring while the PATCH is in flight, so the
+   check visibly clears before the row animates back to the open group. */
+.reminder.uncompleting .check {
+  background: transparent;
+  border-color: var(--text-3);
+  color: var(--text-3);
+}
+.reminder.uncompleting .check .ic { opacity: 0; }
+
 .reminder-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 
 .reminder-title {
@@ -3024,6 +3033,10 @@ body.sheet-open .sidebar {
     animation: check-pop 0.18s ease-out;
   }
 
+  .reminder.uncompleting .check {
+    animation: check-unpop 0.18s ease-out;
+  }
+
   .reminder.completing .check::before {
     content: "";
     position: absolute;
@@ -3048,6 +3061,12 @@ body.sheet-open .sidebar {
 @keyframes check-pop {
   0% { transform: scale(0.7); }
   60% { transform: scale(1.12); }
+  100% { transform: scale(1); }
+}
+
+@keyframes check-unpop {
+  0% { transform: scale(1); }
+  45% { transform: scale(0.88); }
   100% { transform: scale(1); }
 }
 

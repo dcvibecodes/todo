@@ -3258,17 +3258,26 @@ function escapeHtml(value) {
 // twice, silently skipping an occurrence).
 const completingInFlight = new Set();
 
+// Keep the uncheck state on screen long enough to read before the row moves.
+const UNCHECK_FEEDBACK_MS = 220;
+
 async function toggleCompleted(reminder, row) {
-  // Optimistic feedback only: the check fills while the request is already
-  // in flight. A failure re-renders the row's real state.
+  // Optimistic feedback only: the check fills/unfills while the request is
+  // already in flight. A failure re-renders the row's real state.
   if (completingInFlight.has(reminder.id)) return;
   completingInFlight.add(reminder.id);
-  if (row && !reminder.completed) row.classList.add('completing');
+  const undoing = Boolean(reminder.completed);
+  const startedAt = Date.now();
+  if (row) row.classList.add(undoing ? 'uncompleting' : 'completing');
   try {
     const result = await api('/api/reminders/' + reminder.id, {
       method: 'PATCH',
       body: { completed: !reminder.completed },
     });
+    if (undoing && row) {
+      const remaining = UNCHECK_FEEDBACK_MS - (Date.now() - startedAt);
+      if (remaining > 0) await new Promise((resolve) => setTimeout(resolve, remaining));
+    }
     await loadState();
     requestRowAnimation();
     render();
@@ -3279,7 +3288,7 @@ async function toggleCompleted(reminder, row) {
       toast('Already recorded for this date — move the date to a new day to advance');
     }
   } catch (err) {
-    if (row) row.classList.remove('completing');
+    if (row) row.classList.remove('completing', 'uncompleting');
     toast(err.message);
   } finally {
     completingInFlight.delete(reminder.id);

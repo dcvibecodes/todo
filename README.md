@@ -2,6 +2,11 @@
 
 A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due dates, urgent flags, recurring reminders, natural-language quick add, smart lists, floating time zones, a token API for external agents, completed history, dark mode, and web push. No frontend framework and no build step.
 
+## What's New in v2.13.21
+
+- **Un-completing now shows the checkbox clearing first** - the ring empties in place with a short unpop animation and the check icon fades out, held for about a fifth of a second before the row moves back to the open group. A failed request restores the filled check. Completion feedback is unchanged.
+- Service worker cache bumped to `todo-v2.13.21`.
+
 ## What's New in v2.13.20
 
 - **Completed titles keep their normal font size** - v2.13.18 had reduced completed titles to the note size. They now keep the same size and line-height as open titles (15px, or 14px in Compact) and step down by colour only: the title uses the note-level `--text-2`, while notes, link chips, due line, completed date and metadata stay muted. The filled check remains the completion marker and there is still no strike-through.
