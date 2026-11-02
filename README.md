@@ -2,6 +2,11 @@
 
 A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due dates, urgent flags, recurring reminders, natural-language quick add, smart lists, floating time zones, a token API for external agents, completed history, dark mode, and web push. No frontend framework and no build step.
 
+## What's New in v2.13.22
+
+- **Un-completing now gets the same glow as completing** - both directions use the identical 0.32s list-colour halo. Each row is held for ~340ms so the full halo is visible before it moves, and un-completing still shows the ring emptying and the check icon fading. Failed requests restore the previous state.
+- Service worker cache bumped to `todo-v2.13.22`.
+
 ## What's New in v2.13.21
 
 - **Un-completing now shows the checkbox clearing first** - the ring empties in place with a short unpop animation and the check icon fades out, held for about a fifth of a second before the row moves back to the open group. A failed request restores the filled check. Completion feedback is unchanged.

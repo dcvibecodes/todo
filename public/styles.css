@@ -3037,7 +3037,8 @@ body.sheet-open .sidebar {
     animation: check-unpop 0.18s ease-out;
   }
 
-  .reminder.completing .check::before {
+  .reminder.completing .check::before,
+  .reminder.uncompleting .check::before {
     content: "";
     position: absolute;
     inset: -1px;

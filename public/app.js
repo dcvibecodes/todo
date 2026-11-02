@@ -3258,8 +3258,9 @@ function escapeHtml(value) {
 // twice, silently skipping an occurrence).
 const completingInFlight = new Set();
 
-// Keep the uncheck state on screen long enough to read before the row moves.
-const UNCHECK_FEEDBACK_MS = 220;
+// Keep the check feedback on screen long enough to finish before the row moves
+// (the halo runs for 0.32s, with a little buffer).
+const TOGGLE_FEEDBACK_MS = 340;
 
 async function toggleCompleted(reminder, row) {
   // Optimistic feedback only: the check fills/unfills while the request is
@@ -3274,8 +3275,8 @@ async function toggleCompleted(reminder, row) {
       method: 'PATCH',
       body: { completed: !reminder.completed },
     });
-    if (undoing && row) {
-      const remaining = UNCHECK_FEEDBACK_MS - (Date.now() - startedAt);
+    if (row) {
+      const remaining = TOGGLE_FEEDBACK_MS - (Date.now() - startedAt);
       if (remaining > 0) await new Promise((resolve) => setTimeout(resolve, remaining));
     }
     await loadState();
