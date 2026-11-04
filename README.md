@@ -2,6 +2,11 @@
 
 A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due dates, urgent flags, recurring reminders, natural-language quick add, smart lists, floating time zones, a token API for external agents, completed history, dark mode, and web push. No frontend framework and no build step.
 
+## What's New in v2.13.24
+
+- **No more browser pop-ups** - deleting an item from the editor, deleting a list, changing token access and revoking a token now use the same in-app two-step confirmation as the list rows: **Delete / Change access / Revoke → Confirm?**, resetting after about four seconds. List deletion adds an inline warning that its items go too, and recurring items keep their permanent series warning. No native `confirm`, `alert` or `prompt` dialogs remain anywhere.
+- Service worker cache bumped to `todo-v2.13.24`.
+
 ## What's New in v2.13.23
 
 - **Optional username login** - the single-user account can now have a username. New installs choose one at setup; existing installs keep password-only login and get a one-time **Choose your username** prompt after signing in. Once set, login asks for username + password, ignores case and surrounding spaces, and returns the same “Incorrect username or password” for either failure.

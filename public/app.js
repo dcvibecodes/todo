@@ -3925,9 +3925,7 @@ function openEditor(id) {
   state.editingId = reminder ? reminder.id : null;
   pendingOccurrenceOps = [];
   pendingSnooze = null;
-  deleteArmed = false;
-  $('#e-delete').textContent = 'Delete Item';
-  $('#e-delete-warn').hidden = true;
+  resetEditorDelete();
   $('#editor-heading').textContent = reminder ? 'Edit Item' : 'New Item';
   $('#e-title').value = reminder ? reminder.title : '';
   clearFieldError($('#e-title'), $('#e-title-error'));
@@ -4255,30 +4253,51 @@ function toggleParseSuggestion() {
   $('#e-parse-chip').setAttribute('aria-label', `Remove suggested schedule: ${label}`);
 }
 
-let deleteArmed = false; // second tap confirms a recurring-series delete
+const INLINE_CONFIRM_MS = 4000;
+let deleteArmed = false; // second tap confirms the item delete
+let deleteResetTimer = null;
+
+function resetEditorDelete() {
+  deleteArmed = false;
+  clearTimeout(deleteResetTimer);
+  deleteResetTimer = null;
+  if ($('#e-delete')) {
+    $('#e-delete').textContent = 'Delete Item';
+    $('#e-delete').setAttribute('aria-label', 'Delete item');
+  }
+  if ($('#e-delete-warn')) $('#e-delete-warn').hidden = true;
+}
 
 async function deleteReminder() {
   if (!state.editingId) return;
   // Deleting a series wipes it and its whole history (ON DELETE CASCADE),
   // so a recurring item needs an acknowledged warning — not a toast, not a
-  // bare confirm. First tap explains and arms; second tap deletes.
+  // native confirm. A one-off item uses the same inline Delete → Confirm?
+  // pattern as the list rows.
   const reminder = findReminder(state.editingId);
   const rule = reminder ? parseRuleClient(reminder.repeat_rule) : { type: 'none' };
   if (!rule || rule.type === 'none') {
-    deleteArmed = false;
-    $('#e-delete-warn').hidden = true;
-    $('#e-delete').textContent = 'Delete Item';
-    if (!window.confirm('Delete this item?')) return;
+    if (!deleteArmed) {
+      deleteArmed = true;
+      $('#e-delete').textContent = 'Confirm?';
+      $('#e-delete').setAttribute('aria-label', 'Confirm delete item');
+      clearTimeout(deleteResetTimer);
+      deleteResetTimer = setTimeout(resetEditorDelete, INLINE_CONFIRM_MS);
+      return;
+    }
   } else if (!deleteArmed) {
     deleteArmed = true;
     const warn = $('#e-delete-warn');
     warn.textContent = `This repeats (${repeatLabel(rule)}). Deleting removes the whole series and its history. To remove just this occurrence, use Skip instead.`;
     warn.hidden = false;
     $('#e-delete').textContent = 'Delete everything';
+    $('#e-delete').setAttribute('aria-label', 'Delete the repeating series');
     return;
   }
+  const id = state.editingId;
+  resetEditorDelete();
   try {
-    await api('/api/reminders/' + state.editingId, { method: 'DELETE' });
+    await api('/api/reminders/' + id, { method: 'DELETE' });
     closeSheet('#editor');
     await loadState();
     requestRowAnimation();
@@ -4370,6 +4389,7 @@ function openListSheet(list) {
   clearFieldError($('#l-name'), $('#l-name-error'));
   $('#l-name').disabled = system;
   $('#l-delete').hidden = !list || system;
+  resetListDelete();
   $('#list-save').textContent = 'Save';
   $('#list-sheet').removeAttribute('aria-busy');
   $('#l-retention').value = retention;
@@ -4468,10 +4488,39 @@ async function saveList(event, options = {}) {
   }
 }
 
+let listDeleteArmed = false;
+let listDeleteTimer = null;
+
+function resetListDelete() {
+  listDeleteArmed = false;
+  clearTimeout(listDeleteTimer);
+  listDeleteTimer = null;
+  if ($('#l-delete')) {
+    $('#l-delete').textContent = 'Delete List';
+    $('#l-delete').setAttribute('aria-label', 'Delete list');
+  }
+  if ($('#l-delete-warn')) $('#l-delete-warn').hidden = true;
+}
+
 async function deleteList() {
   if (!state.editingListId) return;
-  if (!window.confirm('Delete this list and all of its items?')) return;
+  if (!listDeleteArmed) {
+    listDeleteArmed = true;
+    $('#l-delete').textContent = 'Confirm?';
+    $('#l-delete').setAttribute('aria-label', 'Confirm delete list');
+    const warn = $('#l-delete-warn');
+    warn.textContent = 'This also deletes every item in this list.';
+    warn.hidden = false;
+    warn.scrollIntoView({
+      block: 'nearest',
+      behavior: MOTION_REDUCED.matches ? 'auto' : 'smooth',
+    });
+    clearTimeout(listDeleteTimer);
+    listDeleteTimer = setTimeout(resetListDelete, INLINE_CONFIRM_MS);
+    return;
+  }
   const id = state.editingListId;
+  resetListDelete();
   try {
     await api('/api/lists/' + id, { method: 'DELETE' });
     closeSheet('#list-sheet');
@@ -5214,12 +5263,13 @@ async function renderTokenList() {
       }),
     ]);
     if (!token.revoked_at) {
+      const tokenName = token.name || 'token';
       const targets = token.profile === 'legacy' ? ['read', 'write']
         : token.profile === 'write' ? ['read']
         : ['write'];
       const select = el('select', {
         class: 'secondary-btn small-btn',
-        'aria-label': `Change access for ${token.name || 'token'}`,
+        'aria-label': `Change access for ${tokenName}`,
       });
       for (const target of targets) {
         select.append(el('option', {
@@ -5227,37 +5277,77 @@ async function renderTokenList() {
           text: target === 'write' ? 'read + write' : 'read only',
         }));
       }
-      row.append(select);
-      row.append(el('button', {
+      const accessButton = el('button', {
         type: 'button',
         class: 'secondary-btn small-btn',
         text: 'Change access',
-        onclick: async () => {
-          if (!window.confirm(`Change "${token.name || 'token'}" to "${select.value === 'write' ? 'read + write' : 'read only'}"? Capability changes apply immediately.`)) return;
-          try {
-            await api('/api/tokens/' + token.id + '/profile', { method: 'POST', body: { profile: select.value } });
-            await renderTokenList();
-            toast('Token access changed');
-          } catch (err) {
-            toast(err.message);
-          }
-        },
-      }));
-      row.append(el('button', {
+        'aria-label': `Change access for ${tokenName}`,
+      });
+      let accessArmed = false;
+      let accessTimer = null;
+      const resetAccess = () => {
+        accessArmed = false;
+        clearTimeout(accessTimer);
+        accessTimer = null;
+        accessButton.textContent = 'Change access';
+        accessButton.setAttribute('aria-label', `Change access for ${tokenName}`);
+      };
+      select.addEventListener('change', resetAccess);
+      accessButton.addEventListener('click', async () => {
+        if (!accessArmed) {
+          accessArmed = true;
+          accessButton.textContent = 'Confirm?';
+          accessButton.setAttribute('aria-label', `Confirm access change for ${tokenName}`);
+          clearTimeout(accessTimer);
+          accessTimer = setTimeout(resetAccess, INLINE_CONFIRM_MS);
+          return;
+        }
+        const profile = select.value;
+        resetAccess();
+        try {
+          await api('/api/tokens/' + token.id + '/profile', { method: 'POST', body: { profile } });
+          await renderTokenList();
+          toast('Token access changed');
+        } catch (err) {
+          toast(err.message);
+        }
+      });
+
+      const revokeButton = el('button', {
         type: 'button',
         class: 'secondary-btn small-btn',
         text: 'Revoke',
-        onclick: async () => {
-          if (!window.confirm(`Revoke the token "${token.name || 'token'}"? Agents using it stop working immediately.`)) return;
-          try {
-            await api('/api/tokens/' + token.id + '/revoke', { method: 'POST' });
-            await renderTokenList();
-            toast('Token revoked');
-          } catch (err) {
-            toast(err.message);
-          }
-        },
-      }));
+        'aria-label': `Revoke token ${tokenName}`,
+      });
+      let revokeArmed = false;
+      let revokeTimer = null;
+      const resetRevoke = () => {
+        revokeArmed = false;
+        clearTimeout(revokeTimer);
+        revokeTimer = null;
+        revokeButton.textContent = 'Revoke';
+        revokeButton.setAttribute('aria-label', `Revoke token ${tokenName}`);
+      };
+      revokeButton.addEventListener('click', async () => {
+        if (!revokeArmed) {
+          revokeArmed = true;
+          revokeButton.textContent = 'Confirm?';
+          revokeButton.setAttribute('aria-label', `Confirm revoke token ${tokenName}`);
+          clearTimeout(revokeTimer);
+          revokeTimer = setTimeout(resetRevoke, INLINE_CONFIRM_MS);
+          return;
+        }
+        resetRevoke();
+        try {
+          await api('/api/tokens/' + token.id + '/revoke', { method: 'POST' });
+          await renderTokenList();
+          toast('Token revoked');
+        } catch (err) {
+          toast(err.message);
+        }
+      });
+
+      row.append(select, accessButton, revokeButton);
     }
     wrap.append(row);
   }
