@@ -2,6 +2,11 @@
 
 A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due dates, urgent flags, recurring reminders, natural-language quick add, smart lists, floating time zones, a token API for external agents, completed history, dark mode, and web push. No frontend framework and no build step.
 
+## What's New in v2.13.25
+
+- **Deleting a task keeps your place** - swipe-left or desktop × deletion captures the list's scroll position before the row collapses and restores it after the list re-renders. Only the rows below slide up into the freed space; the list no longer jumps to the top.
+- Service worker cache bumped to `todo-v2.13.25`.
+
 ## What's New in v2.13.24
 
 - **No more browser pop-ups** - deleting an item from the editor, deleting a list, changing token access and revoking a token now use the same in-app two-step confirmation as the list rows: **Delete / Change access / Revoke → Confirm?**, resetting after about four seconds. List deletion adds an inline warning that its items go too, and recurring items keep their permanent series warning. No native `confirm`, `alert` or `prompt` dialogs remain anywhere.

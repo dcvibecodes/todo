@@ -3293,6 +3293,16 @@ function showRowSeriesWarning(reminder, row, button) {
 function deleteReminderInline(reminder, row) {
   if (!row || row.dataset.deleting) return;
   row.dataset.deleting = '1';
+  // Remember where the list was before the row collapses. Rebuilding #content
+  // briefly empties it, which otherwise clamps the document scroller to the
+  // top; restore the same position after the new list is painted.
+  const scroller = screenScroller();
+  const startTop = scroller ? scroller.scrollTop : 0;
+  const restoreScroll = () => {
+    if (!scroller) return;
+    const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+    scroller.scrollTop = Math.min(startTop, max);
+  };
   const content = swipeContentOf(row);
   const height = row.offsetHeight;
   row.style.height = `${height}px`;
@@ -3308,11 +3318,13 @@ function deleteReminderInline(reminder, row) {
       await loadState();
       requestRowAnimation();
       render();
+      restoreScroll();
       toast('Item deleted');
     } catch (err) {
       toast(err.message);
       await loadState();
       render();
+      restoreScroll();
     }
   }, 230);
 }
