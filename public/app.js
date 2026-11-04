@@ -10,6 +10,9 @@ const colorVar = (color) => `var(--list-${COLORS.includes(color) ? color : 'blue
 const state = {
   authenticated: false,
   needsSetup: false,
+  username: null,
+  needsUsername: false,
+  usernameRequired: false,
   vapidPublicKey: null,
   lists: [],
   reminders: [],
@@ -578,14 +581,9 @@ async function boot() {
   try {
     const session = await api('/api/session');
     state.needsSetup = session.needsSetup;
+    state.usernameRequired = Boolean(session.usernameRequired);
     if (!session.authenticated) return showAuth();
-    state.csrfToken = session.csrfToken;
-    state.vapidPublicKey = session.vapidPublicKey;
-    showAppLoading();
-    await loadState();
-    showApp();
-    syncPushState();
-    syncDeviceZone();
+    await enterAuthenticatedApp(session);
   } catch (err) {
     // Replace skeletons with real (empty) views so the screen never hangs on them.
     if (state.authenticated) render();
@@ -593,22 +591,36 @@ async function boot() {
   }
 }
 
+function hideUsernameGate() {
+  const gate = $('#username-gate');
+  if (gate) gate.hidden = true;
+  document.body.classList.remove('gate-open');
+  if ($('#shell')) $('#shell').inert = false;
+}
+
 function showAuth() {
   state.authenticated = false;
+  state.needsUsername = false;
+  hideUsernameGate();
   $$('.sheet').forEach((sheet) => { sheet.hidden = true; });
   syncSheetState();
   $('#auth').hidden = false;
   $('#shell').hidden = true;
+  const askUsername = state.needsSetup || state.usernameRequired;
+  $('#auth-username').hidden = !askUsername;
   $('#auth-confirm').hidden = !state.needsSetup;
   $('#auth-sub').textContent = state.needsSetup
-    ? 'Create a password to protect your items'
-    : 'Enter your password to continue';
-  $('#auth-submit').textContent = state.needsSetup ? 'Create Password' : 'Unlock';
+    ? 'Choose a username and password to protect your items'
+    : state.usernameRequired
+      ? 'Enter your username and password to continue'
+      : 'Enter your password to continue';
+  $('#auth-submit').textContent = state.needsSetup ? 'Create Account' : 'Unlock';
   $('#auth-password').setAttribute('autocomplete', state.needsSetup ? 'new-password' : 'current-password');
+  $('#auth-username').value = '';
   $('#auth-password').value = '';
   $('#auth-confirm').value = '';
   $('#auth-error').hidden = true;
-  setTimeout(() => $('#auth-password').focus(), 50);
+  setTimeout(() => (askUsername ? $('#auth-username') : $('#auth-password')).focus(), 50);
 }
 
 function authError(message) {
@@ -617,29 +629,89 @@ function authError(message) {
   node.hidden = false;
 }
 
+async function enterAuthenticatedApp(session) {
+  state.needsSetup = false;
+  state.authenticated = true;
+  state.usernameRequired = Boolean(session.usernameRequired);
+  state.username = session.username || null;
+  state.needsUsername = Boolean(session.needsUsername);
+  state.csrfToken = session.csrfToken;
+  state.vapidPublicKey = session.vapidPublicKey;
+  showAppLoading();
+  await loadState();
+  showApp();
+  syncPushState();
+  if (!state.needsUsername) syncDeviceZone();
+  updateUsernameGate();
+}
+
 async function submitAuth(event) {
   event.preventDefault();
+  const username = $('#auth-username').value.trim();
   const password = $('#auth-password').value;
+  const confirm = $('#auth-confirm').value;
   if (state.needsSetup) {
+    if (!username) return authError('Choose a username');
+    if (username.length > 50) return authError('Username must be 50 characters or fewer');
     if (password.length < 8) return authError('Use at least 8 characters');
-    if (password !== $('#auth-confirm').value) return authError('Passwords do not match');
+    if (password !== confirm) return authError('Passwords do not match');
+  } else if (state.usernameRequired && !username) {
+    return authError('Enter your username and password');
   }
   try {
     await api(state.needsSetup ? '/api/setup' : '/api/login', {
       method: 'POST',
-      body: { password },
+      body: state.needsSetup
+        ? { username, password, confirm }
+        : state.usernameRequired ? { username, password } : { password },
     });
-    const session = await api('/api/session');
-    state.needsSetup = false;
-    state.csrfToken = session.csrfToken;
-    state.vapidPublicKey = session.vapidPublicKey;
-    showAppLoading();
-    await loadState();
-    showApp();
-    syncPushState();
-    syncDeviceZone();
+    await enterAuthenticatedApp(await api('/api/session'));
   } catch (err) {
     authError(err.message);
+  }
+}
+
+function updateUsernameGate() {
+  const show = state.authenticated && state.needsUsername;
+  const gate = $('#username-gate');
+  if (!gate) return;
+  gate.hidden = !show;
+  document.body.classList.toggle('gate-open', show);
+  if ($('#shell')) $('#shell').inert = show;
+  if (show) {
+    $('#gate-error').hidden = true;
+    $('#gate-form').reset();
+    setTimeout(() => $('#gate-username').focus(), 60);
+  }
+}
+
+function usernameGateError(message) {
+  const node = $('#gate-error');
+  node.textContent = message;
+  node.hidden = false;
+}
+
+async function submitUsernameGate(event) {
+  event.preventDefault();
+  const username = $('#gate-username').value.trim();
+  const password = $('#gate-password').value;
+  if (!username) return usernameGateError('Choose a username');
+  if (username.length > 50) return usernameGateError('Username must be 50 characters or fewer');
+  if (!password) return usernameGateError('Enter your current password');
+  try {
+    const result = await api('/api/account/username', {
+      method: 'POST',
+      body: { username, currentPassword: password },
+    });
+    state.username = result.username;
+    state.needsUsername = false;
+    state.usernameRequired = true;
+    updateUsernameGate();
+    updateUsernameDisplay();
+    syncDeviceZone();
+    toast('Username saved');
+  } catch (err) {
+    usernameGateError(err.message);
   }
 }
 
@@ -705,6 +777,8 @@ async function logout() {
   } catch { /* ignore */ }
   state.authenticated = false;
   state.csrfToken = null;
+  state.username = null;
+  state.needsUsername = false;
   state.lists = [];
   state.reminders = [];
   state.subscription = null;
@@ -4989,6 +5063,9 @@ async function openSettings() {
   applyTheme(themePreference, false);
   $('#pw-msg').hidden = true;
   $('#settings-msg').hidden = true;
+  $('#username-msg').hidden = true;
+  $('#username-form').reset();
+  updateUsernameDisplay();
   try {
     Object.assign(state.settings, await api('/api/settings'));
   } catch {
@@ -5243,6 +5320,42 @@ async function importBackupFile(file) {
   }
 }
 
+function updateUsernameDisplay() {
+  const node = $('#username-display');
+  if (node) node.textContent = state.username ? `Username: ${state.username}` : 'Username: not set';
+}
+
+function usernameMessage(message, ok = false) {
+  const node = $('#username-msg');
+  node.textContent = message;
+  node.classList.toggle('ok', ok);
+  node.hidden = false;
+}
+
+async function changeUsername(event) {
+  event.preventDefault();
+  const username = $('#username-new').value.trim();
+  const current = $('#username-current-password').value;
+  if (!username) return usernameMessage('Choose a username');
+  if (username.length > 50) return usernameMessage('Username must be 50 characters or fewer');
+  if (!current) return usernameMessage('Enter your current password');
+  try {
+    const result = await api('/api/account/username', {
+      method: 'POST',
+      body: { username, currentPassword: current },
+    });
+    state.username = result.username;
+    state.needsUsername = false;
+    state.usernameRequired = true;
+    updateUsernameDisplay();
+    updateUsernameGate();
+    $('#username-form').reset();
+    usernameMessage('Username updated', true);
+  } catch (err) {
+    usernameMessage(err.message);
+  }
+}
+
 function passwordMessage(message, ok = false) {
   const node = $('#pw-msg');
   node.textContent = message;
@@ -5263,7 +5376,7 @@ async function changePassword(event) {
       body: { current_password: current, new_password: next, confirm_password: confirm },
     });
     $('#password-form').reset();
-    passwordMessage('Password updated', true);
+    passwordMessage('Password updated — other sessions signed out', true);
   } catch (err) {
     passwordMessage(err.message);
   }
@@ -5295,6 +5408,8 @@ $('#logout-btn').addEventListener('click', logout);
 $('#notifications-btn').addEventListener('click', openNotifySheet);
 $('#settings-btn').addEventListener('click', openSettings);
 $('#password-form').addEventListener('submit', changePassword);
+$('#username-form').addEventListener('submit', changeUsername);
+$('#gate-form').addEventListener('submit', submitUsernameGate);
 $$('.theme-option-btn').forEach((btn) => {
   btn.addEventListener('click', () => {
     applyTheme(btn.dataset.themePref);

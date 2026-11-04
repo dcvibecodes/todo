@@ -9,6 +9,7 @@ const bcrypt = require('bcryptjs');
 const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
 
 const db = require('./db');
+const auth = require('./auth');
 const push = require('./push');
 const SQLiteSessionStore = require('./session-store');
 const recurrence = require('./recurrence');
@@ -928,11 +929,15 @@ async function main() {
   });
 
   app.get('/api/session', async (req, res) => {
-    const user = await db.get('SELECT id FROM users LIMIT 1');
+    const user = await db.get('SELECT id, username FROM users LIMIT 1');
     const authenticated = Boolean(req.session.userId);
     res.json({
       needsSetup: !user,
       authenticated,
+      username: authenticated && user ? (user.username || null) : null,
+      needsUsername: authenticated && user ? !user.username : false,
+      // Public login hint only; the username itself is never exposed before sign-in.
+      usernameRequired: Boolean(user && user.username),
       csrfToken: authenticated ? req.session.csrfToken : null,
       vapidPublicKey: authenticated ? push.getPublicKey() : null,
       version: VERSION,
@@ -943,14 +948,20 @@ async function main() {
     const existing = await db.get('SELECT id FROM users LIMIT 1');
     if (existing) return res.status(409).json({ error: 'This app is already set up' });
 
+    const nameCheck = auth.validateUsername(req.body.username);
+    if (!nameCheck.ok) return res.status(400).json({ error: nameCheck.error });
     const password = String(req.body.password || '');
+    const confirm = String(req.body.confirm || '');
     if (password.length < 8) {
       return res.status(400).json({ error: 'Password must be at least 8 characters' });
+    }
+    if (password !== confirm) {
+      return res.status(400).json({ error: 'Passwords do not match' });
     }
 
     const hash = await bcrypt.hash(password, 12);
     const now = new Date().toISOString();
-    await db.run('INSERT INTO users (password_hash, created_at) VALUES (?, ?)', [hash, now]);
+    await db.run('INSERT INTO users (username, password_hash, created_at) VALUES (?, ?, ?)', [nameCheck.username, hash, now]);
     const remindersList = await db.get('SELECT id FROM lists WHERE LOWER(name) = ? LIMIT 1', ['reminders']);
     if (!remindersList) {
       const max = await db.get('SELECT COALESCE(MAX(sort_order), -1) AS s FROM lists');
@@ -968,9 +979,18 @@ async function main() {
 
   app.post('/api/login', authLimiter, async (req, res) => {
     const password = String(req.body.password || '');
-    const user = await db.get('SELECT id, password_hash FROM users LIMIT 1');
-    if (!user || !(await bcrypt.compare(password, user.password_hash))) {
-      return res.status(401).json({ error: 'Incorrect password' });
+    const user = await db.get('SELECT id, username, password_hash FROM users LIMIT 1');
+    if (!user) return res.status(401).json({ error: 'Incorrect password' });
+
+    // Once a username exists both fields are required. Always run bcrypt so a
+    // wrong username and a wrong password take the same work and return the
+    // same message (no account enumeration).
+    const passwordOk = await bcrypt.compare(password, user.password_hash);
+    const usernameOk = user.username ? auth.usernameMatches(req.body.username, user.username) : true;
+    if (!usernameOk || !passwordOk) {
+      return res.status(401).json({
+        error: user.username ? 'Incorrect username or password' : 'Incorrect password',
+      });
     }
 
     await regenerate(req);
@@ -1106,7 +1126,23 @@ async function main() {
     }
     const hash = await bcrypt.hash(next, 12);
     await db.run('UPDATE users SET password_hash = ? WHERE id = ?', [hash, user.id]);
+    // A password change signs out every other browser. The current session
+    // stays valid because its own row is the only one left.
+    await db.run('DELETE FROM sessions WHERE sid <> ?', [req.sessionID]);
     res.json({ ok: true });
+  });
+
+  app.post('/api/account/username', async (req, res) => {
+    if (req.token) return denyToken(res);
+    const nameCheck = auth.validateUsername(req.body.username);
+    if (!nameCheck.ok) return res.status(400).json({ error: nameCheck.error });
+    const current = String(req.body.currentPassword || req.body.current_password || '');
+    const user = await db.get('SELECT id, password_hash FROM users LIMIT 1');
+    if (!user || !current || !(await bcrypt.compare(current, user.password_hash))) {
+      return res.status(400).json({ error: 'Current password is incorrect' });
+    }
+    await db.run('UPDATE users SET username = ? WHERE id = ?', [nameCheck.username, user.id]);
+    res.json({ ok: true, username: nameCheck.username });
   });
 
   app.get('/api/settings', async (req, res) => {

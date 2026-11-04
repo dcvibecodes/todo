@@ -100,6 +100,14 @@ async function init() {
     password_hash TEXT NOT NULL,
     created_at TEXT NOT NULL
   )`);
+  // Optional username migration: existing installs keep NULL and continue
+  // with password-only login until a username is chosen.
+  // Rollback: ALTER TABLE users DROP COLUMN username; or restore the
+  // pre-migration data/todo.db backup. No other table or data is changed.
+  const userColumns = await all('PRAGMA table_info(users)');
+  if (!userColumns.some((column) => column.name === 'username')) {
+    await run('ALTER TABLE users ADD COLUMN username TEXT');
+  }
   await run(`CREATE TABLE IF NOT EXISTS sessions (
     sid TEXT PRIMARY KEY,
     sess TEXT NOT NULL,

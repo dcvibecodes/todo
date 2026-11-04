@@ -2,6 +2,13 @@
 
 A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due dates, urgent flags, recurring reminders, natural-language quick add, smart lists, floating time zones, a token API for external agents, completed history, dark mode, and web push. No frontend framework and no build step.
 
+## What's New in v2.13.23
+
+- **Optional username login** - the single-user account can now have a username. New installs choose one at setup; existing installs keep password-only login and get a one-time **Choose your username** prompt after signing in. Once set, login asks for username + password, ignores case and surrounding spaces, and returns the same “Incorrect username or password” for either failure.
+- **Account management** - Settings shows the current username and lets you change it with your current password. A password change now signs out every other browser while keeping the current one signed in.
+- **Migration note** - this version adds a nullable `users.username` column; reminders, lists and settings are untouched. Back up the database before upgrading. Rollback: restore the backup or run `ALTER TABLE users DROP COLUMN username`. API tokens still work without a username.
+- Service worker cache bumped to `todo-v2.13.23`.
+
 ## What's New in v2.13.22
 
 - **Un-completing now gets the same glow as completing** - both directions use the identical 0.32s list-colour halo. Each row is held for ~340ms so the full halo is visible before it moves, and un-completing still shows the ring emptying and the check icon fading. Failed requests restore the previous state.

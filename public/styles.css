@@ -201,6 +201,82 @@ button, a, input, select, textarea, [tabindex] { touch-action: manipulation; }
   color: var(--red);
 }
 
+/* One-time username gate for existing installs. */
+.gate-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--bg);
+}
+
+.gate-card {
+  width: min(340px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 22px;
+  background: var(--elev);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.28);
+}
+
+.gate-card h2 {
+  margin: 0;
+  font-family: 'Fraunces', serif;
+  font-size: 1.125rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.gate-card p {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: var(--text-2);
+}
+
+.gate-card form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.gate-card input {
+  width: 100%;
+  height: var(--control-height);
+  min-height: var(--control-height);
+  background: var(--elev);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  font-size: 0.875rem;
+  color: var(--text);
+}
+
+.gate-card input::placeholder { color: var(--text-3); }
+.gate-card input:focus { outline: none; border-color: var(--accent); }
+.gate-card .primary-btn { margin-top: 2px; }
+
+body.gate-open {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  overscroll-behavior: none;
+}
+
+/* Keep the gate's two fields above the iPhone keyboard rather than centring
+   the card underneath it. */
+@media (max-width: 899px) {
+  .gate-overlay {
+    align-items: start;
+    padding-top: calc(env(safe-area-inset-top) + 56px);
+  }
+}
+
 .primary-btn {
   border: 0;
   border-radius: 5px;
@@ -2702,7 +2778,7 @@ body.sheet-open .sidebar {
   .head-actions { order: 3; align-self: flex-start; }
 
   .search input, .main-search input,
-  .auth-card input, .settings-group input, .e-title, .e-notes,
+  .auth-card input, .gate-card input, .settings-group input, .e-title, .e-notes,
   #editor .e-title, #editor .e-notes,
   .ed-subrow input[type="date"], .ed-subrow input[type="time"],
   .ed-list-row select { font-size: 16px; }

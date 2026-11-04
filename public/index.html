@@ -120,6 +120,7 @@
         <h1>ToDo</h1>
       </div>
       <p id="auth-sub" class="auth-sub">Enter your password to continue</p>
+      <input id="auth-username" type="text" placeholder="Username" autocomplete="username" maxlength="50" hidden>
       <input id="auth-password" type="password" placeholder="Password" autocomplete="current-password" required>
       <input id="auth-confirm" type="password" placeholder="Confirm password" autocomplete="new-password" hidden>
       <button type="submit" id="auth-submit" class="primary-btn">Unlock</button>
@@ -663,6 +664,16 @@ curl -X PATCH -H "Authorization: Bearer $TOKEN" \
   $HOST/api/reminders/123</pre>
           </details>
         </div>
+        <div class="settings-group">
+          <h3>Username</h3>
+          <p id="username-display" class="notify-hint">Username: not set</p>
+          <form id="username-form" novalidate>
+            <input id="username-new" type="text" placeholder="New username" maxlength="50" autocomplete="username" required>
+            <input id="username-current-password" type="password" placeholder="Current password" autocomplete="current-password" required>
+            <p id="username-msg" class="form-msg" hidden></p>
+            <button type="submit" class="primary-btn">Update Username</button>
+          </form>
+        </div>
         <form id="password-form" class="settings-group" novalidate>
           <h3>Change Password</h3>
           <input id="pw-current" type="password" placeholder="Current password" autocomplete="current-password" required>
@@ -672,6 +683,19 @@ curl -X PATCH -H "Authorization: Bearer $TOKEN" \
           <button type="submit" class="primary-btn">Update Password</button>
         </form>
       </div>
+    </div>
+  </div>
+
+  <div id="username-gate" class="gate-overlay" hidden>
+    <div class="gate-card" role="dialog" aria-modal="true" aria-labelledby="gate-title">
+      <h2 id="gate-title">Choose your username</h2>
+      <p>Your existing password keeps working. Pick a username once to finish setting up your account.</p>
+      <p id="gate-error" class="form-msg" hidden></p>
+      <form id="gate-form" novalidate>
+        <input id="gate-username" type="text" placeholder="Username" maxlength="50" autocomplete="username" required>
+        <input id="gate-password" type="password" placeholder="Current password" autocomplete="current-password" required>
+        <button type="submit" class="primary-btn">Save username</button>
+      </form>
     </div>
   </div>
 
