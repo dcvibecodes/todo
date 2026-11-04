@@ -1418,6 +1418,11 @@ body.flipping .reminder-group { overflow: visible; }
   transition: height 0.22s ease, opacity 0.18s ease;
 }
 
+/* Keep the browser from changing the scroll position while a row collapses. */
+html.deleting-row,
+html.deleting-row body,
+html.deleting-row #content { overflow-anchor: none; }
+
 .reminder.removing .swipe-content {
   transform: translateX(-100%);
   opacity: 0;

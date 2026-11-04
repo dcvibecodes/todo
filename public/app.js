@@ -2465,6 +2465,26 @@ function emptySearchState() {
   ]);
 }
 
+function syncCompletedFilter() {
+  const view = state.view;
+  const show = typeof view === 'number' && !state.search;
+  const filter = $('#sort-completed');
+  if (!filter) return;
+  filter.hidden = !show;
+  if (!show) return;
+  const count = state.reminders.filter((reminder) => reminder.list_id === view && reminder.completed).length;
+  const noun = count === 1 ? 'item' : 'items';
+  filter.disabled = count === 0;
+  filter.setAttribute('aria-pressed', state.showCompleted ? 'true' : 'false');
+  filter.setAttribute('aria-label', count
+    ? `${state.showCompleted ? 'Hide' : 'Show'} ${count} completed ${noun}`
+    : 'No completed items');
+  filter.title = count
+    ? `${state.showCompleted ? 'Hide' : 'Show'} completed ${noun}`
+    : 'No completed items';
+  $('#sort-completed-count').textContent = String(count);
+}
+
 function renderMain() {
   const view = state.view;
   const content = $('#content');
@@ -2486,24 +2506,7 @@ function renderMain() {
   // list page so the bar keeps its shape, and is disabled — not hidden — when
   // the list has nothing completed. Hidden during search and on Home.
   const isList = typeof view === 'number';
-  const completeCount = isList
-    ? state.reminders.filter((reminder) => reminder.list_id === view && reminder.completed).length
-    : 0;
-  const showCompletedToggle = isList && !state.search;
-  const completedFilter = $('#sort-completed');
-  completedFilter.hidden = !showCompletedToggle;
-  if (showCompletedToggle) {
-    const noun = completeCount === 1 ? 'item' : 'items';
-    completedFilter.disabled = completeCount === 0;
-    completedFilter.setAttribute('aria-pressed', state.showCompleted ? 'true' : 'false');
-    completedFilter.setAttribute('aria-label', completeCount
-      ? `${state.showCompleted ? 'Hide' : 'Show'} ${completeCount} completed ${noun}`
-      : 'No completed items');
-    completedFilter.title = completeCount
-      ? `${state.showCompleted ? 'Hide' : 'Show'} completed ${noun}`
-      : 'No completed items';
-    $('#sort-completed-count').textContent = String(completeCount);
-  }
+  syncCompletedFilter();
 
   if (state.search) {
     renderSearchResults(content);
@@ -3290,19 +3293,95 @@ function showRowSeriesWarning(reminder, row, button) {
   body.append(panel);
 }
 
+function updateViewCount() {
+  if (state.search) return;
+  const count = $$('#content .reminder').length;
+  setPulseText($('#view-count'), count ? String(count) : '');
+}
+
+function cleanupRemovedRow(row) {
+  const view = state.view;
+  const content = $('#content');
+  const section = row.closest('.completed-section');
+  const group = row.closest('.reminder-group');
+  row.remove();
+  if (group && !group.querySelector('.reminder')) {
+    const title = group.previousElementSibling;
+    if (title && title.classList.contains('group-title')) title.remove();
+    group.remove();
+  }
+  if (section && !section.querySelector('.reminder')) section.remove();
+
+  const rowCount = content.querySelectorAll('.reminder').length;
+  if (typeof view === 'number') {
+    const activeGroup = Array.from(content.children)
+      .find((node) => node.classList.contains('reminder-group'));
+    const hasActive = Boolean(activeGroup && activeGroup.querySelector('.reminder'));
+    if (!hasActive && !content.querySelector('.empty')) {
+      const empty = emptyState(view);
+      const completed = content.querySelector('.completed-section');
+      if (completed) content.insertBefore(empty, completed);
+      else content.append(empty);
+    }
+  } else if (view === 'completed' && !rowCount) {
+    const note = content.querySelector('.completed-retention.generic');
+    if (note) note.remove();
+    if (!content.querySelector('.empty')) content.append(emptyState('completed'));
+  } else if (!rowCount && !content.querySelector('.empty')) {
+    content.append(emptyState(view));
+  }
+  updateViewCount();
+  syncCompletedFilter();
+}
+
+function removeReminderLocally(reminder, row) {
+  const index = state.reminders.findIndex((item) => item.id === reminder.id);
+  if (index !== -1) state.reminders.splice(index, 1);
+  const list = state.lists.find((item) => item.id === reminder.list_id);
+  if (list) {
+    if (reminder.completed) {
+      list.done_count = Math.max(0, (list.done_count || 0) - 1);
+      const completed = reminder.completed_at ? new Date(reminder.completed_at).getTime() : NaN;
+      if (Number.isFinite(completed) && completed >= Date.now() - 30 * 24 * 60 * 60 * 1000) {
+        list.done_count_30d = Math.max(0, (list.done_count_30d || 0) - 1);
+      }
+    } else {
+      list.count = Math.max(0, (list.count || 0) - 1);
+    }
+  }
+  cleanupRemovedRow(row);
+  renderSidebar();
+  updateBadge();
+}
+
+function restoreDeletingRow(row) {
+  if (!row) return;
+  row.classList.remove('removing');
+  row.style.height = '';
+  row.style.opacity = '';
+  const content = swipeContentOf(row);
+  if (content) content.style.transform = '';
+  delete row.dataset.deleting;
+  resetSwipe(row);
+}
+
 function deleteReminderInline(reminder, row) {
   if (!row || row.dataset.deleting) return;
   row.dataset.deleting = '1';
-  // Remember where the list was before the row collapses. Rebuilding #content
-  // briefly empties it, which otherwise clamps the document scroller to the
-  // top; restore the same position after the new list is painted.
   const scroller = screenScroller();
   const startTop = scroller ? scroller.scrollTop : 0;
+  const viewAtStart = state.view;
+  const searchAtStart = Boolean(state.search);
+  // Stop the browser from compensating for the collapsing row's height; that
+  // is what nudged the row above by a pixel before it settled.
+  document.documentElement.classList.add('deleting-row');
   const restoreScroll = () => {
     if (!scroller) return;
     const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
     scroller.scrollTop = Math.min(startTop, max);
   };
+  const canUpdateLocally = () => !searchAtStart && !state.search
+    && state.view === viewAtStart && row.isConnected;
   const content = swipeContentOf(row);
   const height = row.offsetHeight;
   row.style.height = `${height}px`;
@@ -3315,16 +3394,27 @@ function deleteReminderInline(reminder, row) {
   setTimeout(async () => {
     try {
       await api('/api/reminders/' + reminder.id, { method: 'DELETE' });
-      await loadState();
-      requestRowAnimation();
-      render();
-      restoreScroll();
-      toast('Item deleted');
+      if (canUpdateLocally()) {
+        removeReminderLocally(reminder, row);
+        toast('Item deleted');
+      } else {
+        await loadState();
+        requestRowAnimation();
+        render();
+        restoreScroll();
+        toast('Item deleted');
+      }
     } catch (err) {
+      if (canUpdateLocally()) {
+        restoreDeletingRow(row);
+      } else {
+        await loadState();
+        render();
+        restoreScroll();
+      }
       toast(err.message);
-      await loadState();
-      render();
-      restoreScroll();
+    } finally {
+      document.documentElement.classList.remove('deleting-row');
     }
   }, 230);
 }

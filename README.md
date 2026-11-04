@@ -2,6 +2,11 @@
 
 A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due dates, urgent flags, recurring reminders, natural-language quick add, smart lists, floating time zones, a token API for external agents, completed history, dark mode, and web push. No frontend framework and no build step.
 
+## What's New in v2.13.26
+
+- **Deleting a row no longer rebuilds the list** - swipe-left or desktop × now removes just that row and updates the list counts, completed filter and empty states in place. The row above stays exactly where it was, only the rows below slide up, and the scroll position is untouched. Scroll anchoring is disabled during the collapse so the browser cannot nudge the row above.
+- Service worker cache bumped to `todo-v2.13.26`.
+
 ## What's New in v2.13.25
 
 - **Deleting a task keeps your place** - swipe-left or desktop × deletion captures the list's scroll position before the row collapses and restores it after the list re-renders. Only the rows below slide up into the freed space; the list no longer jumps to the top.
