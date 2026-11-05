@@ -4890,8 +4890,13 @@ function closeTopSheet() {
 }
 
 function focusableIn(sheet) {
-  return $$('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])', sheet)
-    .filter((node) => !node.disabled && node.offsetParent !== null);
+  const more = $('#e-more');
+  const moreCollapsed = Boolean(more && (more.hidden || !more.classList.contains('expanded')));
+  return $$('button, a[href], area[href], input, select, textarea, [tabindex]:not([tabindex="-1"])', sheet)
+    .filter((node) => node instanceof HTMLElement
+      && !node.disabled
+      && node.offsetParent !== null
+      && !(moreCollapsed && node.closest('#e-more')));
 }
 
 // Keep Tab inside the topmost sheet (WCAG 2.2 AA): focus wraps instead of
@@ -4900,11 +4905,15 @@ function trapSheetTab(event) {
   const open = $$('.sheet').filter((sheet) => !sheet.hidden);
   if (!open.length) return;
   const sheet = open[open.length - 1];
-  if (!sheet.contains(event.target)) return;
   const focusable = focusableIn(sheet);
   if (!focusable.length) return;
   const first = focusable[0];
   const last = focusable[focusable.length - 1];
+  if (!sheet.contains(event.target)) {
+    event.preventDefault();
+    (event.shiftKey ? last : first).focus();
+    return;
+  }
   if (event.shiftKey && event.target === first) {
     event.preventDefault();
     last.focus();

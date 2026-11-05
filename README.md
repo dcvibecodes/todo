@@ -2,6 +2,11 @@
 
 A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due dates, urgent flags, recurring reminders, natural-language quick add, smart lists, floating time zones, a token API for external agents, completed history, dark mode, and web push. No frontend framework and no build step.
 
+## What's New in v2.13.32
+
+- **Tab now stays inside sheets** - the sheet focus trap only counts real HTML controls, so inline SVG icons no longer throw off its first/last detection. With More options open, Tab moves through Notes, Date, Time, Urgent, Repeat and List, then wraps back into the sheet instead of jumping to the page behind; when it is closed, the hidden fields are skipped. If focus is outside a sheet (such as the Shortcuts sheet, which opens without auto-focus), Tab now enters it. Shift+Tab wraps in the other direction.
+- Service worker cache bumped to `todo-v2.13.32`.
+
 ## What's New in v2.13.31
 
 - **The Shortcuts sheet no longer auto-focuses Done** - opening it with **S** or the toolbar button leaves focus where it was, so Done has no focus ring. Esc and Done still close the sheet.
