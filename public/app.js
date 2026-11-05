@@ -4899,6 +4899,14 @@ function focusableIn(sheet) {
       && !(moreCollapsed && node.closest('#e-more')));
 }
 
+function focusInSheet(element) {
+  element.focus();
+  const row = element.closest('.ed-row, .ed-subrow');
+  if (!row) return;
+  row.classList.add('keyboard-focus');
+  element.addEventListener('blur', () => row.classList.remove('keyboard-focus'), { once: true });
+}
+
 // Keep Tab inside the topmost sheet (WCAG 2.2 AA): focus wraps instead of
 // escaping to the page behind.
 function trapSheetTab(event) {
@@ -4907,20 +4915,14 @@ function trapSheetTab(event) {
   const sheet = open[open.length - 1];
   const focusable = focusableIn(sheet);
   if (!focusable.length) return;
-  const first = focusable[0];
-  const last = focusable[focusable.length - 1];
-  if (!sheet.contains(event.target)) {
-    event.preventDefault();
-    (event.shiftKey ? last : first).focus();
+  event.preventDefault();
+  const index = focusable.indexOf(event.target);
+  if (index === -1) {
+    focusInSheet(event.shiftKey ? focusable[focusable.length - 1] : focusable[0]);
     return;
   }
-  if (event.shiftKey && event.target === first) {
-    event.preventDefault();
-    last.focus();
-  } else if (!event.shiftKey && event.target === last) {
-    event.preventDefault();
-    first.focus();
-  }
+  const next = (index + (event.shiftKey ? -1 : 1) + focusable.length) % focusable.length;
+  focusInSheet(focusable[next]);
 }
 
 // Interactive swipe: the card follows the pointer and reveals Delete beneath

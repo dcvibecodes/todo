@@ -2104,6 +2104,11 @@ body.sheet-open .sidebar {
 .ed-switch input:checked + span::after { transform: translateX(18px); }
 .ed-switch input:focus-visible + span { box-shadow: 0 0 0 2px var(--accent); }
 
+.ed-row.keyboard-focus,
+.ed-subrow.keyboard-focus {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
 .ed-group,
 .ed-row,
 .ed-subrow,
