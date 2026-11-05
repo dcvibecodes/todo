@@ -6007,6 +6007,9 @@ document.addEventListener('keydown', (event) => {
     event.preventDefault();
     const target = $('#main-search').offsetParent ? $('#main-search') : $('#search');
     target.focus();
+  } else if (event.key.toLowerCase() === 's' && !event.repeat) {
+    event.preventDefault();
+    openShortcuts();
   } else if (event.key.toLowerCase() === 'n' && !event.repeat) {
     event.preventDefault();
     closeAccountMenu();

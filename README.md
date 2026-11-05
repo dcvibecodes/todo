@@ -2,6 +2,11 @@
 
 A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due dates, urgent flags, recurring reminders, natural-language quick add, smart lists, floating time zones, a token API for external agents, completed history, dark mode, and web push. No frontend framework and no build step.
 
+## What's New in v2.13.30
+
+- **S opens the Shortcuts sheet** - pressing **S** (desktop/web, when not typing and no sheet is open) opens the Shortcuts sheet. Its first row is now **Show this shortcuts menu → S**. The header Shortcuts button and all other shortcuts are unchanged.
+- Service worker cache bumped to `todo-v2.13.30`.
+
 ## What's New in v2.13.29
 
 - **Refresh now sits before Shortcuts** - the header action order is list options (when present), Refresh, Shortcuts, then the menu, on both Home and list screens. The Shortcuts sheet and all keyboard shortcuts are unchanged.

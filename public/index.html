@@ -141,7 +141,7 @@
           <button id="refresh-btn-side" class="icon-btn refresh-btn" title="Refresh items" aria-label="Refresh items">
             <svg class="ic"><use href="#i-refresh"/></svg>
           </button>
-          <button id="shortcuts-btn-side" class="icon-btn shortcuts-btn" type="button" title="Shortcuts" aria-label="Keyboard shortcuts" aria-haspopup="dialog">
+          <button id="shortcuts-btn-side" class="icon-btn shortcuts-btn" type="button" title="Shortcuts" aria-label="Keyboard shortcuts" aria-haspopup="dialog" aria-keyshortcuts="S">
             <svg class="ic"><use href="#i-keyboard"/></svg>
           </button>
           <button id="sidebar-menu-btn" class="icon-btn" title="Menu" aria-label="Menu">
@@ -234,7 +234,7 @@
           <button id="refresh-btn" class="icon-btn refresh-btn" title="Refresh items" aria-label="Refresh items">
             <svg class="ic"><use href="#i-refresh"/></svg>
           </button>
-          <button id="shortcuts-btn" class="icon-btn shortcuts-btn" type="button" title="Shortcuts" aria-label="Keyboard shortcuts" aria-haspopup="dialog">
+          <button id="shortcuts-btn" class="icon-btn shortcuts-btn" type="button" title="Shortcuts" aria-label="Keyboard shortcuts" aria-haspopup="dialog" aria-keyshortcuts="S">
             <svg class="ic"><use href="#i-keyboard"/></svg>
           </button>
           <button id="menu-btn" class="icon-btn" aria-label="Toggle sidebar" aria-expanded="true" title="Sidebar">
@@ -705,6 +705,7 @@ curl -X PATCH -H "Authorization: Bearer $TOKEN" \
         <button type="button" class="text-btn strong" data-close>Done</button>
       </header>
       <div class="sheet-body shortcut-list">
+        <div class="shortcut-row"><span>Show this shortcuts menu</span><span class="shortcut-keys"><kbd class="kbd">S</kbd></span></div>
         <div class="shortcut-row"><span>New item</span><span class="shortcut-keys"><kbd class="kbd">N</kbd></span></div>
         <div class="shortcut-row"><span>Search</span><span class="shortcut-keys"><kbd class="kbd" data-mod-key="search">⌘K</kbd></span></div>
         <div class="shortcut-row"><span>More options while adding</span><span class="shortcut-keys"><kbd class="kbd" data-mod-key="more">⌘⇧M</kbd></span></div>
