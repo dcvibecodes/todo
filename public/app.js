@@ -4,6 +4,8 @@ const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selector));
 const ICON = (name, cls = 'ic') => `<svg class="${cls}"><use href="#i-${name}"/></svg>`;
 
+const IS_MAC = /Mac|iPhone|iPad|iPod/.test(navigator.platform || navigator.userAgent || '');
+
 const COLORS = ['red', 'rose', 'orange', 'yellow', 'lime', 'green', 'teal', 'cyan', 'blue', 'indigo', 'purple', 'pink', 'brown', 'slate', 'gray'];
 const colorVar = (color) => `var(--list-${COLORS.includes(color) ? color : 'blue'})`;
 
@@ -5209,6 +5211,11 @@ function updateSettingsDirty(preserveMessage = false) {
   if (dirty && !preserveMessage) $('#settings-msg').hidden = true;
 }
 
+function openShortcuts() {
+  closeAccountMenu();
+  openSheet('#shortcuts-sheet');
+}
+
 async function openSettings() {
   closeAccountMenu();
   applyTheme(themePreference, false);
@@ -5599,6 +5606,7 @@ $('#back-btn').addEventListener('click', () => {
 $('#logout-btn').addEventListener('click', logout);
 $('#notifications-btn').addEventListener('click', openNotifySheet);
 $('#settings-btn').addEventListener('click', openSettings);
+$$('.shortcuts-btn').forEach((btn) => btn.addEventListener('click', openShortcuts));
 $('#password-form').addEventListener('submit', changePassword);
 $('#username-form').addEventListener('submit', changeUsername);
 $('#gate-form').addEventListener('submit', submitUsernameGate);
@@ -5964,25 +5972,46 @@ document.addEventListener('pointerdown', (event) => {
 }, true);
 
 document.addEventListener('keydown', (event) => {
+  if ($('#username-gate') && !$('#username-gate').hidden) return;
   if (event.key === 'Tab') {
     trapSheetTab(event);
     return;
   }
   if (event.key === 'Escape') {
     if (closeTopSheet()) return;
-    if ((document.activeElement === $('#search') || document.activeElement === $('#main-search')) && state.search) {
+    closeAccountMenu();
+    if (state.search) {
       setSearch('', 'both');
+      return;
+    }
+    if (document.body.dataset.screen === 'detail') {
+      clearSearch();
+      go('home');
+    }
+    return;
+  }
+  // This one must work while typing in the title/notes, so it runs before the
+  // input guard. Only the new-item sheet has a collapsible More options.
+  if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key.toLowerCase() === 'm') {
+    if (!event.repeat && !$('#editor').hidden && $('#editor').classList.contains('is-new')) {
+      event.preventDefault();
+      toggleEditorMore();
     }
     return;
   }
   const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
   if (typing) return;
+  if ($$('.sheet').some((sheet) => !sheet.hidden)) return;
   if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
     event.preventDefault();
     const target = $('#main-search').offsetParent ? $('#main-search') : $('#search');
     target.focus();
-  } else if (event.key === 'n') {
+  } else if (event.key.toLowerCase() === 's' && !event.repeat) {
     event.preventDefault();
+    openShortcuts();
+  } else if (event.key.toLowerCase() === 'n' && !event.repeat) {
+    event.preventDefault();
+    closeAccountMenu();
     openEditor(null);
   }
 });
@@ -6013,6 +6042,11 @@ document.addEventListener('visibilitychange', () => {
 
 applyDensity();
 syncMenuButtons();
+$$('[data-mod-key]').forEach((node) => {
+  node.textContent = node.dataset.modKey === 'search'
+    ? (IS_MAC ? '⌘K' : 'Ctrl+K')
+    : (IS_MAC ? '⌘⇧M' : 'Ctrl+Shift+M');
+});
 initPullToRefresh();
 initDayPeek();
 function onScrollActivity() {

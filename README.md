@@ -2,6 +2,31 @@
 
 A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due dates, urgent flags, recurring reminders, natural-language quick add, smart lists, floating time zones, a token API for external agents, completed history, dark mode, and web push. No frontend framework and no build step.
 
+## What's New in v2.13.31
+
+- **The Shortcuts sheet no longer auto-focuses Done** - opening it with **S** or the toolbar button leaves focus where it was, so Done has no focus ring. Esc and Done still close the sheet.
+- Service worker cache bumped to `todo-v2.13.31`.
+
+## What's New in v2.13.30
+
+- **S opens the Shortcuts sheet** - pressing **S** (desktop/web, when not typing and no sheet is open) opens the Shortcuts sheet. Its first row is now **Show this shortcuts menu → S**. The header Shortcuts button and all other shortcuts are unchanged.
+- Service worker cache bumped to `todo-v2.13.30`.
+
+## What's New in v2.13.29
+
+- **Refresh now sits before Shortcuts** - the header action order is list options (when present), Refresh, Shortcuts, then the menu, on both Home and list screens. The Shortcuts sheet and all keyboard shortcuts are unchanged.
+- Service worker cache bumped to `todo-v2.13.29`.
+
+## What's New in v2.13.28
+
+- **Shortcut hints now live in one Shortcuts sheet** - a keyboard-icon button before Refresh on Home and list screens opens an in-app Shortcuts sheet listing **N** new item, **Cmd/Ctrl+K** search, **Cmd/Ctrl+Shift+M** More options and **Esc** close/search/Back. The inline keycaps beside the + button, Back, Cancel and More options are gone. The button and sheet are for the desktop/web app and are hidden on touch phones.
+- Service worker cache bumped to `todo-v2.13.28`.
+
+## What's New in v2.13.27
+
+- **Keyboard shortcuts** - press **N** anywhere the + button is visible to open New Item, **Cmd/Ctrl+Shift+M** to expand or collapse More options while adding, and **Esc** to close the top sheet, clear search, or go Back from a list. Subtle desktop key hints appear by the + button, on Back and Cancel, and beside More options; they are hidden on phones. The existing Cmd/Ctrl+K search shortcut is unchanged.
+- Service worker cache bumped to `todo-v2.13.27`.
+
 ## What's New in v2.13.26
 
 - **Deleting a row no longer rebuilds the list** - swipe-left or desktop × now removes just that row and updates the list counts, completed filter and empty states in place. The row above stays exactly where it was, only the rows below slide up, and the scroll position is untouched. Scroll anchoring is disabled during the collapse so the browser cannot nudge the row above.
