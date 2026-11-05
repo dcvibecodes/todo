@@ -5214,7 +5214,6 @@ function updateSettingsDirty(preserveMessage = false) {
 function openShortcuts() {
   closeAccountMenu();
   openSheet('#shortcuts-sheet');
-  setTimeout(() => $('#shortcuts-sheet .sheet-head [data-close]')?.focus(), 60);
 }
 
 async function openSettings() {
