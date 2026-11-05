@@ -5211,6 +5211,12 @@ function updateSettingsDirty(preserveMessage = false) {
   if (dirty && !preserveMessage) $('#settings-msg').hidden = true;
 }
 
+function openShortcuts() {
+  closeAccountMenu();
+  openSheet('#shortcuts-sheet');
+  setTimeout(() => $('#shortcuts-sheet .sheet-head [data-close]')?.focus(), 60);
+}
+
 async function openSettings() {
   closeAccountMenu();
   applyTheme(themePreference, false);
@@ -5601,6 +5607,7 @@ $('#back-btn').addEventListener('click', () => {
 $('#logout-btn').addEventListener('click', logout);
 $('#notifications-btn').addEventListener('click', openNotifySheet);
 $('#settings-btn').addEventListener('click', openSettings);
+$$('.shortcuts-btn').forEach((btn) => btn.addEventListener('click', openShortcuts));
 $('#password-form').addEventListener('submit', changePassword);
 $('#username-form').addEventListener('submit', changeUsername);
 $('#gate-form').addEventListener('submit', submitUsernameGate);
@@ -6033,7 +6040,11 @@ document.addEventListener('visibilitychange', () => {
 
 applyDensity();
 syncMenuButtons();
-if ($('#e-more-kbd')) $('#e-more-kbd').textContent = IS_MAC ? '⌘⇧M' : 'Ctrl+Shift+M';
+$$('[data-mod-key]').forEach((node) => {
+  node.textContent = node.dataset.modKey === 'search'
+    ? (IS_MAC ? '⌘K' : 'Ctrl+K')
+    : (IS_MAC ? '⌘⇧M' : 'Ctrl+Shift+M');
+});
 initPullToRefresh();
 initDayPeek();
 function onScrollActivity() {

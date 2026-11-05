@@ -139,7 +139,7 @@ button, a, input, select, textarea, [tabindex] { touch-action: manipulation; }
 .sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
 .ic { width: 22px; height: 22px; flex: none; }
 
-/* Keyboard hints (desktop/web only). */
+/* Keycaps used by the Shortcuts sheet. */
 .kbd {
   display: inline-flex;
   align-items: center;
@@ -158,20 +158,17 @@ button, a, input, select, textarea, [tabindex] { touch-action: manipulation; }
   white-space: nowrap;
 }
 
-.kbd-hint { display: none; }
-@media (min-width: 900px) { .kbd-hint { display: inline-flex; } }
-.back-kbd { margin-left: 4px; }
-.e-more-kbd { margin-left: 3px; opacity: 0.8; }
-
-.fab-hint {
-  display: none;
-  position: fixed;
-  right: 92px;
-  bottom: calc(47px + env(safe-area-inset-bottom));
-  z-index: 39;
-  pointer-events: none;
-  opacity: 0.7;
+.sheet-body.shortcut-list { gap: 12px; }
+.shortcut-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  font-size: 0.875rem;
 }
+.shortcut-row > span:first-child { color: var(--text); }
+.shortcut-keys { display: flex; align-items: center; gap: 4px; flex: none; }
+.shortcut-list .notify-hint { margin-top: 2px; }
 
 /* ---------- Auth ---------- */
 
@@ -445,7 +442,7 @@ body.gate-open {
    layout pull down at the top of a scroller instead. The pill is fixed and
    slides into view as the pull progresses. */
 @media (max-width: 899px) and (pointer: coarse) {
-  .refresh-btn { display: none; }
+  .refresh-btn, .shortcuts-btn { display: none; }
 }
 
 .pull-refresh {
@@ -1759,7 +1756,6 @@ body.sheet-open .fab {
   pointer-events: none;
 }
 
-body.sheet-open .fab-hint { opacity: 0; }
 
 .fab:hover {
   background: var(--accent-hover);
@@ -2726,11 +2722,6 @@ body.sheet-open .sidebar {
     right: max(28px, calc((100vw - min(54vw, 990px)) / 2 + 28px));
   }
 
-  .fab-hint {
-    display: inline-flex;
-    right: max(92px, calc((100vw - min(54vw, 990px)) / 2 + 92px));
-  }
-
   .content {
     width: 100%;
     max-width: none;
@@ -3199,8 +3190,3 @@ body.sheet-open .sidebar {
   .e-more-toggle .ic { transition: none; }
 }
 
-/* Keyboard hints are for pointer-and-keyboard desktop use only. */
-@media (pointer: coarse) {
-  .kbd-hint,
-  .fab-hint { display: none; }
-}

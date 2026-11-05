@@ -2,6 +2,11 @@
 
 A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due dates, urgent flags, recurring reminders, natural-language quick add, smart lists, floating time zones, a token API for external agents, completed history, dark mode, and web push. No frontend framework and no build step.
 
+## What's New in v2.13.28
+
+- **Shortcut hints now live in one Shortcuts sheet** - a keyboard-icon button before Refresh on Home and list screens opens an in-app Shortcuts sheet listing **N** new item, **Cmd/Ctrl+K** search, **Cmd/Ctrl+Shift+M** More options and **Esc** close/search/Back. The inline keycaps beside the + button, Back, Cancel and More options are gone. The button and sheet are for the desktop/web app and are hidden on touch phones.
+- Service worker cache bumped to `todo-v2.13.28`.
+
 ## What's New in v2.13.27
 
 - **Keyboard shortcuts** - press **N** anywhere the + button is visible to open New Item, **Cmd/Ctrl+Shift+M** to expand or collapse More options while adding, and **Esc** to close the top sheet, clear search, or go Back from a list. Subtle desktop key hints appear by the + button, on Back and Cancel, and beside More options; they are hidden on phones. The existing Cmd/Ctrl+K search shortcut is unchanged.
