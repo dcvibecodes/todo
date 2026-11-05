@@ -2326,7 +2326,10 @@ function renderSidebar() {
   setPulseText($('#count-flagged'), flaggedCount ? String(flaggedCount) : '');
 
   $$('#smart-nav .nav-row').forEach((row) => {
-    row.classList.toggle('active', row.dataset.view === state.view);
+    const active = row.dataset.view === state.view;
+    row.classList.toggle('active', active);
+    if (active) row.setAttribute('aria-current', 'page');
+    else row.removeAttribute('aria-current');
   });
 
   const wrap = $('#lists');
@@ -2350,27 +2353,35 @@ function renderSidebar() {
     if (progressMode === 'ring' && total > 0) {
       dot = el('span', { class: 'list-ring', style: { '--p': String(pct) }, title: doneTitle }, [dot]);
     }
-    const row = el('button', {
-      class: 'list-row' + (state.view === list.id ? ' active' : ''),
+    const active = state.view === list.id;
+    const openButton = el('button', {
+      type: 'button',
+      class: 'list-open',
+      'aria-current': active ? 'page' : null,
+    }, [
+      dot,
+      el('span', { class: 'list-name', text: list.name }),
+      el('span', { class: 'badge', text: list.count ? String(list.count) : '' }),
+    ]);
+    const row = el('div', {
+      class: 'list-row' + (active ? ' active' : ''),
       style: { '--c': colorVar(list.color) },
       'data-list-id': list.id,
       onclick: () => {
         clearSearch();
         go('list/' + list.id);
       },
-    }, [
-      dot,
-      el('span', { class: 'list-name', text: list.name }),
-      el('span', { class: 'badge', text: list.count ? String(list.count) : '' }),
-    ]);
+    });
     if (list.is_system) {
-      row.append(el('span', {
+      openButton.append(el('span', {
         class: 'list-lock',
         title: 'Unlisted is always first',
         'aria-hidden': 'true',
         html: ICON('lock', 'ic'),
       }));
-    } else {
+    }
+    row.append(openButton);
+    if (!list.is_system) {
       const grip = el('span', {
         class: 'list-grip',
         title: 'Drag to reorder',
@@ -2392,6 +2403,10 @@ function renderSidebar() {
           event.stopPropagation();
           const from = state.lists.findIndex((item) => item.id === list.id);
           moveListKeyboard(list.id, (event.key === 'Home' ? 0 : state.lists.length - 1) - from);
+        } else if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          event.stopPropagation();
+          announce(`Use up and down arrows to reorder ${list.name}`);
         }
       });
       row.append(grip);
@@ -4889,40 +4904,59 @@ function closeTopSheet() {
   return true;
 }
 
-function focusableIn(sheet) {
+function focusableIn(root) {
   const more = $('#e-more');
   const moreCollapsed = Boolean(more && (more.hidden || !more.classList.contains('expanded')));
-  return $$('button, a[href], area[href], input, select, textarea, [tabindex]:not([tabindex="-1"])', sheet)
+  return $$('button, a[href], area[href], input, select, textarea, [tabindex]', root)
     .filter((node) => node instanceof HTMLElement
+      && node.tabIndex >= 0
       && !node.disabled
-      && node.offsetParent !== null
+      && node.getClientRects().length > 0
+      && getComputedStyle(node).visibility !== 'hidden'
+      && !node.closest('[aria-hidden="true"]')
+      && !node.closest('.nav-snapshot, .list-drag-ghost')
       && !(moreCollapsed && node.closest('#e-more')));
 }
 
-function focusInSheet(element) {
+function focusControl(element) {
+  const row = element.matches('.ed-select-row select, .ed-list-row select, #e-date, #e-time')
+    ? element.closest('.ed-row, .ed-subrow')
+    : null;
+  element.classList.add('keyboard-focus');
+  if (row) row.classList.add('keyboard-focus');
   element.focus();
-  const row = element.closest('.ed-row, .ed-subrow');
-  if (!row) return;
-  row.classList.add('keyboard-focus');
-  element.addEventListener('blur', () => row.classList.remove('keyboard-focus'), { once: true });
+  element.addEventListener('blur', () => {
+    element.classList.remove('keyboard-focus');
+    if (row) row.classList.remove('keyboard-focus');
+  }, { once: true });
 }
 
-// Keep Tab inside the topmost sheet (WCAG 2.2 AA): focus wraps instead of
-// escaping to the page behind.
-function trapSheetTab(event) {
+function topOpenSheet() {
   const open = $$('.sheet').filter((sheet) => !sheet.hidden);
-  if (!open.length) return;
-  const sheet = open[open.length - 1];
-  const focusable = focusableIn(sheet);
+  return open[open.length - 1] || null;
+}
+
+function tabScope() {
+  const sheet = topOpenSheet();
+  if (sheet) return sheet;
+  for (const selector of ['#username-gate', '#auth', '#account-menu']) {
+    const node = $(selector);
+    if (node && !node.hidden) return node;
+  }
+  return document.body;
+}
+
+function trapTab(event) {
+  const focusable = focusableIn(tabScope());
   if (!focusable.length) return;
   event.preventDefault();
-  const index = focusable.indexOf(event.target);
+  const index = focusable.indexOf(document.activeElement);
   if (index === -1) {
-    focusInSheet(event.shiftKey ? focusable[focusable.length - 1] : focusable[0]);
+    focusControl(event.shiftKey ? focusable[focusable.length - 1] : focusable[0]);
     return;
   }
   const next = (index + (event.shiftKey ? -1 : 1) + focusable.length) % focusable.length;
-  focusInSheet(focusable[next]);
+  focusControl(focusable[next]);
 }
 
 // Interactive swipe: the card follows the pointer and reveals Delete beneath
@@ -5983,11 +6017,11 @@ document.addEventListener('pointerdown', (event) => {
 }, true);
 
 document.addEventListener('keydown', (event) => {
-  if ($('#username-gate') && !$('#username-gate').hidden) return;
-  if (event.key === 'Tab') {
-    trapSheetTab(event);
+  if (event.key === 'Tab' && !event.ctrlKey && !event.metaKey && !event.altKey) {
+    trapTab(event);
     return;
   }
+  if ($('#username-gate') && !$('#username-gate').hidden) return;
   if (event.key === 'Escape') {
     if (closeTopSheet()) return;
     closeAccountMenu();
