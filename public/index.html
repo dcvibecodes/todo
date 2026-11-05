@@ -85,10 +85,6 @@
     <symbol id="i-list" viewBox="0 0 24 24">
       <path d="M5 7h14M5 12h14M5 17h14" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>
     </symbol>
-    <symbol id="i-keyboard" viewBox="0 0 24 24">
-      <rect x="2.5" y="6.5" width="19" height="11" rx="2.2" fill="none" stroke="currentColor" stroke-width="1.8"/>
-      <path d="M6.5 10h1M10 10h1M13.5 10h1M17 10h1M7.5 14h9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-    </symbol>
     <symbol id="i-grip" viewBox="0 0 24 24">
       <path d="M5 8h14M5 12h14M5 16h14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
     </symbol>
@@ -141,9 +137,6 @@
           <button id="refresh-btn-side" class="icon-btn refresh-btn" title="Refresh items" aria-label="Refresh items">
             <svg class="ic"><use href="#i-refresh"/></svg>
           </button>
-          <button id="shortcuts-btn-side" class="icon-btn shortcuts-btn" type="button" title="Shortcuts" aria-label="Keyboard shortcuts" aria-haspopup="dialog" aria-keyshortcuts="S">
-            <svg class="ic"><use href="#i-keyboard"/></svg>
-          </button>
           <button id="sidebar-menu-btn" class="icon-btn" title="Menu" aria-label="Menu">
             <svg class="ic"><use href="#i-list"/></svg>
           </button>
@@ -152,7 +145,7 @@
 
       <form id="search-form" class="search" role="search">
         <svg class="ic search-ic"><use href="#i-search"/></svg>
-        <input id="search" type="search" aria-keyshortcuts="Control+K Meta+K" placeholder="Search" autocomplete="off" aria-label="Search items">
+        <input id="search" type="search" placeholder="Search" autocomplete="off" aria-label="Search items">
       </form>
       </div>
 
@@ -221,7 +214,7 @@
     <main class="main">
       <div class="main-top">
       <header class="main-head">
-        <button id="back-btn" class="back-btn" aria-label="Back to lists" aria-keyshortcuts="Escape">
+        <button id="back-btn" class="back-btn" aria-label="Back to lists">
           <svg class="ic"><use href="#i-back"/></svg>
           <span>Lists</span>
         </button>
@@ -234,9 +227,6 @@
           <button id="refresh-btn" class="icon-btn refresh-btn" title="Refresh items" aria-label="Refresh items">
             <svg class="ic"><use href="#i-refresh"/></svg>
           </button>
-          <button id="shortcuts-btn" class="icon-btn shortcuts-btn" type="button" title="Shortcuts" aria-label="Keyboard shortcuts" aria-haspopup="dialog" aria-keyshortcuts="S">
-            <svg class="ic"><use href="#i-keyboard"/></svg>
-          </button>
           <button id="menu-btn" class="icon-btn" aria-label="Toggle sidebar" aria-expanded="true" title="Sidebar">
             <svg class="ic"><use href="#i-list"/></svg>
           </button>
@@ -245,7 +235,7 @@
 
       <form id="main-search-form" class="main-search" role="search">
         <svg class="ic search-ic"><use href="#i-search"/></svg>
-        <input id="main-search" type="search" aria-keyshortcuts="Control+K Meta+K" placeholder="Search" autocomplete="off" aria-label="Search items">
+        <input id="main-search" type="search" placeholder="Search" autocomplete="off" aria-label="Search items">
       </form>
 
       <div id="sort-bar" class="sort-bar" hidden>
@@ -274,7 +264,7 @@
       <div id="content" class="content"></div>
     </main>
 
-    <button id="fab-add" class="fab" aria-label="New Item" aria-keyshortcuts="N" title="New Item">
+    <button id="fab-add" class="fab" aria-label="New Item" title="New Item">
       <svg class="ic"><use href="#i-plus"/></svg>
     </button>
   </div>
@@ -283,7 +273,7 @@
     <div class="sheet-backdrop" data-close></div>
     <form id="editor-form" class="sheet-card editor-card" novalidate>
       <header class="sheet-head editor-head">
-        <button type="button" class="text-btn" data-close aria-keyshortcuts="Escape">Cancel</button>
+        <button type="button" class="text-btn" data-close>Cancel</button>
         <span id="editor-heading">New Item</span>
         <button type="submit" id="editor-submit" class="text-btn strong">Add</button>
       </header>
@@ -298,7 +288,7 @@
         </div>
 
         <div id="e-quick-actions" class="e-quick-actions" hidden>
-          <button type="button" id="e-more-toggle" class="e-more-toggle" aria-expanded="false" aria-controls="e-more" aria-keyshortcuts="Control+Shift+M Meta+Shift+M">
+          <button type="button" id="e-more-toggle" class="e-more-toggle" aria-expanded="false" aria-controls="e-more">
             <svg class="ic"><use href="#i-chevron"/></svg>
             <span id="e-more-label">More options</span>
           </button>
@@ -693,24 +683,6 @@ curl -X PATCH -H "Authorization: Bearer $TOKEN" \
           <p id="pw-msg" class="form-msg" hidden></p>
           <button type="submit" class="primary-btn">Update Password</button>
         </form>
-      </div>
-    </div>
-  </div>
-
-  <div id="shortcuts-sheet" class="sheet" hidden>
-    <div class="sheet-backdrop" data-close></div>
-    <div class="sheet-card">
-      <header class="sheet-head">
-        <span>Shortcuts</span>
-        <button type="button" class="text-btn strong" data-close>Done</button>
-      </header>
-      <div class="sheet-body shortcut-list">
-        <div class="shortcut-row"><span>Show this shortcuts menu</span><span class="shortcut-keys"><kbd class="kbd">S</kbd></span></div>
-        <div class="shortcut-row"><span>New item</span><span class="shortcut-keys"><kbd class="kbd">N</kbd></span></div>
-        <div class="shortcut-row"><span>Search</span><span class="shortcut-keys"><kbd class="kbd" data-mod-key="search">⌘K</kbd></span></div>
-        <div class="shortcut-row"><span>More options while adding</span><span class="shortcut-keys"><kbd class="kbd" data-mod-key="more">⌘⇧M</kbd></span></div>
-        <div class="shortcut-row"><span>Close a sheet, clear search, or go Back</span><span class="shortcut-keys"><kbd class="kbd">Esc</kbd></span></div>
-        <p class="notify-hint">Keyboard shortcuts work in the desktop and web app.</p>
       </div>
     </div>
   </div>

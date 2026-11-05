@@ -139,37 +139,6 @@ button, a, input, select, textarea, [tabindex] { touch-action: manipulation; }
 .sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
 .ic { width: 22px; height: 22px; flex: none; }
 
-/* Keycaps used by the Shortcuts sheet. */
-.kbd {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 5px;
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  background: var(--elev);
-  color: var(--text-3);
-  font-family: inherit;
-  font-size: 0.65rem;
-  font-weight: 600;
-  line-height: 1;
-  white-space: nowrap;
-}
-
-.sheet-body.shortcut-list { gap: 12px; }
-.shortcut-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  font-size: 0.875rem;
-}
-.shortcut-row > span:first-child { color: var(--text); }
-.shortcut-keys { display: flex; align-items: center; gap: 4px; flex: none; }
-.shortcut-list .notify-hint { margin-top: 2px; }
-
 /* ---------- Auth ---------- */
 
 .auth {
@@ -442,7 +411,7 @@ body.gate-open {
    layout pull down at the top of a scroller instead. The pill is fixed and
    slides into view as the pull progresses. */
 @media (max-width: 899px) and (pointer: coarse) {
-  .refresh-btn, .shortcuts-btn { display: none; }
+  .refresh-btn { display: none; }
 }
 
 .pull-refresh {
@@ -1755,7 +1724,6 @@ body.sheet-open .fab {
   opacity: 0;
   pointer-events: none;
 }
-
 
 .fab:hover {
   background: var(--accent-hover);
@@ -3189,4 +3157,3 @@ body.sheet-open .sidebar {
   .e-more { transition: none; }
   .e-more-toggle .ic { transition: none; }
 }
-
