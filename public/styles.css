@@ -139,6 +139,40 @@ button, a, input, select, textarea, [tabindex] { touch-action: manipulation; }
 .sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
 .ic { width: 22px; height: 22px; flex: none; }
 
+/* Keyboard hints (desktop/web only). */
+.kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--elev);
+  color: var(--text-3);
+  font-family: inherit;
+  font-size: 0.65rem;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.kbd-hint { display: none; }
+@media (min-width: 900px) { .kbd-hint { display: inline-flex; } }
+.back-kbd { margin-left: 4px; }
+.e-more-kbd { margin-left: 3px; opacity: 0.8; }
+
+.fab-hint {
+  display: none;
+  position: fixed;
+  right: 92px;
+  bottom: calc(47px + env(safe-area-inset-bottom));
+  z-index: 39;
+  pointer-events: none;
+  opacity: 0.7;
+}
+
 /* ---------- Auth ---------- */
 
 .auth {
@@ -1725,6 +1759,8 @@ body.sheet-open .fab {
   pointer-events: none;
 }
 
+body.sheet-open .fab-hint { opacity: 0; }
+
 .fab:hover {
   background: var(--accent-hover);
   transform: translateY(-1px);
@@ -2690,6 +2726,11 @@ body.sheet-open .sidebar {
     right: max(28px, calc((100vw - min(54vw, 990px)) / 2 + 28px));
   }
 
+  .fab-hint {
+    display: inline-flex;
+    right: max(92px, calc((100vw - min(54vw, 990px)) / 2 + 92px));
+  }
+
   .content {
     width: 100%;
     max-width: none;
@@ -3156,4 +3197,10 @@ body.sheet-open .sidebar {
   .skel { animation: none; }
   .e-more { transition: none; }
   .e-more-toggle .ic { transition: none; }
+}
+
+/* Keyboard hints are for pointer-and-keyboard desktop use only. */
+@media (pointer: coarse) {
+  .kbd-hint,
+  .fab-hint { display: none; }
 }

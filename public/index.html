@@ -145,7 +145,7 @@
 
       <form id="search-form" class="search" role="search">
         <svg class="ic search-ic"><use href="#i-search"/></svg>
-        <input id="search" type="search" placeholder="Search" autocomplete="off" aria-label="Search items">
+        <input id="search" type="search" aria-keyshortcuts="Control+K Meta+K" placeholder="Search" autocomplete="off" aria-label="Search items">
       </form>
       </div>
 
@@ -214,9 +214,10 @@
     <main class="main">
       <div class="main-top">
       <header class="main-head">
-        <button id="back-btn" class="back-btn" aria-label="Back to lists">
+        <button id="back-btn" class="back-btn" aria-label="Back to lists" aria-keyshortcuts="Escape">
           <svg class="ic"><use href="#i-back"/></svg>
           <span>Lists</span>
+          <kbd class="kbd kbd-hint back-kbd" aria-hidden="true">Esc</kbd>
         </button>
         <div class="title-wrap">
           <h2 id="view-title">Today</h2>
@@ -235,7 +236,7 @@
 
       <form id="main-search-form" class="main-search" role="search">
         <svg class="ic search-ic"><use href="#i-search"/></svg>
-        <input id="main-search" type="search" placeholder="Search" autocomplete="off" aria-label="Search items">
+        <input id="main-search" type="search" aria-keyshortcuts="Control+K Meta+K" placeholder="Search" autocomplete="off" aria-label="Search items">
       </form>
 
       <div id="sort-bar" class="sort-bar" hidden>
@@ -264,16 +265,17 @@
       <div id="content" class="content"></div>
     </main>
 
-    <button id="fab-add" class="fab" aria-label="New Item" title="New Item">
+    <button id="fab-add" class="fab" aria-label="New Item" aria-keyshortcuts="N" title="New Item (N)">
       <svg class="ic"><use href="#i-plus"/></svg>
     </button>
+    <span class="fab-hint" aria-hidden="true"><kbd class="kbd">N</kbd></span>
   </div>
 
   <div id="editor" class="sheet" hidden>
     <div class="sheet-backdrop" data-close></div>
     <form id="editor-form" class="sheet-card editor-card" novalidate>
       <header class="sheet-head editor-head">
-        <button type="button" class="text-btn" data-close>Cancel</button>
+        <button type="button" class="text-btn" data-close aria-keyshortcuts="Escape">Cancel <kbd class="kbd kbd-hint" aria-hidden="true">Esc</kbd></button>
         <span id="editor-heading">New Item</span>
         <button type="submit" id="editor-submit" class="text-btn strong">Add</button>
       </header>
@@ -288,9 +290,10 @@
         </div>
 
         <div id="e-quick-actions" class="e-quick-actions" hidden>
-          <button type="button" id="e-more-toggle" class="e-more-toggle" aria-expanded="false" aria-controls="e-more">
+          <button type="button" id="e-more-toggle" class="e-more-toggle" aria-expanded="false" aria-controls="e-more" aria-keyshortcuts="Control+Shift+M Meta+Shift+M">
             <svg class="ic"><use href="#i-chevron"/></svg>
             <span id="e-more-label">More options</span>
+            <kbd class="kbd kbd-hint e-more-kbd" id="e-more-kbd" aria-hidden="true">⌘⇧M</kbd>
           </button>
         </div>
 
