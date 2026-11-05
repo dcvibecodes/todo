@@ -801,25 +801,9 @@ body.gate-open {
    fat-finger-proof touch target. */
 .list-row {
   min-height: 56px;
-  padding: 0 8px;
+  padding: 12px 8px;
   border-bottom: 1px solid var(--line-soft);
   border-radius: 0;
-}
-
-.list-open {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex: 1 1 auto;
-  min-width: 0;
-  min-height: 56px;
-  padding: 12px 0;
-  border: 0;
-  border-radius: 5px;
-  background: transparent;
-  text-align: left;
-  color: var(--text);
-  font: inherit;
 }
 
 .list-row .list-dot {
@@ -908,12 +892,8 @@ body.gate-open {
 
 .list-grip .ic { width: 15px; height: 15px; }
 .list-row:hover .list-grip { opacity: 0.9; }
+.list-row:focus-visible .list-grip { opacity: 1; }
 .list-grip:hover { background: var(--fill); }
-.list-grip.keyboard-focus {
-  outline: none;
-  opacity: 1;
-  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px color-mix(in srgb, var(--accent) 35%, transparent);
-}
 
 .list-lock {
   width: 22px;
@@ -1992,7 +1972,7 @@ body.sheet-open .sidebar {
 #editor .e-title:focus,
 #editor .e-notes:focus {
   outline: none;
-  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px color-mix(in srgb, var(--accent) 35%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent);
 }
 
 .ed-note-links {
@@ -2122,25 +2102,7 @@ body.sheet-open .sidebar {
 
 .ed-switch input:checked + span { background: var(--accent); }
 .ed-switch input:checked + span::after { transform: translateX(18px); }
-.ed-switch input:focus-visible + span,
-.ed-switch input.keyboard-focus + span {
-  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px color-mix(in srgb, var(--accent) 35%, transparent);
-}
-
-.ed-row.keyboard-focus,
-.ed-subrow.keyboard-focus,
-.nav-row.keyboard-focus,
-.list-open.keyboard-focus {
-  outline: none;
-  box-shadow:
-    inset 0 0 0 2px var(--surface),
-    inset 0 0 0 4px color-mix(in srgb, var(--accent) 35%, transparent);
-}
-
-.ed-select-row.keyboard-focus .ed-value,
-.ed-list-row.keyboard-focus .ed-value { color: var(--text); }
-.ed-select-row.keyboard-focus .ed-chevron,
-.ed-list-row.keyboard-focus .ed-chevron { color: var(--accent); }
+.ed-switch input:focus-visible + span { box-shadow: 0 0 0 2px var(--accent); }
 
 .ed-group,
 .ed-row,
@@ -2185,17 +2147,8 @@ body.sheet-open .sidebar {
 }
 
 #e-date-row:focus-within,
-#e-time-row:focus-within,
-#e-date-row.keyboard-focus,
-#e-time-row.keyboard-focus {
-  box-shadow:
-    inset 0 0 0 2px var(--surface),
-    inset 0 0 0 4px color-mix(in srgb, var(--accent) 35%, transparent);
-}
-
-#e-date-row input.keyboard-focus,
-#e-time-row input.keyboard-focus {
-  box-shadow: none;
+#e-time-row:focus-within {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent);
 }
 
 #e-date-row input:focus,
@@ -3051,15 +3004,6 @@ body.sheet-open .sidebar {
 }
 
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-
-.keyboard-focus {
-  outline: none;
-  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px color-mix(in srgb, var(--accent) 35%, transparent);
-}
-
-.day-cell.keyboard-focus {
-  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px color-mix(in srgb, var(--accent) 35%, transparent);
-}
 
 .list-grip:focus-visible { opacity: 0.9; }
 
