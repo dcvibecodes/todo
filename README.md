@@ -2,6 +2,16 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v4.1.0
+
+- **Workspace-wide token permissions** - the existing bearer key can now be granted explicit Notes, Docs, file, storage and search scopes without changing or reissuing the secret. Reminders keep their existing read/write/legacy behaviour; new scopes are opt-in in Settings.
+- **Read boundaries closed** - token calls to `/api/state`, `/api/lists`, search and storage are filtered to authorized tenants. Unauthorized arrays come back empty with `filtered: true`.
+- **Notes and Docs API** - collection/detail reads, Notes create/edit/delete, Docs upload/move/delete, reminder/note attachments, private downloads, scoped storage and search. Writes use idempotency keys; revisions and store-epoch guards protect against stale edits.
+- **Discovery** - `GET /api/capabilities` reports effective scopes, supported Docs formats, upload limits, search fields and backup scope.
+- **Safer file lifecycle** - attachment folder IDs stay in sync when parents move, completed-reminder retention removes attachments and files, and uploads clean up temp files on replay or failure.
+- **Storage and backup wording** - storage text now counts UTF-8 bytes, largest files show the tenant, JSON backup is labelled as text/metadata only, and Settings documents that a complete restore needs both the database and uploads.
+- Service worker cache bumped to `workspace-v4.1.0`.
+
 ## What's New in v4.0.0
 
 - **Renamed to Workspace** - the app is now Workspace everywhere: browser title, sign-in screen, PWA name, notification copy, backup filename and service-worker cache.
@@ -759,7 +769,8 @@ Public: `GET /api/health`, `GET /api/session`, `POST /api/setup`, `POST /api/log
 
 Authenticated routes require the `todo.sid` session cookie. State-changing requests also require the `X-CSRF-Token` header returned by `GET /api/session`.
 
-- `GET /api/state` (lists, reminders, non-secret settings)
+- `GET /api/state` (lists, reminders, notes, docs, attachments, non-secret settings)
+- `GET /api/capabilities` (API version, effective scopes, limits, search fields, backup scope)
 - `GET /api/settings`, `POST /api/settings` (allowlisted keys only)
 - `POST /api/settings/sort` (synced per-view sorting; one intent per call - single view, apply-all, or first-device seed - merged server-side)
 - `POST` / `PATCH` / `DELETE /api/lists[/:id]`
@@ -768,7 +779,11 @@ Authenticated routes require the `todo.sid` session cookie. State-changing reque
 - `POST /api/reminders/:id/skip|unskip|snooze|reschedule`, `GET /api/reminders/:id/occurrences`
 - `POST /api/parse` (natural-language title parsing)
 - `GET /api/lists`, `GET /api/reminders` (also usable with a token)
-- `GET /api/tokens`, `POST /api/tokens`, `POST /api/tokens/:id/revoke`
+- `GET/POST /api/notes`, `GET/PATCH/DELETE /api/notes/:id`, `GET/POST /api/notes/:id/attachments`
+- `GET/POST /api/docs`, `GET/PATCH/DELETE /api/docs/:id`, `GET /api/files/:id`
+- `GET/POST /api/reminders/:id/attachments`, `DELETE /api/attachments/:id`
+- `GET /api/storage`
+- `GET /api/tokens`, `POST /api/tokens`, `POST /api/tokens/:id/permissions`, `POST /api/tokens/:id/profile`, `POST /api/tokens/:id/revoke`
 - `GET /api/export`, `POST /api/import`
 - `POST /api/push/subscribe`, `/unsubscribe`, `/test`, `/action` (signed notification actions)
 - `POST /api/password`
@@ -780,13 +795,23 @@ Personal access tokens (`Authorization: Bearer $TEST_TOKEN`, created in Settings
 - **write**: everything in read, plus idempotent `POST /reminders`, full-edit `PATCH /reminders/:id`, and `POST /reminders/:id/snooze|skip|reschedule`. Every write-profile mutation REQUIRES an `Idempotency-Key` header (1–200 chars) and `base_revision` + `base_epoch` (see below).
 - **legacy** (migration-only, never selectable): exactly the pre-profile capabilities — reads, key-optional creates, and complete-only PATCH.
 
-`GET /api/tokens` shows each token's profile (never hashes); the owner changes profiles in Settings (`POST /api/tokens/:id/profile`, session-only). Deleting reminders, managing lists, settings, token management, import/export, password, and push stay session-only for every profile.
+Additional tenant permissions are opt-in scopes on the same token record. Existing tokens migrate with an empty list and keep exactly their reminder profile; the owner changes them in Settings (`POST /api/tokens/:id/permissions`, session-only). Valid scopes are `notes:read`, `notes:write`, `notes:delete`, `docs:read`, `docs:write`, `docs:delete`, `storage:read`, `search:read`. `write` does **not** imply any new-tenant permission.
 
-**Write-protocol (write profile only).** First execution of every mutation needs `base_revision` (integer) and `base_epoch` (string); missing or wrongly typed → `400`. The server checks `base_epoch` against its `store_epoch` setting (regenerated on every backup import, nowhere else) → mismatch is `409 {"error": "Store was restored since your read"}` — never bypassed. Mutations apply as one atomic compare-and-write (`revision = revision + 1` in the same statement); a stale base → `409 {"error": "Reminder changed since your read", "reminder": <current row>}`. Replays (same key + byte-identical body) return `200 {"deduplicated": true, "original_status", "result"}` where `result` is the FROZEN first-execution outcome (historical — follow up with `GET /api/reminders/:id` for current state); a retried snooze keeps its original absolute time, never recomputed. Same key with a different raw payload → `409`. Keys are namespaced per token and per concrete route, survive reminder deletion (replay then adds `"deleted": true`), and the fingerprint covers the raw request only — resolved defaults and server-computed targets are frozen at first execution, so replaying the same raw request is stable across Settings changes, list renames, and clock moves. Token bodies are strictly validated (unknown fields and wrong types → `400` naming the field); session callers keep their lenient behavior.
+- Notes/Docs reads use `GET /api/notes`, `/api/notes/:id`, `/api/docs`, `/api/docs/:id`; Docs search matches filenames only.
+- Notes create/edit needs `notes:write`; Notes delete needs `notes:delete`. Docs upload/move needs `docs:write`; Docs delete needs `docs:delete`. Note/reminder attachments follow the parent: read to list/download, write to upload, `notes:delete`/`docs:delete` to delete.
+- `GET /api/files/:id` is authorized by the owning parent, never by file ID alone. Downloads are private/no-store and use attachment disposition.
+- `/api/state`, `/api/lists`, `/api/search`, `/api/storage` and largest-file results are filtered for token callers; unauthorized arrays are empty, and responses include `filtered: true`. A query parameter only narrows access.
+- `/api/capabilities` reports effective capabilities, supported Docs formats (Word, PDF, Excel, TXT, Markdown, HTML), upload limits (25 MiB per file, 10 files per request), search fields and JSON-backup scope.
+
+`GET /api/tokens` shows each token's profile and additional scopes (never hashes). Deleting reminders, managing folders, settings, token management, import/export, password, and push stay session-only for every profile.
+
+**Write-protocol.** Reminder writes keep the existing strict/`Idempotency-Key`/revision protocol. Notes and Docs writes require an `Idempotency-Key` header; Notes PATCH/DELETE, Docs move/delete and attachment delete also require `base_revision` + `base_epoch`. Uploads require `Idempotency-Key` + `base_epoch`; Docs/attachment fingerprints use normalized file metadata plus SHA-256 file-content hashes, never multipart boundaries, and temporary files are removed on replay or validation failure. First execution of every revisioned mutation needs `base_revision` (integer) and `base_epoch` (string); missing or wrongly typed → `400`. The server checks `base_epoch` against its `store_epoch` setting (regenerated on every backup import, nowhere else) → mismatch is `409 {"error": "Store was restored since your read"}` — never bypassed. Mutations apply as one atomic compare-and-write (`revision = revision + 1` in the same statement); a stale base → `409 {"error": "Reminder changed since your read", "reminder": <current row>}`. Replays (same key + byte-identical body) return `200 {"deduplicated": true, "original_status", "result"}` where `result` is the FROZEN first-execution outcome (historical — follow up with `GET /api/reminders/:id` for current state); a retried snooze keeps its original absolute time, never recomputed. Same key with a different raw payload → `409`. Keys are namespaced per token and per concrete route, survive deletion where applicable, and the fingerprint covers the raw request only — resolved defaults and server-computed targets are frozen at first execution, so replaying the same raw request is stable across Settings changes, list renames, and clock moves. Token bodies are strictly validated (unknown fields and wrong types → `400` naming the field); session callers keep their lenient behavior.
 
 **Recurring series (write profile).** `PATCH {"completed": true}` and `POST …/skip` on a recurring reminder must include `occurrence_at`. If it equals the current `due_at`, the operation proceeds (same-occurrence duplicates are harmless). If it differs and that occurrence is already recorded done, the server answers `200 {"ok": true, "alreadyDone": true}` without advancing again (this recognition bypasses only the revision check, never the epoch guard). Otherwise → `409 {"error": "Stale occurrence", "currentDue"}`.
 
 **Change tracking.** Every reminder carries `revision` (monotonic integer, bumped by every content/state mutation including UI edits and occurrence-scope edits — never by push bookkeeping) and `updated_at`/`notified_at`. `GET /api/reminders` with NO filters returns the COMPLETE snapshot (every row, `ORDER BY id`, `complete: true`, top-level `store_epoch`): diff two snapshots by `id` to see everything, including hand edits from the UI. Only absence from that unfiltered snapshot implies deletion; filtered/limited responses are convenience reads, not change signals. No cursors, no feeds, no polling promises.
+
+**Backup caveat.** Settings → Backup is a JSON text/metadata export: it does not include uploaded file bytes. A complete Workspace restore needs both `data/todo.db` and `data/uploads` from the same point in time. Storage figures are logical counters (file sizes plus SQLite text bytes), not a physical disk audit.
 
 **Agent conduct.** A token profile is technical capability, not permission: only create, edit, complete, or snooze reminders the owner has explicitly instructed, and never invent operations on their own.
 

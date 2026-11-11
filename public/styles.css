@@ -2581,6 +2581,51 @@ body.sheet-open .sidebar {
   transition: opacity 0.18s ease, transform 0.18s ease;
 }
 
+.token-scope-grid { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+
+.token-scope-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+}
+
+.token-scope-label {
+  flex-basis: 100%;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.token-scope-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  color: var(--text-2);
+}
+
+.token-scope-option input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.token-scope-details {
+  flex-basis: 100%;
+  padding-top: 6px;
+  border-top: 1px dashed var(--line-soft);
+}
+
+.token-scope-details summary {
+  cursor: pointer;
+  font-size: 0.75rem;
+  color: var(--text-2);
+}
+
 .token-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 550; }
 .token-meta { color: var(--text-3); font-size: 0.75rem; }
 

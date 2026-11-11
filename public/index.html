@@ -711,51 +711,6 @@
           <h4 class="settings-subhead">Time zone</h4>
           <p class="notify-hint" id="device-zone-label">Time zone: unknown yet.</p>
           <button type="button" id="zone-use-device" class="secondary-btn" hidden>Use this device's time zone</button>
-          <h4 class="settings-subhead">API tokens</h4>
-          <p class="notify-hint">Tokens let your other agents work with reminder items — no browser needed. A token can never delete, manage folders, or change the password.</p>
-          <label class="settings-row" for="token-name">
-            <span>Name</span>
-            <input id="token-name" type="text" placeholder="e.g. friday-agent" maxlength="80" autocomplete="off">
-          </label>
-          <label class="settings-row" for="token-profile">
-            <span>Access</span>
-            <select id="token-profile">
-              <option value="read" selected>Read only</option>
-              <option value="write">Read + write</option>
-            </select>
-          </label>
-          <p class="notify-hint">Read + write tokens can add, edit, complete, and snooze items. Choose it deliberately.</p>
-          <button type="button" id="token-generate" class="primary-btn">Generate token</button>
-          <div id="token-once" class="token-once" hidden>
-            <p class="notify-hint"><strong>Copy it now — it will never be shown again.</strong></p>
-            <p id="token-value" class="token-value"></p>
-            <button type="button" id="token-copy" class="secondary-btn">Copy</button>
-          </div>
-          <div id="token-list" class="token-list"></div>
-          <details class="token-examples">
-            <summary>curl examples</summary>
-            <pre id="token-examples">export TOKEN=YOUR_TOKEN
-export HOST=https://your-domain.example
-
-# lists
-curl -H "Authorization: Bearer $TOKEN" $HOST/api/lists
-
-# add an item (idempotent with a client key)
-curl -X POST -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -H "Idempotency-Key: friday-001" \
-  -d '{"title":"Call mom","list":"Reminders","due_at":"2026-11-01T18:00:00","has_time":true}' \
-  $HOST/api/reminders
-
-# read it back
-curl -H "Authorization: Bearer $TOKEN" "$HOST/api/reminders?q=Call%20mom"
-
-# complete it (advances recurring series)
-curl -X PATCH -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"completed":true}' \
-  $HOST/api/reminders/123</pre>
-          </details>
         </div>
         <div class="settings-group">
           <h3>Sorting</h3>
@@ -792,7 +747,55 @@ curl -X PATCH -H "Authorization: Bearer $TOKEN" \
           <button type="button" id="import-btn" class="secondary-btn">Import backup…</button>
           <input id="import-file" type="file" accept="application/json,.json" hidden>
           <p id="import-msg" class="form-msg" hidden></p>
-          <p class="notify-hint">Import adds missing folders and items; it never overwrites or deletes anything.</p>
+          <p class="notify-hint">JSON backup includes folders, reminder history, note text and file metadata — <strong>not uploaded file bytes</strong>. For a complete restore, back up <code>data/todo.db</code> and <code>data/uploads</code> together.</p>
+        </div>
+        <div class="settings-group">
+          <h3>API tokens</h3>
+          <p class="notify-hint">Tokens let your other agents work with items — no browser needed. Reminder read/write stays as before; Notes, Docs, storage and search access is opt-in below. Tokens still cannot manage folders, settings or the password.</p>
+          <label class="settings-row" for="token-name">
+            <span>Name</span>
+            <input id="token-name" type="text" placeholder="e.g. friday-agent" maxlength="80" autocomplete="off">
+          </label>
+          <label class="settings-row" for="token-profile">
+            <span>Reminders access</span>
+            <select id="token-profile">
+              <option value="read" selected>Read only</option>
+              <option value="write">Read + write</option>
+            </select>
+          </label>
+          <p class="notify-hint">Reminders access keeps the existing read / read+write behaviour. Additional tenant permissions below are opt-in and default to none.</p>
+          <div id="token-scopes-new" class="token-scope-grid"></div>
+          <button type="button" id="token-generate" class="primary-btn">Generate token</button>
+          <div id="token-once" class="token-once" hidden>
+            <p class="notify-hint"><strong>Copy it now — it will never be shown again.</strong></p>
+            <p id="token-value" class="token-value"></p>
+            <button type="button" id="token-copy" class="secondary-btn">Copy</button>
+          </div>
+          <div id="token-list" class="token-list"></div>
+          <details class="token-examples">
+            <summary>curl examples</summary>
+            <pre id="token-examples">export TOKEN=YOUR_TOKEN
+export HOST=https://your-domain.example
+
+# lists
+curl -H "Authorization: Bearer $TOKEN" $HOST/api/lists
+
+# add an item (idempotent with a client key)
+curl -X POST -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: friday-001" \
+  -d '{"title":"Call mom","list":"Reminders","due_at":"2026-11-01T18:00:00","has_time":true}' \
+  $HOST/api/reminders
+
+# read it back
+curl -H "Authorization: Bearer $TOKEN" "$HOST/api/reminders?q=Call%20mom"
+
+# complete it (advances recurring series)
+curl -X PATCH -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"completed":true}' \
+  $HOST/api/reminders/123</pre>
+          </details>
         </div>
         <div class="settings-group">
           <h3>Username</h3>

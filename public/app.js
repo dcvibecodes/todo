@@ -3175,7 +3175,7 @@ function renderStorageSettings() {
       el('span', { class: 'storage-file-name', text: file.name }),
       el('span', {
         class: 'storage-file-meta',
-        text: `${file.folder_name || 'Unfiled'} · ${formatBytes(file.size)}`,
+        text: `${({ reminders: 'Reminders', notes: 'Notes', docs: 'Docs' })[file.tenant] || file.tenant} · ${file.folder_name || 'Unfiled'} · ${formatBytes(file.size)}`,
       }),
       el('button', {
         type: 'button',
@@ -6251,6 +6251,35 @@ async function saveAppSettings() {
   }
 }
 
+const TOKEN_SCOPE_GROUPS = [
+  { label: 'Notes', scopes: [['notes:read', 'Read'], ['notes:write', 'Add / edit'], ['notes:delete', 'Delete']] },
+  { label: 'Docs', scopes: [['docs:read', 'Read'], ['docs:write', 'Add / edit / move'], ['docs:delete', 'Delete']] },
+  { label: 'Other', scopes: [['storage:read', 'Storage usage'], ['search:read', 'Search']] },
+];
+
+function buildTokenScopeEditor(container, selected = []) {
+  container.replaceChildren();
+  const chosen = new Set(selected);
+  for (const group of TOKEN_SCOPE_GROUPS) {
+    container.append(el('div', { class: 'token-scope-group' }, [
+      el('span', { class: 'token-scope-label', text: group.label }),
+      ...group.scopes.map(([scope, label]) => el('label', { class: 'token-scope-option' }, [
+        el('input', { type: 'checkbox', value: scope, checked: chosen.has(scope) }),
+        el('span', { text: label }),
+      ])),
+    ]));
+  }
+}
+
+function tokenScopesFrom(container) {
+  return $$('input[type="checkbox"]:checked', container).map((input) => input.value);
+}
+
+function tokenScopeSummary(scopes) {
+  if (!scopes || !scopes.length) return 'none';
+  return scopes.map((scope) => scope.replace(':', ' ')).join(' · ');
+}
+
 async function renderTokenList() {
   const wrap = $('#token-list');
   wrap.replaceChildren();
@@ -6365,6 +6394,34 @@ async function renderTokenList() {
       });
 
       row.append(select, accessButton, revokeButton);
+      const scopeGrid = el('div', { class: 'token-scope-grid' });
+      buildTokenScopeEditor(scopeGrid, token.permissions || []);
+      const scopeSave = el('button', {
+        type: 'button',
+        class: 'secondary-btn small-btn',
+        text: 'Save permissions',
+        'aria-label': `Save additional permissions for ${tokenName}`,
+      });
+      scopeSave.addEventListener('click', async () => {
+        scopeSave.disabled = true;
+        try {
+          await api('/api/tokens/' + token.id + '/permissions', {
+            method: 'POST',
+            body: { permissions: tokenScopesFrom(scopeGrid) },
+          });
+          await renderTokenList();
+          toast('Token permissions saved');
+        } catch (err) {
+          toast(err.message);
+        } finally {
+          scopeSave.disabled = false;
+        }
+      });
+      row.append(el('details', { class: 'token-scope-details' }, [
+        el('summary', { text: `Additional permissions: ${tokenScopeSummary(token.permissions)}` }),
+        scopeGrid,
+        scopeSave,
+      ]));
     }
     wrap.append(row);
   }
@@ -6373,8 +6430,9 @@ async function renderTokenList() {
 async function generateToken() {
   const name = $('#token-name').value.trim() || 'agent';
   const profile = $('#token-profile') ? $('#token-profile').value : 'read';
+  const permissions = tokenScopesFrom($('#token-scopes-new'));
   try {
-    const result = await api('/api/tokens', { method: 'POST', body: { name, profile } });
+    const result = await api('/api/tokens', { method: 'POST', body: { name, profile, permissions } });
     $('#token-value').textContent = result.token;
     $('#token-once').hidden = false;
     $('#token-name').value = '';
@@ -6992,6 +7050,7 @@ document.addEventListener('visibilitychange', () => {
 
 applyDensity();
 syncMenuButtons();
+buildTokenScopeEditor($('#token-scopes-new'));
 
 initPullToRefresh();
 initDayPeek();

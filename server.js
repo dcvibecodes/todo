@@ -77,11 +77,21 @@ async function systemFolderId(tenant) {
   return folder ? folder.id : null;
 }
 
-async function storageSnapshot() {
+async function hashUploadedFile(filePath) {
+  return new Promise((resolve, reject) => {
+    const hash = crypto.createHash('sha256');
+    const stream = fs.createReadStream(filePath);
+    stream.on('data', (chunk) => hash.update(chunk));
+    stream.on('error', reject);
+    stream.on('end', () => resolve(hash.digest('hex')));
+  });
+}
+
+async function storageSnapshot(allowedTenants = null) {
   const [reminderText, noteText, docNames, fileRows, largestRows] = await Promise.all([
-    db.get(`SELECT COALESCE(SUM(LENGTH(title) + LENGTH(notes)), 0) AS bytes FROM reminders`),
-    db.get(`SELECT COALESCE(SUM(LENGTH(title) + LENGTH(body)), 0) AS bytes FROM notes`),
-    db.get(`SELECT COALESCE(SUM(LENGTH(name)), 0) AS bytes FROM attachments WHERE owner_type = 'doc'`),
+    db.get(`SELECT COALESCE(SUM(LENGTH(CAST(title AS BLOB)) + LENGTH(CAST(notes AS BLOB))), 0) AS bytes FROM reminders`),
+    db.get(`SELECT COALESCE(SUM(LENGTH(CAST(title AS BLOB)) + LENGTH(CAST(body AS BLOB))), 0) AS bytes FROM notes`),
+    db.get(`SELECT COALESCE(SUM(LENGTH(CAST(name AS BLOB))), 0) AS bytes FROM attachments WHERE owner_type = 'doc'`),
     db.all(`SELECT tenant, COALESCE(SUM(size), 0) AS bytes, COUNT(*) AS files FROM attachments GROUP BY tenant`),
     db.all(`SELECT a.id, a.tenant, a.owner_type, a.owner_id, a.name, a.size, a.mime,
                    l.name AS folder_name
@@ -116,7 +126,7 @@ async function storageSnapshot() {
     try { databaseBytes += fs.statSync(db.DB_FILE + suffix).size; } catch { /* not present */ }
   }
   const total = fileTotal + databaseBytes;
-  return {
+  let snapshot = {
     total,
     database: databaseBytes,
     files: fileTotal,
@@ -124,7 +134,34 @@ async function storageSnapshot() {
     other: Math.max(0, databaseBytes - (text.reminders + text.notes + text.docs)),
     tenants,
     largest: largestRows,
+    filtered: false,
   };
+  if (Array.isArray(allowedTenants)) {
+    const allowed = new Set(allowedTenants);
+    const scopedTenants = {};
+    let scopedFiles = 0;
+    let scopedText = 0;
+    for (const tenant of ['reminders', 'notes', 'docs']) {
+      if (!allowed.has(tenant)) {
+        scopedTenants[tenant] = { files: 0, fileCount: 0, text: 0, total: 0 };
+        continue;
+      }
+      scopedTenants[tenant] = tenants[tenant];
+      scopedFiles += tenants[tenant].files;
+      scopedText += tenants[tenant].text;
+    }
+    snapshot = {
+      total: scopedFiles + scopedText,
+      database: 0,
+      files: scopedFiles,
+      text: scopedText,
+      other: 0,
+      tenants: scopedTenants,
+      largest: largestRows.filter((row) => allowed.has(row.tenant)),
+      filtered: true,
+    };
+  }
+  return snapshot;
 }
 
 
@@ -284,6 +321,22 @@ async function purgeCompletedRetention(listId = null) {
   for (const list of lists) {
     const cutoff = retentionCutoff(list.completed_retention);
     if (!cutoff) continue;
+    const expired = await db.all(
+      `SELECT id FROM reminders
+       WHERE list_id = ? AND completed = 1 AND completed_at IS NOT NULL AND completed_at < ?`,
+      [list.id, cutoff]
+    );
+    for (const reminder of expired) {
+      const files = await db.all(
+        "SELECT stored_name FROM attachments WHERE owner_type = 'reminder' AND owner_id = ?",
+        [reminder.id]
+      );
+      await removeStoredFiles(files);
+      await db.run(
+        "DELETE FROM attachments WHERE owner_type = 'reminder' AND owner_id = ?",
+        [reminder.id]
+      );
+    }
     const result = await db.run(
       `DELETE FROM reminders
        WHERE list_id = ? AND completed = 1 AND completed_at IS NOT NULL AND completed_at < ?`,
@@ -386,9 +439,60 @@ function denyToken(res) {
   return res.status(403).json({ error: 'This token is not allowed to use this endpoint' });
 }
 
+
+const TOKEN_SCOPES = new Set([
+  'notes:read', 'notes:write', 'notes:delete',
+  'docs:read', 'docs:write', 'docs:delete',
+  'storage:read', 'search:read',
+]);
+
+function normalizeTokenPermissions(value) {
+  let raw = value;
+  if (typeof raw === 'string') {
+    try { raw = JSON.parse(raw); } catch { raw = []; }
+  }
+  if (!Array.isArray(raw)) return [];
+  return [...new Set(raw.filter((scope) => TOKEN_SCOPES.has(scope)))];
+}
+
+function validTokenPermissionsInput(value) {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) return null;
+  if (value.some((scope) => !TOKEN_SCOPES.has(scope))) return null;
+  return [...new Set(value)];
+}
+
+function tokenPermissions(token) {
+  return normalizeTokenPermissions(token ? token.permissions : []);
+}
+
+function tokenHas(token, scope) {
+  return tokenPermissions(token).includes(scope);
+}
+
+function tokenReminderWrite(token) {
+  return Boolean(token) && (token.profile === 'write' || token.profile === 'legacy');
+}
+
+function tokenTenantCan(token, tenant, level) {
+  if (tenant === 'reminders') {
+    if (level === 'read') return true;
+    if (level === 'write') return tokenReminderWrite(token);
+    return false;
+  }
+  return tokenHas(token, `${tenant}:${level}`);
+}
+
+function tokenAuthorizedTenants(token) {
+  return ['reminders'].concat(
+    tokenHas(token, 'notes:read') ? ['notes'] : [],
+    tokenHas(token, 'docs:read') ? ['docs'] : [],
+  );
+}
+
 async function lookupToken(raw) {
   return db.get(
-    'SELECT id, name, profile FROM personal_access_tokens WHERE token_hash = ? AND revoked_at IS NULL',
+    'SELECT id, name, profile, permissions FROM personal_access_tokens WHERE token_hash = ? AND revoked_at IS NULL',
     [hashToken(raw)]
   );
 }
@@ -497,6 +601,64 @@ async function runTokenWrite(req, res, { route, key, fingerprint, execute }) {
     if (res.headersSent) return;
     if (err && err.rollbackOnly) return res.status(err.status).json(err.body);
     res.status(err.status || 500).json({ error: err.message || 'Server error' });
+  }
+}
+
+
+// Token uploads: same stored-response protocol as runTokenWrite, but the
+// temporary files must be deleted on replay/validation failure. The caller
+// owns deleting them on success (they become the stored file).
+async function runTokenUpload(req, res, { route, key, fingerprint, execute, cleanup }) {
+  const tokenId = req.token.id;
+  const replayEnvelope = async (claim) => {
+    await cleanup();
+    const result = JSON.parse(claim.response_json);
+    return { status: 200, body: { deduplicated: true, original_status: claim.status, result } };
+  };
+  try {
+    const out = await db.transaction(async () => {
+      const claim = await db.get(
+        'SELECT payload_hash, response_json, status FROM token_idempotency_keys WHERE token_id = ? AND route = ? AND key = ?',
+        [tokenId, route, key]
+      );
+      if (claim) {
+        if (claim.payload_hash !== fingerprint) {
+          throw tokenWriteError(409, 'Idempotency key reused with a different payload');
+        }
+        return replayEnvelope(claim);
+      }
+      try {
+        await db.run(
+          'INSERT INTO token_idempotency_keys (token_id, route, key, payload_hash, response_json, status, reminder_id, created_at) VALUES (?, ?, ?, ?, NULL, NULL, NULL, ?)',
+          [tokenId, route, key, fingerprint, new Date().toISOString()]
+        );
+      } catch (err) {
+        if (err && err.code === 'SQLITE_CONSTRAINT') {
+          const raced = await db.get(
+            'SELECT payload_hash, response_json, status FROM token_idempotency_keys WHERE token_id = ? AND route = ? AND key = ?',
+            [tokenId, route, key]
+          );
+          if (raced && raced.payload_hash === fingerprint) return replayEnvelope(raced);
+          throw tokenWriteError(409, 'Idempotency key reused with a different payload');
+        }
+        throw err;
+      }
+      const result = await execute();
+      if (result.status >= 200 && result.status < 300) {
+        await db.run(
+          'UPDATE token_idempotency_keys SET response_json = ?, status = ? WHERE token_id = ? AND route = ? AND key = ?',
+          [JSON.stringify(result.body), result.status, tokenId, route, key]
+        );
+        return result;
+      }
+      throw { status: result.status, body: result.body, rollbackOnly: true };
+    });
+    res.status(out.status).json(out.body);
+  } catch (err) {
+    await cleanup();
+    if (res.headersSent) return;
+    if (err && err.rollbackOnly) return res.status(err.status).json(err.body);
+    return res.status(err.status || 500).json({ error: err.message || 'Server error' });
   }
 }
 
@@ -1164,32 +1326,95 @@ async function main() {
   const REMINDER_ID = /^\/reminders\/\d+$/;
   const OCCURRENCES = /^\/reminders\/\d+\/occurrences$/;
   const REMINDER_ACTION = /^\/reminders\/\d+\/(snooze|skip|reschedule)$/;
+  const REMINDER_FILES = /^\/reminders\/\d+\/attachments$/;
+  const NOTE_ID = /^\/notes\/\d+$/;
+  const NOTE_FILES = /^\/notes\/\d+\/attachments$/;
+  const DOC_ID = /^\/docs\/\d+$/;
+
+  function tokenRouteAllowed(req, token) {
+    const method = req.method;
+    const route = req.path;
+    if (method === 'GET') {
+      if (route === '/capabilities') return true;
+      if (['/lists', '/reminders', '/state', '/parse'].includes(route)) return true;
+      if (REMINDER_ID.test(route) || OCCURRENCES.test(route) || REMINDER_FILES.test(route)) return true;
+      if (route === '/notes' || NOTE_ID.test(route) || NOTE_FILES.test(route)) return tokenHas(token, 'notes:read');
+      if (route === '/docs' || DOC_ID.test(route)) return tokenHas(token, 'docs:read');
+      if (/^\/files\/\d+$/.test(route)) return true;
+      if (route === '/storage') return tokenHas(token, 'storage:read');
+      if (route === '/search') return tokenHas(token, 'search:read');
+      return false;
+    }
+    if (method === 'POST') {
+      if (route === '/parse') return true;
+      if (route === '/reminders') return tokenReminderWrite(token);
+      if (REMINDER_ACTION.test(route)) return tokenReminderWrite(token);
+      if (REMINDER_FILES.test(route)) return tokenReminderWrite(token);
+      if (route === '/notes') return tokenHas(token, 'notes:write');
+      if (NOTE_FILES.test(route)) return tokenHas(token, 'notes:write');
+      if (route === '/docs') return tokenHas(token, 'docs:write');
+      return false;
+    }
+    if (method === 'PATCH') {
+      if (REMINDER_ID.test(route)) return tokenReminderWrite(token);
+      if (NOTE_ID.test(route)) return tokenHas(token, 'notes:write');
+      if (DOC_ID.test(route)) return tokenHas(token, 'docs:write');
+      return false;
+    }
+    if (method === 'DELETE') {
+      if (NOTE_ID.test(route)) return tokenHas(token, 'notes:delete');
+      if (DOC_ID.test(route)) return tokenHas(token, 'docs:delete');
+      if (/^\/attachments\/\d+$/.test(route)) {
+        return tokenHas(token, 'notes:delete') || tokenHas(token, 'docs:delete');
+      }
+      return false;
+    }
+    return false;
+  }
+
   app.use('/api', (req, res, next) => {
     if (!req.token) return next();
-    const profile = req.token.profile || 'legacy';
-    if (profile !== 'read' && profile !== 'write' && profile !== 'legacy') {
-      return denyToken(res);
-    }
-    if (req.method === 'GET') {
-      if (['/lists', '/reminders', '/state'].includes(req.path)) return next();
-      if ((profile === 'read' || profile === 'write')
-        && (REMINDER_ID.test(req.path) || OCCURRENCES.test(req.path))) return next();
-      return denyToken(res);
-    }
-    if (req.method === 'POST' && req.path === '/parse'
-      && (profile === 'read' || profile === 'write')) return next();
-    if (profile === 'legacy') {
-      if (req.method === 'POST' && req.path === '/reminders') return next();
-      if (req.method === 'PATCH' && req.path.startsWith('/reminders/')) return next();
-      return denyToken(res);
-    }
-    if (profile === 'write') {
-      if (req.method === 'POST' && req.path === '/reminders') return next();
-      if (req.method === 'PATCH' && REMINDER_ID.test(req.path)) return next();
-      if (req.method === 'POST' && REMINDER_ACTION.test(req.path)) return next();
-      return denyToken(res);
-    }
+    if (tokenRouteAllowed(req, req.token)) return next();
     return denyToken(res);
+  });
+
+  app.get('/api/capabilities', async (req, res) => {
+    const token = req.token;
+    const owner = !token;
+    const caps = owner ? {
+      reminders: { read: true, write: true, delete: true },
+      notes: { read: true, write: true, delete: true },
+      docs: { read: true, write: true, delete: true },
+      storage: { read: true, scoped: false },
+      search: { read: true, scoped: false },
+    } : {
+      reminders: { read: true, write: tokenReminderWrite(token), delete: false },
+      notes: {
+        read: tokenHas(token, 'notes:read'),
+        write: tokenHas(token, 'notes:write'),
+        delete: tokenHas(token, 'notes:delete'),
+      },
+      docs: {
+        read: tokenHas(token, 'docs:read'),
+        write: tokenHas(token, 'docs:write'),
+        delete: tokenHas(token, 'docs:delete'),
+      },
+      storage: { read: tokenHas(token, 'storage:read'), scoped: true },
+      search: { read: tokenHas(token, 'search:read'), scoped: true },
+    };
+    res.json({
+      api_version: VERSION,
+      authenticated_as: owner ? 'owner-session' : 'bearer-token',
+      capabilities: caps,
+      limits: { upload_bytes: UPLOAD_MAX_BYTES, files_per_request: 10 },
+      docs_formats: [...DOC_EXTENSIONS],
+      search_fields: {
+        reminders: 'title + notes',
+        notes: 'title + body',
+        docs: 'filename only',
+      },
+      json_backup: { includes_uploaded_files: false },
+    });
   });
 
   app.use('/api', (req, res, next) => {
@@ -1474,9 +1699,9 @@ async function main() {
   app.get('/api/tokens', async (req, res) => {
     if (req.token) return denyToken(res);
     const rows = await db.all(
-      'SELECT id, name, profile, created_at, last_used_at, revoked_at FROM personal_access_tokens ORDER BY id'
+      'SELECT id, name, profile, permissions, created_at, last_used_at, revoked_at FROM personal_access_tokens ORDER BY id'
     );
-    res.json({ tokens: rows });
+    res.json({ tokens: rows.map((row) => ({ ...row, permissions: tokenPermissions(row) })) });
   });
 
   app.post('/api/tokens', async (req, res) => {
@@ -1488,15 +1713,30 @@ async function main() {
     if (profile !== 'read' && profile !== 'write') {
       return res.status(400).json({ error: 'profile must be read or write' });
     }
+    const permissions = validTokenPermissionsInput(req.body.permissions);
+    if (permissions === null) return res.status(400).json({ error: 'Unknown permission scope' });
     // 48 random bytes, base64url: unguessable, URL-safe. Only the SHA-256
     // hash is stored — the raw value below is shown exactly once.
     const raw = crypto.randomBytes(48).toString('base64url');
     const now = new Date().toISOString();
     const result = await db.run(
-      'INSERT INTO personal_access_tokens (name, token_hash, profile, created_at) VALUES (?, ?, ?, ?)',
-      [name, hashToken(raw), profile, now]
+      'INSERT INTO personal_access_tokens (name, token_hash, profile, permissions, created_at) VALUES (?, ?, ?, ?, ?)',
+      [name, hashToken(raw), profile, JSON.stringify(permissions), now]
     );
-    res.status(201).json({ id: result.lastID, name, profile, token: raw, created_at: now });
+    res.status(201).json({ id: result.lastID, name, profile, permissions, token: raw, created_at: now });
+  });
+
+  app.post('/api/tokens/:id/permissions', async (req, res) => {
+    if (req.token) return denyToken(res);
+    const id = parseId(req.params.id);
+    if (!id) return res.status(400).json({ error: 'Invalid token' });
+    const permissions = validTokenPermissionsInput(req.body.permissions);
+    if (permissions === null) return res.status(400).json({ error: 'Unknown permission scope' });
+    const row = await db.get('SELECT id, revoked_at FROM personal_access_tokens WHERE id = ?', [id]);
+    if (!row) return res.status(404).json({ error: 'Token not found' });
+    if (row.revoked_at) return res.status(400).json({ error: 'Token is revoked' });
+    await db.run('UPDATE personal_access_tokens SET permissions = ? WHERE id = ?', [JSON.stringify(permissions), id]);
+    res.json({ ok: true, permissions });
   });
 
   // Owner-only profile changes: the ONLY way a token's capability changes.
@@ -2072,20 +2312,20 @@ async function main() {
       FROM lists l ORDER BY l.tenant, l.sort_order, l.id
     `, [thirtyDayCutoff]);
     const notes = await db.all(`
-      SELECT n.id, n.folder_id, n.title, n.body, n.created_at, n.updated_at,
+      SELECT n.id, n.folder_id, n.title, n.body, n.revision, n.created_at, n.updated_at,
              l.name AS folder_name, l.color AS folder_color
       FROM notes n JOIN lists l ON l.id = n.folder_id
       ORDER BY n.updated_at DESC, n.id DESC
     `);
     const docs = await db.all(`
-      SELECT a.id, a.folder_id, a.name, a.mime, a.size, a.created_at,
+      SELECT a.id, a.folder_id, a.name, a.mime, a.size, a.revision, a.created_at,
              l.name AS folder_name, l.color AS folder_color
       FROM attachments a JOIN lists l ON l.id = a.folder_id
       WHERE a.owner_type = 'doc'
       ORDER BY a.created_at DESC, a.id DESC
     `);
     const attachments = await db.all(`
-      SELECT id, tenant, owner_type, owner_id, folder_id, name, mime, size, created_at
+      SELECT id, tenant, owner_type, owner_id, folder_id, name, mime, size, revision, created_at
       FROM attachments WHERE owner_type IN ('reminder', 'note')
       ORDER BY id ASC
     `);
@@ -2099,7 +2339,31 @@ async function main() {
       ORDER BY r.sort_order, r.id
     `, [cutoffs['1m'], cutoffs['3m'], cutoffs['6m'], cutoffs['12m']]);
     await applyOccurrenceOverrides(reminders);
-    res.json({ lists, reminders, notes, docs, attachments, settings, now: new Date().toISOString(), store_epoch: await getStoreEpoch() });
+    let visibleLists = lists;
+    let visibleNotes = notes;
+    let visibleDocs = docs;
+    let visibleAttachments = attachments;
+    if (req.token) {
+      const tenants = new Set(tokenAuthorizedTenants(req.token));
+      visibleLists = lists.filter((list) => tenants.has(list.tenant));
+      visibleNotes = tenants.has('notes') ? notes : [];
+      visibleDocs = tenants.has('docs') ? docs : [];
+      visibleAttachments = attachments.filter((file) => (
+        file.owner_type === 'reminder'
+        || (file.owner_type === 'note' && tenants.has('notes'))
+      ));
+    }
+    res.json({
+      lists: visibleLists,
+      reminders,
+      notes: visibleNotes,
+      docs: visibleDocs,
+      attachments: visibleAttachments,
+      settings,
+      now: new Date().toISOString(),
+      store_epoch: await getStoreEpoch(),
+      filtered: Boolean(req.token),
+    });
   });
 
   // Full-history search for the UI: /api/state only carries each list's
@@ -2108,7 +2372,6 @@ async function main() {
   // in JS, then each group is capped independently so a long completed history
   // cannot crowd out active items.
   app.get('/api/search', async (req, res) => {
-    if (req.token) return denyToken(res);
     const query = text(req.query.q, 200);
     if (!query) return res.status(400).json({ error: 'Search text is required' });
     let limit = 250;
@@ -2122,9 +2385,17 @@ async function main() {
     if (!['all', 'reminders', 'notes', 'docs'].includes(scope)) {
       return res.status(400).json({ error: 'Invalid search scope' });
     }
+    if (req.token && scope === 'notes' && !tokenHas(req.token, 'notes:read')) {
+      return denyToken(res);
+    }
+    if (req.token && scope === 'docs' && !tokenHas(req.token, 'docs:read')) {
+      return denyToken(res);
+    }
     const includeReminders = scope === 'all' || scope === 'reminders';
-    const includeNotes = scope === 'all' || scope === 'notes';
-    const includeDocs = scope === 'all' || scope === 'docs';
+    const includeNotes = (scope === 'all' || scope === 'notes')
+      && (!req.token || tokenHas(req.token, 'notes:read'));
+    const includeDocs = (scope === 'all' || scope === 'docs')
+      && (!req.token || tokenHas(req.token, 'docs:read'));
     const cutoffs = retentionCutoffs();
     const [openRows, completedRows, noteRows, docRows, storeEpoch] = await Promise.all([
       includeReminders ? db.all(
@@ -2143,7 +2414,7 @@ async function main() {
         [cutoffs['1m'], cutoffs['3m'], cutoffs['6m'], cutoffs['12m']]
       ) : [],
       includeNotes ? db.all(
-        `SELECT n.id, n.folder_id, n.title, n.body, n.created_at, n.updated_at,
+        `SELECT n.id, n.folder_id, n.title, n.body, n.revision, n.created_at, n.updated_at,
                 l.name AS folder_name, l.color AS folder_color
          FROM notes n JOIN lists l ON l.id = n.folder_id
          WHERE instr(lower(n.title), lower(?)) > 0 OR instr(lower(n.body), lower(?)) > 0
@@ -2151,7 +2422,7 @@ async function main() {
         [query, query]
       ) : [],
       includeDocs ? db.all(
-        `SELECT a.id, a.folder_id, a.name, a.mime, a.size, a.created_at,
+        `SELECT a.id, a.folder_id, a.name, a.mime, a.size, a.revision, a.created_at,
                 l.name AS folder_name, l.color AS folder_color
          FROM attachments a JOIN lists l ON l.id = a.folder_id
          WHERE a.owner_type = 'doc' AND instr(lower(a.name), lower(?)) > 0
@@ -2184,6 +2455,7 @@ async function main() {
       truncated: openMatches.length > open.length || completedMatches.length > completed.length
         || noteRows.length > notes.length || docRows.length > docs.length,
       store_epoch: storeEpoch,
+      filtered: Boolean(req.token),
     });
   });
 
@@ -2204,7 +2476,10 @@ async function main() {
         AS done_count_30d
       FROM lists l ORDER BY l.tenant, l.sort_order, l.id
     `, [cutoff]);
-    res.json({ lists });
+    const visible = req.token
+      ? lists.filter((list) => tokenAuthorizedTenants(req.token).includes(list.tenant))
+      : lists;
+    res.json({ lists: visible, filtered: Boolean(req.token) });
   });
 
   app.get('/api/reminders', async (req, res) => {
@@ -2366,7 +2641,109 @@ async function main() {
 
   /* ---------------- Notes tenant ---------------- */
 
+  const NOTE_COLUMNS = 'id, folder_id, title, body, revision, created_at, updated_at';
+  const NOTE_WRITE_FIELDS = ['title', 'body', 'folder_id', 'base_revision', 'base_epoch', 'idempotency_key'];
+
+  async function loadNoteRow(id) {
+    return db.get(`SELECT ${NOTE_COLUMNS} FROM notes WHERE id = ?`, [id]);
+  }
+
+  async function guardNoteEpoch(baseEpoch) {
+    if (typeof baseEpoch !== 'string' || !baseEpoch) {
+      return { status: 400, body: { error: 'base_epoch is required for API writes' } };
+    }
+    if ((await getStoreEpoch()) !== baseEpoch) {
+      return { status: 409, body: { error: 'Store was restored since your read' } };
+    }
+    return null;
+  }
+
+  function validateNoteWrite(body, { create }) {
+    for (const key of Object.keys(body || {})) {
+      if (!NOTE_WRITE_FIELDS.includes(key)) return `Unknown field: ${key}`;
+    }
+    if (body.title !== undefined && typeof body.title !== 'string') return 'Invalid title';
+    if (body.body !== undefined && typeof body.body !== 'string') return 'Invalid body';
+    if (body.folder_id !== undefined && (!Number.isInteger(body.folder_id) || body.folder_id <= 0)) {
+      return 'Invalid folder_id';
+    }
+    if (create) {
+      if (typeof body.base_epoch !== 'string' || !body.base_epoch) return 'base_epoch is required for API writes';
+    } else {
+      if (!Number.isInteger(body.base_revision) || body.base_revision < 0
+        || typeof body.base_epoch !== 'string' || !body.base_epoch) {
+        return 'base_revision and base_epoch are required for API writes';
+      }
+    }
+    return null;
+  }
+
+  app.get('/api/notes', async (req, res) => {
+    const conditions = [];
+    const params = [];
+    if (req.query.folder_id !== undefined) {
+      const folderId = parseId(req.query.folder_id);
+      if (!folderId) return res.status(400).json({ error: 'Invalid folder_id' });
+      const folder = await folderRow(folderId, 'notes');
+      if (!folder) return res.status(404).json({ error: 'Folder not found' });
+      conditions.push('n.folder_id = ?');
+      params.push(folderId);
+    }
+    let limit = 100;
+    if (req.query.limit !== undefined) {
+      limit = Number(req.query.limit);
+      if (!Number.isInteger(limit) || limit < 1 || limit > 500) {
+        return res.status(400).json({ error: 'limit must be 1 to 500' });
+      }
+    }
+    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+    const notes = await db.all(
+      `SELECT ${NOTE_COLUMNS.replace(/(^|, )/g, (m) => m.startsWith(',') ? ', n.' : 'n.')}
+       FROM notes n ${where} ORDER BY n.updated_at DESC, n.id DESC LIMIT ?`,
+      [...params, limit]
+    );
+    res.json({ notes, complete: req.query.limit === undefined, filtered: Boolean(req.token) });
+  });
+
+  app.get('/api/notes/:id', async (req, res) => {
+    const id = parseId(req.params.id);
+    if (!id) return res.status(400).json({ error: 'Invalid note' });
+    const note = await loadNoteRow(id);
+    if (!note) return res.status(404).json({ error: 'Note not found' });
+    res.json({ note });
+  });
+
   app.post('/api/notes', async (req, res) => {
+    if (req.token) {
+      const key = idempotencyKeyFrom(req);
+      if (!key) return res.status(400).json({ error: 'Idempotency-Key header is required for API writes' });
+      const invalid = validateNoteWrite(req.body, { create: true });
+      if (invalid) return res.status(400).json({ error: invalid });
+      return runTokenWrite(req, res, {
+        route: 'POST /api/notes',
+        key,
+        fingerprint: payloadFingerprint(req.body),
+        execute: async () => {
+          const epochError = await guardNoteEpoch(req.body.base_epoch);
+          if (epochError) return epochError;
+          const title = text(req.body.title, 500);
+          if (!title) return { status: 400, body: { error: 'Note title is required' } };
+          const body = typeof req.body.body === 'string' ? req.body.body.slice(0, NOTE_BODY_MAX) : '';
+          const folderId = req.body.folder_id === undefined || req.body.folder_id === null
+            ? await systemFolderId('notes')
+            : req.body.folder_id;
+          const folder = folderId ? await folderRow(folderId, 'notes') : null;
+          if (!folder) return { status: 400, body: { error: 'Choose a Notes folder' } };
+          const now = new Date().toISOString();
+          const result = await db.run(
+            'INSERT INTO notes (folder_id, title, body, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
+            [folder.id, title, body, now, now]
+          );
+          const note = await loadNoteRow(result.lastID);
+          return { status: 201, body: { id: result.lastID, note } };
+        },
+      });
+    }
     const title = text(req.body.title, 500);
     if (!title) return res.status(400).json({ error: 'Note title is required' });
     const body = typeof req.body.body === 'string' ? req.body.body.slice(0, NOTE_BODY_MAX) : '';
@@ -2386,6 +2763,55 @@ async function main() {
   app.patch('/api/notes/:id', async (req, res) => {
     const id = parseId(req.params.id);
     if (!id) return res.status(400).json({ error: 'Invalid note' });
+    if (req.token) {
+      const key = idempotencyKeyFrom(req);
+      if (!key) return res.status(400).json({ error: 'Idempotency-Key header is required for API writes' });
+      const invalid = validateNoteWrite(req.body, { create: false });
+      if (invalid) return res.status(400).json({ error: invalid });
+      return runTokenWrite(req, res, {
+        route: `PATCH /api/notes/${id}`,
+        key,
+        fingerprint: payloadFingerprint(req.body),
+        execute: async () => {
+          const current = await loadNoteRow(id);
+          if (!current) return { status: 404, body: { error: 'Note not found' } };
+          const epochError = await guardNoteEpoch(req.body.base_epoch);
+          if (epochError) return epochError;
+          if (current.revision !== req.body.base_revision) {
+            return { status: 409, body: { error: 'Note changed since your read', note: current } };
+          }
+          const fields = [];
+          const params = [];
+          if (req.body.title !== undefined) {
+            const title = text(req.body.title, 500);
+            if (!title) return { status: 400, body: { error: 'Note title is required' } };
+            fields.push('title = ?');
+            params.push(title);
+          }
+          if (req.body.body !== undefined) {
+            fields.push('body = ?');
+            params.push(req.body.body.slice(0, NOTE_BODY_MAX));
+          }
+          if (req.body.folder_id !== undefined) {
+            const folder = await folderRow(req.body.folder_id, 'notes');
+            if (!folder) return { status: 400, body: { error: 'Choose a Notes folder' } };
+            fields.push('folder_id = ?');
+            params.push(folder.id);
+            await db.run(
+              "UPDATE attachments SET folder_id = ? WHERE owner_type = 'note' AND owner_id = ?",
+              [folder.id, id]
+            );
+          }
+          if (!fields.length) return { status: 400, body: { error: 'Nothing to update' } };
+          fields.push('updated_at = ?');
+          params.push(new Date().toISOString());
+          fields.push('revision = revision + 1');
+          params.push(id);
+          await db.run(`UPDATE notes SET ${fields.join(', ')} WHERE id = ?`, params);
+          return { status: 200, body: { ok: true, note: await loadNoteRow(id) } };
+        },
+      });
+    }
     const note = await db.get('SELECT id FROM notes WHERE id = ?', [id]);
     if (!note) return res.status(404).json({ error: 'Note not found' });
     const fields = [];
@@ -2405,10 +2831,16 @@ async function main() {
       if (!folder) return res.status(400).json({ error: 'Choose a Notes folder' });
       fields.push('folder_id = ?');
       params.push(folder.id);
+      await db.run(
+        "UPDATE attachments SET folder_id = ? WHERE owner_type = 'note' AND owner_id = ?",
+        [folder.id, id]
+      );
     }
     if (!fields.length) return res.status(400).json({ error: 'Nothing to update' });
     fields.push('updated_at = ?');
-    params.push(new Date().toISOString(), id);
+    params.push(new Date().toISOString());
+    fields.push('revision = revision + 1');
+    params.push(id);
     await db.run(`UPDATE notes SET ${fields.join(', ')} WHERE id = ?`, params);
     res.json({ ok: true });
   });
@@ -2416,6 +2848,35 @@ async function main() {
   app.delete('/api/notes/:id', async (req, res) => {
     const id = parseId(req.params.id);
     if (!id) return res.status(400).json({ error: 'Invalid note' });
+    if (req.token) {
+      const key = idempotencyKeyFrom(req);
+      if (!key) return res.status(400).json({ error: 'Idempotency-Key header is required for API writes' });
+      if (!Number.isInteger(req.body.base_revision) || req.body.base_revision < 0
+        || typeof req.body.base_epoch !== 'string' || !req.body.base_epoch) {
+        return res.status(400).json({ error: 'base_revision and base_epoch are required for API writes' });
+      }
+      return runTokenWrite(req, res, {
+        route: `DELETE /api/notes/${id}`,
+        key,
+        fingerprint: payloadFingerprint(req.body),
+        execute: async () => {
+          const note = await loadNoteRow(id);
+          if (!note) return { status: 404, body: { error: 'Note not found' } };
+          const epochError = await guardNoteEpoch(req.body.base_epoch);
+          if (epochError) return epochError;
+          if (note.revision !== req.body.base_revision) {
+            return { status: 409, body: { error: 'Note changed since your read', note } };
+          }
+          const files = await db.all(
+            "SELECT stored_name FROM attachments WHERE owner_type = 'note' AND owner_id = ?", [id]
+          );
+          await removeStoredFiles(files);
+          await db.run("DELETE FROM attachments WHERE owner_type = 'note' AND owner_id = ?", [id]);
+          await db.run('DELETE FROM notes WHERE id = ?', [id]);
+          return { status: 200, body: { ok: true, deleted: true } };
+        },
+      });
+    }
     const note = await db.get('SELECT id FROM notes WHERE id = ?', [id]);
     if (!note) return res.status(404).json({ error: 'Note not found' });
     const files = await db.all(
@@ -2444,6 +2905,38 @@ async function main() {
     return rows;
   }
 
+  app.get('/api/reminders/:id/attachments', async (req, res) => {
+    const id = parseId(req.params.id);
+    const reminder = id ? await db.get('SELECT id FROM reminders WHERE id = ?', [id]) : null;
+    if (!reminder) return res.status(404).json({ error: 'Item not found' });
+    const attachments = await db.all(
+      "SELECT id, name, mime, size, revision, created_at FROM attachments WHERE owner_type = 'reminder' AND owner_id = ? ORDER BY id",
+      [id]
+    );
+    res.json({ attachments });
+  });
+
+  app.get('/api/notes/:id/attachments', async (req, res) => {
+    const id = parseId(req.params.id);
+    const note = id ? await db.get('SELECT id FROM notes WHERE id = ?', [id]) : null;
+    if (!note) return res.status(404).json({ error: 'Note not found' });
+    const attachments = await db.all(
+      "SELECT id, name, mime, size, revision, created_at FROM attachments WHERE owner_type = 'note' AND owner_id = ? ORDER BY id",
+      [id]
+    );
+    res.json({ attachments });
+  });
+
+  async function uploadFingerprint(ownerType, ownerId, folderId, baseEpoch, files) {
+    const hashes = await Promise.all(files.map(async (file) => ({
+      name: cleanFileName(file.originalname),
+      size: file.size || 0,
+      sha256: await hashUploadedFile(file.path),
+    })));
+    return crypto.createHash('sha256')
+      .update(JSON.stringify({ ownerType, ownerId, folderId, baseEpoch, files: hashes })).digest('hex');
+  }
+
   app.post('/api/reminders/:id/attachments', upload.array('files', 10), async (req, res) => {
     const id = parseId(req.params.id);
     const reminder = id ? await db.get('SELECT id, list_id FROM reminders WHERE id = ?', [id]) : null;
@@ -2452,9 +2945,34 @@ async function main() {
       return res.status(404).json({ error: 'Item not found' });
     }
     if (!req.files || !req.files.length) return res.status(400).json({ error: 'Choose at least one file' });
+    if (req.token) {
+      const key = idempotencyKeyFrom(req);
+      if (!key || typeof req.body.base_epoch !== 'string' || !req.body.base_epoch) {
+        await removeStoredFiles(req.files);
+        return res.status(400).json({ error: 'Idempotency-Key and base_epoch are required for API writes' });
+      }
+      const fingerprint = await uploadFingerprint('reminder', reminder.id, reminder.list_id, req.body.base_epoch, req.files);
+      return runTokenUpload(req, res, {
+        route: `POST /api/reminders/${id}/attachments`,
+        key,
+        fingerprint,
+        cleanup: () => removeStoredFiles(req.files),
+        execute: async () => {
+          if ((await getStoreEpoch()) !== req.body.base_epoch) {
+            return { status: 409, body: { error: 'Store was restored since your read' } };
+          }
+          const rows = await saveUploads(req, {
+            tenant: 'reminders', ownerType: 'reminder', ownerId: reminder.id, folderId: reminder.list_id,
+          });
+          await db.run('UPDATE reminders SET revision = revision + 1 WHERE id = ?', [reminder.id]);
+          return { status: 201, body: { attachments: rows } };
+        },
+      });
+    }
     const rows = await saveUploads(req, {
       tenant: 'reminders', ownerType: 'reminder', ownerId: reminder.id, folderId: reminder.list_id,
     });
+    await db.run('UPDATE reminders SET revision = revision + 1 WHERE id = ?', [reminder.id]);
     res.status(201).json({ attachments: rows });
   });
 
@@ -2466,9 +2984,34 @@ async function main() {
       return res.status(404).json({ error: 'Note not found' });
     }
     if (!req.files || !req.files.length) return res.status(400).json({ error: 'Choose at least one file' });
+    if (req.token) {
+      const key = idempotencyKeyFrom(req);
+      if (!key || typeof req.body.base_epoch !== 'string' || !req.body.base_epoch) {
+        await removeStoredFiles(req.files);
+        return res.status(400).json({ error: 'Idempotency-Key and base_epoch are required for API writes' });
+      }
+      const fingerprint = await uploadFingerprint('note', note.id, note.folder_id, req.body.base_epoch, req.files);
+      return runTokenUpload(req, res, {
+        route: `POST /api/notes/${id}/attachments`,
+        key,
+        fingerprint,
+        cleanup: () => removeStoredFiles(req.files),
+        execute: async () => {
+          if ((await getStoreEpoch()) !== req.body.base_epoch) {
+            return { status: 409, body: { error: 'Store was restored since your read' } };
+          }
+          const rows = await saveUploads(req, {
+            tenant: 'notes', ownerType: 'note', ownerId: note.id, folderId: note.folder_id,
+          });
+          await db.run('UPDATE notes SET revision = revision + 1 WHERE id = ?', [note.id]);
+          return { status: 201, body: { attachments: rows } };
+        },
+      });
+    }
     const rows = await saveUploads(req, {
       tenant: 'notes', ownerType: 'note', ownerId: note.id, folderId: note.folder_id,
     });
+    await db.run('UPDATE notes SET revision = revision + 1 WHERE id = ?', [note.id]);
     res.status(201).json({ attachments: rows });
   });
 
@@ -2488,18 +3031,94 @@ async function main() {
         error: 'Docs supports Word, PDF, Excel, TXT, Markdown and HTML files only',
       });
     }
+    if (req.token) {
+      const key = idempotencyKeyFrom(req);
+      if (!key || typeof req.body.base_epoch !== 'string' || !req.body.base_epoch) {
+        await removeStoredFiles(req.files);
+        return res.status(400).json({ error: 'Idempotency-Key and base_epoch are required for API writes' });
+      }
+      const hashes = await Promise.all(req.files.map(async (file) => ({
+        name: cleanFileName(file.originalname),
+        size: file.size || 0,
+        sha256: await hashUploadedFile(file.path),
+      })));
+      const fingerprint = crypto.createHash('sha256')
+        .update(JSON.stringify({ folder_id: folder.id, base_epoch: req.body.base_epoch, files: hashes })).digest('hex');
+      return runTokenUpload(req, res, {
+        route: 'POST /api/docs',
+        key,
+        fingerprint,
+        cleanup: () => removeStoredFiles(req.files),
+        execute: async () => {
+          if ((await getStoreEpoch()) !== req.body.base_epoch) {
+            return { status: 409, body: { error: 'Store was restored since your read' } };
+          }
+          const rows = await saveUploads(req, {
+            tenant: 'docs', ownerType: 'doc', ownerId: null, folderId: folder.id,
+          });
+          return { status: 201, body: { docs: rows } };
+        },
+      });
+    }
     const rows = await saveUploads(req, {
       tenant: 'docs', ownerType: 'doc', ownerId: null, folderId: folder.id,
     });
     res.status(201).json({ docs: rows });
   });
 
+  app.get('/api/docs', async (req, res) => {
+    const conditions = ["a.owner_type = 'doc'"];
+    const params = [];
+    if (req.query.folder_id !== undefined) {
+      const folderId = parseId(req.query.folder_id);
+      if (!folderId) return res.status(400).json({ error: 'Invalid folder_id' });
+      const folder = await folderRow(folderId, 'docs');
+      if (!folder) return res.status(404).json({ error: 'Folder not found' });
+      conditions.push('a.folder_id = ?');
+      params.push(folderId);
+    }
+    let limit = 100;
+    if (req.query.limit !== undefined) {
+      limit = Number(req.query.limit);
+      if (!Number.isInteger(limit) || limit < 1 || limit > 500) {
+        return res.status(400).json({ error: 'limit must be 1 to 500' });
+      }
+    }
+    const docs = await db.all(
+      `SELECT a.id, a.folder_id, a.name, a.mime, a.size, a.revision, a.created_at
+       FROM attachments a WHERE ${conditions.join(' AND ')}
+       ORDER BY a.created_at DESC, a.id DESC LIMIT ?`,
+      [...params, limit]
+    );
+    res.json({ docs, complete: req.query.limit === undefined, filtered: Boolean(req.token) });
+  });
+
+  app.get('/api/docs/:id', async (req, res) => {
+    const id = parseId(req.params.id);
+    if (!id) return res.status(400).json({ error: 'Invalid file' });
+    const doc = await db.get(
+      `SELECT id, folder_id, name, mime, size, revision, created_at
+       FROM attachments WHERE id = ? AND owner_type = 'doc'`, [id]
+    );
+    if (!doc) return res.status(404).json({ error: 'File not found' });
+    res.json({ doc });
+  });
+
   app.get('/api/files/:id', async (req, res) => {
     const id = parseId(req.params.id);
-    const file = id ? await db.get('SELECT name, stored_name FROM attachments WHERE id = ?', [id]) : null;
+    const file = id ? await db.get(
+      'SELECT name, stored_name, owner_type, owner_id FROM attachments WHERE id = ?', [id]
+    ) : null;
     if (!file) return res.status(404).json({ error: 'File not found' });
+    if (req.token) {
+      const allowed = file.owner_type === 'reminder'
+        || (file.owner_type === 'note' && tokenHas(req.token, 'notes:read'))
+        || (file.owner_type === 'doc' && tokenHas(req.token, 'docs:read'));
+      if (!allowed) return denyToken(res);
+    }
     const full = path.join(UPLOAD_DIR, file.stored_name);
     res.setHeader('Cache-Control', 'private, no-store');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
     res.download(full, file.name, (err) => {
       if (err && !res.headersSent) res.status(404).json({ error: 'File not found' });
     });
@@ -2507,17 +3126,56 @@ async function main() {
 
   async function deleteAttachmentRow(id) {
     const file = await db.get(
-      'SELECT id, stored_name FROM attachments WHERE id = ?', [id]
+      'SELECT id, stored_name, owner_type, owner_id FROM attachments WHERE id = ?', [id]
     );
     if (!file) return null;
     await removeStoredFiles([file]);
     await db.run('DELETE FROM attachments WHERE id = ?', [id]);
+    if (file.owner_type === 'note') {
+      await db.run('UPDATE notes SET revision = revision + 1 WHERE id = ?', [file.owner_id]);
+    } else if (file.owner_type === 'reminder') {
+      await db.run('UPDATE reminders SET revision = revision + 1 WHERE id = ?', [file.owner_id]);
+    }
     return file;
   }
 
   app.delete('/api/attachments/:id', async (req, res) => {
     const id = parseId(req.params.id);
     if (!id) return res.status(400).json({ error: 'Invalid file' });
+    const file = await db.get(
+      'SELECT id, owner_type, stored_name, revision FROM attachments WHERE id = ?', [id]
+    );
+    if (req.token) {
+      if (file) {
+        const allowed = (file.owner_type === 'note' && tokenHas(req.token, 'notes:delete'))
+          || (file.owner_type === 'doc' && tokenHas(req.token, 'docs:delete'));
+        if (!allowed) return denyToken(res);
+      }
+      const key = idempotencyKeyFrom(req);
+      if (!key) return res.status(400).json({ error: 'Idempotency-Key header is required for API writes' });
+      if (!Number.isInteger(req.body.base_revision) || req.body.base_revision < 0
+        || typeof req.body.base_epoch !== 'string' || !req.body.base_epoch) {
+        return res.status(400).json({ error: 'base_revision and base_epoch are required for API writes' });
+      }
+      return runTokenWrite(req, res, {
+        route: `DELETE /api/attachments/${id}`,
+        key,
+        fingerprint: payloadFingerprint(req.body),
+        execute: async () => {
+          const current = await db.get('SELECT revision FROM attachments WHERE id = ?', [id]);
+          if (!current) return { status: 404, body: { error: 'File not found' } };
+          if ((await getStoreEpoch()) !== req.body.base_epoch) {
+            return { status: 409, body: { error: 'Store was restored since your read' } };
+          }
+          if (current.revision !== req.body.base_revision) {
+            return { status: 409, body: { error: 'File changed since your read' } };
+          }
+          await deleteAttachmentRow(id);
+          return { status: 200, body: { ok: true, deleted: true } };
+        },
+      });
+    }
+    if (!file) return res.status(404).json({ error: 'File not found' });
     if (!(await deleteAttachmentRow(id))) return res.status(404).json({ error: 'File not found' });
     res.json({ ok: true });
   });
@@ -2526,28 +3184,84 @@ async function main() {
     const id = parseId(req.params.id);
     if (!id) return res.status(400).json({ error: 'Invalid file' });
     const file = await db.get(
-      "SELECT id FROM attachments WHERE id = ? AND owner_type = 'doc'", [id]
+      "SELECT id, folder_id, revision FROM attachments WHERE id = ? AND owner_type = 'doc'", [id]
     );
     if (!file) return res.status(404).json({ error: 'File not found' });
     const folder = await folderRow(parseId(req.body.folder_id), 'docs');
     if (!folder) return res.status(400).json({ error: 'Choose a Docs folder' });
-    await db.run('UPDATE attachments SET folder_id = ? WHERE id = ?', [folder.id, id]);
+    if (req.token) {
+      for (const key of Object.keys(req.body || {})) {
+        if (!['folder_id', 'base_revision', 'base_epoch', 'idempotency_key'].includes(key)) {
+          return res.status(400).json({ error: `Unknown field: ${key}` });
+        }
+      }
+      const key = idempotencyKeyFrom(req);
+      if (!key) return res.status(400).json({ error: 'Idempotency-Key header is required for API writes' });
+      if (!Number.isInteger(req.body.base_revision) || req.body.base_revision < 0
+        || typeof req.body.base_epoch !== 'string' || !req.body.base_epoch) {
+        return res.status(400).json({ error: 'base_revision and base_epoch are required for API writes' });
+      }
+      return runTokenWrite(req, res, {
+        route: `PATCH /api/docs/${id}`,
+        key,
+        fingerprint: payloadFingerprint(req.body),
+        execute: async () => {
+          const current = await db.get(
+            "SELECT id, folder_id, revision FROM attachments WHERE id = ? AND owner_type = 'doc'", [id]
+          );
+          if (!current) return { status: 404, body: { error: 'File not found' } };
+          if ((await getStoreEpoch()) !== req.body.base_epoch) {
+            return { status: 409, body: { error: 'Store was restored since your read' } };
+          }
+          if (current.revision !== req.body.base_revision) {
+            return { status: 409, body: { error: 'File changed since your read' } };
+          }
+          await db.run('UPDATE attachments SET folder_id = ?, revision = revision + 1 WHERE id = ?', [folder.id, id]);
+          return { status: 200, body: { ok: true, folder_id: folder.id } };
+        },
+      });
+    }
+    await db.run('UPDATE attachments SET folder_id = ?, revision = revision + 1 WHERE id = ?', [folder.id, id]);
     res.json({ ok: true, folder_id: folder.id });
   });
 
   app.delete('/api/docs/:id', async (req, res) => {
     const id = parseId(req.params.id);
     if (!id) return res.status(400).json({ error: 'Invalid file' });
-    const file = await db.get(
-      "SELECT id FROM attachments WHERE id = ? AND owner_type = 'doc'", [id]
-    );
-    if (!file) return res.status(404).json({ error: 'File not found' });
+    if (req.token) {
+      const key = idempotencyKeyFrom(req);
+      if (!key) return res.status(400).json({ error: 'Idempotency-Key header is required for API writes' });
+      if (!Number.isInteger(req.body.base_revision) || req.body.base_revision < 0
+        || typeof req.body.base_epoch !== 'string' || !req.body.base_epoch) {
+        return res.status(400).json({ error: 'base_revision and base_epoch are required for API writes' });
+      }
+      return runTokenWrite(req, res, {
+        route: `DELETE /api/docs/${id}`,
+        key,
+        fingerprint: payloadFingerprint(req.body),
+        execute: async () => {
+          const current = await db.get(
+            "SELECT id, revision FROM attachments WHERE id = ? AND owner_type = 'doc'", [id]
+          );
+          if (!current) return { status: 404, body: { error: 'File not found' } };
+          if ((await getStoreEpoch()) !== req.body.base_epoch) {
+            return { status: 409, body: { error: 'Store was restored since your read' } };
+          }
+          if (current.revision !== req.body.base_revision) {
+            return { status: 409, body: { error: 'File changed since your read' } };
+          }
+          await deleteAttachmentRow(id);
+          return { status: 200, body: { ok: true, deleted: true } };
+        },
+      });
+    }
     await deleteAttachmentRow(id);
     res.json({ ok: true });
   });
 
   app.get('/api/storage', async (req, res) => {
-    res.json(await storageSnapshot());
+    const allowed = req.token ? tokenAuthorizedTenants(req.token) : null;
+    res.json(await storageSnapshot(allowed));
   });
 
   // Shared reminder-create preparation. strict=false preserves the exact
@@ -3016,6 +3730,12 @@ async function main() {
           if (!fresh) return { status: 404, body: { error: 'Item not found' } };
           return { status: 409, body: { error: 'Item changed since your read', reminder: fresh } };
         }
+        if (body.list_id !== undefined) {
+          await db.run(
+            "UPDATE attachments SET folder_id = ? WHERE owner_type = 'reminder' AND owner_id = ?",
+            [body.list_id, id]
+          );
+        }
         const reminder = await loadReminder(id);
         return { status: 200, body: { ok: true, dueChanged, reminder }, reminderId: id };
       },
@@ -3228,6 +3948,12 @@ async function main() {
     fields.push('revision = revision + 1');
     params.push(id);
     await db.run(`UPDATE reminders SET ${fields.join(', ')} WHERE id = ?`, params);
+    if (req.body.list_id !== undefined) {
+      await db.run(
+        "UPDATE attachments SET folder_id = ? WHERE owner_type = 'reminder' AND owner_id = ?",
+        [parseId(req.body.list_id), id]
+      );
+    }
     res.json({ ok: true, dueChanged });
   });
 

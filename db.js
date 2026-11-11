@@ -238,6 +238,9 @@ async function init() {
     revoked_at TEXT
   )`);
   const tokenColumns = await all('PRAGMA table_info(personal_access_tokens)');
+  if (!tokenColumns.some((column) => column.name === 'permissions')) {
+    await run("ALTER TABLE personal_access_tokens ADD COLUMN permissions TEXT NOT NULL DEFAULT '[]'");
+  }
   if (!tokenColumns.some((column) => column.name === 'profile')) {
     await run(`ALTER TABLE personal_access_tokens ADD COLUMN profile TEXT NOT NULL DEFAULT 'read' CHECK (profile IN ('read','write','legacy'))`);
     // Existing tokens keep exactly the capabilities they have today.
@@ -297,6 +300,10 @@ async function init() {
     updated_at TEXT NOT NULL
   )`);
   await run('CREATE INDEX IF NOT EXISTS idx_notes_folder ON notes(folder_id, updated_at)');
+  const noteColumns = await all('PRAGMA table_info(notes)');
+  if (!noteColumns.some((column) => column.name === 'revision')) {
+    await run('ALTER TABLE notes ADD COLUMN revision INTEGER NOT NULL DEFAULT 0');
+  }
   // Every uploaded file: Docs rows themselves (owner_type = 'doc') plus
   // attachments owned by a reminder or a note. `stored_name` is an opaque
   // filename under data/uploads; the original name is display metadata.
@@ -315,6 +322,10 @@ async function init() {
   await run('CREATE INDEX IF NOT EXISTS idx_attachments_owner ON attachments(owner_type, owner_id)');
   await run('CREATE INDEX IF NOT EXISTS idx_attachments_folder ON attachments(folder_id)');
   await run('CREATE INDEX IF NOT EXISTS idx_attachments_tenant ON attachments(tenant)');
+  const attachmentColumns = await all('PRAGMA table_info(attachments)');
+  if (!attachmentColumns.some((column) => column.name === 'revision')) {
+    await run('ALTER TABLE attachments ADD COLUMN revision INTEGER NOT NULL DEFAULT 0');
+  }
   await run(`CREATE TABLE IF NOT EXISTS push_subscriptions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     endpoint TEXT UNIQUE NOT NULL,
