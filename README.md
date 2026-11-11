@@ -2,6 +2,16 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v4.1.1
+
+- **Folder colours in item sheets** - the Notes and Docs folder icons now use the selected folder's colour, matching Reminders.
+- **Full-width Download button** - the File sheet download link is now a centred, full-width button with the download icon and the word Download.
+- **No focus outlines** - removed the global focus outline and the selected-day outline; the search field no longer switches to an accent focus border.
+- **Folder header alignment** - the Folders heading now shares the same 8px left inset as the smart-group and folder icons.
+- **No mobile scrollbars** - mobile scrolling surfaces hide their scrollbars.
+- **Swipe between tenants** - on mobile Home, swipe left/right to move between Reminders, Notes and Docs.
+- Service worker cache bumped to `workspace-v4.1.1`.
+
 ## What's New in v4.1.0
 
 - **Workspace-wide token permissions** - the existing bearer key can now be granted explicit Notes, Docs, file, storage and search scopes without changing or reissuing the secret. Reminders keep their existing read/write/legacy behaviour; new scopes are opt-in in Settings.

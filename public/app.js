@@ -2998,6 +2998,7 @@ function docRow(doc, options = {}) {
 function syncDocFolderVisual() {
   const folder = listById(Number($('#doc-folder').value));
   $('#doc-folder-value').textContent = folder ? folder.name : '';
+  $('#doc-folder-icon').style.setProperty('--c', colorVar(folder ? folder.color : 'gray'));
 }
 
 function syncDocSave() {
@@ -5246,6 +5247,7 @@ function openNoteEditor(id) {
 function syncNoteFolderVisual() {
   const folder = listById(Number($('#n-folder').value));
   $('#n-folder-value').textContent = folder ? folder.name : '';
+  $('#n-folder-icon').style.setProperty('--c', colorVar(folder ? folder.color : 'gray'));
 }
 
 function renderNoteAttachments() {
@@ -6570,6 +6572,38 @@ $('#tenant-switch').addEventListener('click', (event) => {
   setTenant(btn.dataset.tenant);
   closeAccountMenu();
 });
+
+// Mobile Home only: horizontal swipe flips between Reminders, Notes and Docs.
+let tenantSwipeStart = null;
+{
+  const sidebar = $('.sidebar');
+  const order = ['reminders', 'notes', 'docs'];
+  if (sidebar) {
+    sidebar.addEventListener('touchstart', (event) => {
+      if (!NAV_MOBILE.matches || document.body.dataset.screen !== 'home') return;
+      if ($$('.sheet').some((sheet) => !sheet.hidden)) return;
+      if (event.target.closest('input, select, textarea, .list-grip, .icon-btn, .new-list-btn, .tenant-btn')) {
+        tenantSwipeStart = null;
+        return;
+      }
+      const touch = event.touches[0];
+      tenantSwipeStart = { x: touch.clientX, y: touch.clientY };
+    }, { passive: true });
+    sidebar.addEventListener('touchend', (event) => {
+      if (!tenantSwipeStart) return;
+      const touch = event.changedTouches[0];
+      const dx = touch.clientX - tenantSwipeStart.x;
+      const dy = touch.clientY - tenantSwipeStart.y;
+      tenantSwipeStart = null;
+      if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.4) return;
+      event.preventDefault();
+      const index = order.indexOf(state.tenant);
+      if (index === -1) return;
+      setTenant(order[(index + (dx < 0 ? 1 : order.length - 1)) % order.length]);
+    }, { passive: false });
+    sidebar.addEventListener('touchcancel', () => { tenantSwipeStart = null; });
+  }
+}
 
 $('#new-list-2').addEventListener('click', () => openListSheet(null));
 $('#back-btn').addEventListener('click', () => {

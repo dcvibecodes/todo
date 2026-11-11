@@ -376,7 +376,7 @@ body.gate-open {
 }
 
 .search-bar-overlay input::placeholder { color: var(--text-3); }
-.search-bar-overlay input:focus { outline: none; border-color: var(--accent); }
+.search-bar-overlay input:focus { outline: none; border-color: var(--line); }
 .search-bar-overlay input::-webkit-search-cancel-button { -webkit-appearance: none; }
 
 .search-bar-close {
@@ -578,7 +578,7 @@ body.gate-open {
 }
 
 .search input::placeholder { color: var(--text-3); }
-.search input:focus { outline: none; border-color: var(--accent); }
+.search input:focus { outline: none; border-color: var(--line); }
 .search input::-webkit-search-cancel-button { -webkit-appearance: none; }
 
 
@@ -614,9 +614,8 @@ body.gate-open {
   border-radius: 10px;
   background: transparent;
   color: var(--text-2);
-  outline: 1.5px solid transparent;
-  outline-offset: 1px;
-  transition: background 200ms ease, outline-color 200ms ease, color 200ms ease;
+  outline: none;
+  transition: background 200ms ease, color 200ms ease;
 }
 
 @media (hover: hover) {
@@ -629,7 +628,7 @@ body.gate-open {
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
 }
 
-.day-cell.is-selected { outline-color: var(--accent); }
+.day-cell.is-selected { background: color-mix(in srgb, var(--accent) 10%, transparent); }
 
 .day-weekday {
   max-width: 100%;
@@ -808,7 +807,7 @@ body.gate-open {
   align-items: center;
   justify-content: space-between;
   /* 8px matches .list-row's right padding so the plus lines up with the grips. */
-  padding: 0 8px 0 0;
+  padding: 0 8px;
   margin-top: 2px;
   font-size: 0.72rem;
   font-weight: 600;
@@ -2835,7 +2834,7 @@ body.sheet-open .sidebar {
   }
 
   .main-search input::placeholder { color: var(--text-3); }
-  .main-search input:focus { outline: none; border-color: var(--accent); }
+  .main-search input:focus { outline: none; border-color: var(--line); }
   .main-search input::-webkit-search-cancel-button { -webkit-appearance: none; }
 
   .sort-bar { margin: 12px 24px 0; }
@@ -3009,7 +3008,7 @@ body.sheet-open .sidebar {
   }
 
   .main-search input::placeholder { color: var(--text-3); }
-  .main-search input:focus { outline: none; border-color: var(--accent); }
+  .main-search input:focus { outline: none; border-color: var(--line); }
   .main-search input::-webkit-search-cancel-button { -webkit-appearance: none; }
 
   .content { padding: 12px 18px calc(132px + env(safe-area-inset-bottom)); }
@@ -3129,7 +3128,7 @@ body.sheet-open .sidebar {
   .reminder:hover .swipe-content { background: var(--surface); }
 }
 
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+:focus-visible { outline: none; }
 
 .list-grip:focus-visible { opacity: 0.9; }
 
@@ -3448,7 +3447,17 @@ body.sheet-open .sidebar {
   color: var(--text-3);
 }
 
-#doc-sheet-download { margin-top: 4px; }
+#doc-sheet-download {
+  width: 100%;
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-decoration: none;
+}
+
+#doc-sheet-download .ic { width: 16px; height: 16px; }
 
 .attach-list {
   display: flex;
@@ -3568,6 +3577,14 @@ body.sheet-open .sidebar {
 .storage-file .storage-file-meta { flex: none; color: var(--text-3); }
 
 @media (max-width: 899px) {
+  html, body, .sidebar, .content, .sheet-body, .editor-body, .day-card-scroll {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  html::-webkit-scrollbar, body::-webkit-scrollbar,
+  .sidebar::-webkit-scrollbar, .content::-webkit-scrollbar,
+  .sheet-body::-webkit-scrollbar, .editor-body::-webkit-scrollbar,
+  .day-card-scroll::-webkit-scrollbar { display: none; width: 0; height: 0; }
   .tenant-btn { min-height: 40px; }
   .doc-body { flex-direction: column; align-items: flex-start; gap: 6px; }
   .doc-meta { justify-content: flex-start; }
