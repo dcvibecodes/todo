@@ -326,6 +326,7 @@ body.gate-open {
 }
 
 .sidebar-head {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -334,16 +335,66 @@ body.gate-open {
 }
 
 .sidebar-head .tenant-switch { flex: 1; min-width: 0; margin: 0; }
+.sidebar-head .head-actions { gap: 12px; align-self: center; }
 
-.search-row {
+.search-bar-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin: 12px 0 14px;
+  gap: 8px;
+  padding: 0 2px 0 10px;
+  background: var(--surface);
+  border-radius: 10px;
+  clip-path: inset(0 0 0 100%);
+  opacity: 0;
+  pointer-events: none;
+  transition: clip-path 0.22s ease, opacity 0.16s ease;
 }
 
-.search-row .search { flex: 1; min-width: 0; margin: 0; }
-.search-row .head-actions { gap: 12px; align-self: center; }
+.search-bar-overlay.open {
+  clip-path: inset(0);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.search-overlay-ic { flex: none; width: 16px; height: 16px; color: var(--text-3); }
+
+.search-bar-overlay input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--elev);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.8125rem;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.search-bar-overlay input::placeholder { color: var(--text-3); }
+.search-bar-overlay input:focus { outline: none; border-color: var(--accent); }
+.search-bar-overlay input::-webkit-search-cancel-button { -webkit-appearance: none; }
+
+.search-bar-close {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-3);
+  font-family: inherit;
+  font-size: 1.15rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.search-bar-close:hover { background: var(--hover); color: var(--text); }
 
 .head-actions {
   display: flex;
@@ -2815,7 +2866,7 @@ body.sheet-open .sidebar {
   .view-count { font-size: 0.8125rem; }
   .head-actions { order: 3; align-self: flex-start; }
 
-  .search input, .main-search input,
+  .search-bar-overlay input, .main-search input,
   .auth-card input, .gate-card input, .settings-group input, .e-title, .e-notes,
   #editor .e-title, #editor .e-notes,
   .ed-subrow input[type="date"], .ed-subrow input[type="time"],

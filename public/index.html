@@ -146,12 +146,16 @@
   <div id="shell" class="shell" hidden>
     <aside class="sidebar">
       <div class="sidebar-top">
-      <div class="search-row">
-        <form id="search-form" class="search" role="search">
-          <svg class="ic search-ic"><use href="#i-search"/></svg>
-          <input id="search" type="search" placeholder="Search all tenants" autocomplete="off" aria-label="Search items">
-        </form>
-        <div class="head-actions search-actions">
+      <div class="sidebar-head">
+        <div id="tenant-switch" class="tenant-switch" role="tablist" aria-label="View">
+          <button type="button" class="tenant-btn active" data-tenant="reminders" role="tab" aria-selected="true">Reminders</button>
+          <button type="button" class="tenant-btn" data-tenant="notes" role="tab" aria-selected="false">Notes</button>
+          <button type="button" class="tenant-btn" data-tenant="docs" role="tab" aria-selected="false">Docs</button>
+        </div>
+        <div class="head-actions">
+          <button id="search-open-btn" type="button" class="icon-btn search-open-btn" title="Search" aria-label="Search" aria-expanded="false">
+            <svg class="ic"><use href="#i-search"/></svg>
+          </button>
           <button id="refresh-btn-side" type="button" class="icon-btn refresh-btn" title="Refresh items" aria-label="Refresh items">
             <svg class="ic"><use href="#i-refresh"/></svg>
           </button>
@@ -159,14 +163,11 @@
             <svg class="ic"><use href="#i-list"/></svg>
           </button>
         </div>
-      </div>
-
-      <div class="sidebar-head">
-        <div id="tenant-switch" class="tenant-switch" role="tablist" aria-label="View">
-          <button type="button" class="tenant-btn active" data-tenant="reminders" role="tab" aria-selected="true">Reminders</button>
-          <button type="button" class="tenant-btn" data-tenant="notes" role="tab" aria-selected="false">Notes</button>
-          <button type="button" class="tenant-btn" data-tenant="docs" role="tab" aria-selected="false">Docs</button>
-        </div>
+        <form id="search-form" class="search-bar-overlay" role="search" aria-hidden="true" inert>
+          <svg class="ic search-overlay-ic"><use href="#i-search"/></svg>
+          <input id="search" type="search" placeholder="Search all tenants" autocomplete="off" aria-label="Search items">
+          <button id="search-close" type="button" class="search-bar-close" aria-label="Close search">&times;</button>
+        </form>
       </div>
 
 
