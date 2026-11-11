@@ -2,6 +2,11 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v4.3.1
+
+- **Stable sort value size** - Sort and Order dropdowns stay at the compact 13px size on mobile and no longer grow temporarily while focused.
+- Service worker cache bumped to `workspace-v4.3.1`.
+
 ## What's New in v4.3.0
 
 - **Bullet and numbered lists in Notes** - the Note editor toolbar now has Scrawl-style Bullet list and Numbered list buttons. Lists are saved in note HTML, shown in the editor and rendered on note cards, expanded notes and rich clipboard copies.

@@ -3750,11 +3750,6 @@ body.sheet-open .sidebar {
   html body .sort-control select {
     font-size: 0.8125rem !important;
   }
-  /* While focused, temporarily use the iOS-safe 16px so opening a picker
-     cannot trigger focus zoom; it returns to 13px on blur. */
-  html body .sort-control select:focus {
-    font-size: 16px !important;
-  }
 }
 
 /* Mobile rows: stack Copy above Edit so the note/title preview keeps its width. */
