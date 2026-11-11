@@ -2,6 +2,11 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v4.5.2
+
+- **Centred Docs format help** - the category summary, “All formats” expander, extension list and caveat are now centred inside the empty state.
+- Service worker cache bumped to `workspace-v4.5.2`.
+
 ## What's New in v4.5.1
 
 - **Docs format help only when empty** - the supported-format summary and expandable full list now appear inside the “No files yet” state instead of above every Docs list.

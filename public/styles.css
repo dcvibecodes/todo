@@ -3779,3 +3779,17 @@ body.sheet-open .sidebar {
   line-height: 1.5;
   overflow-wrap: anywhere;
 }
+
+.empty .docs-format-help {
+  width: 100%;
+  max-width: 320px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.empty .docs-format-help details { width: 100%; }
+.empty .docs-format-help summary,
+.empty .docs-format-list,
+.empty .docs-format-help .notify-hint { width: 100%; text-align: center; }
