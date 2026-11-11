@@ -2,6 +2,12 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v3.1.12
+
+- **Sort Notes and Docs** - both tenants now have the Sort/Order bar: Date added or Name, ascending or descending. Each Notes and Docs folder remembers its own choice.
+- **Sorting is global in Settings** - Sorting moved into its own generic Settings group. It sets defaults for Reminders, Notes and Docs; Due date is marked Reminders-only.
+- Service worker cache bumped to `todo-v3.1.12`.
+
 ## What's New in v3.1.11
 
 - **Docs card alignment fixed** - the combined title + folder block, file type, size, download icon and delete icon now share one true vertical centre. Download and delete line up exactly.

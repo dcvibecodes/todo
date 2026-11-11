@@ -1547,6 +1547,18 @@ const SORT_DIR_LABELS = {
 function syncSortFieldOptions(view) {
   const select = $('#sort-field');
   if (!select) return;
+  const tenant = tenantForView(view);
+  let due = select.querySelector('option[value="due"]');
+  if (tenant === 'reminders') {
+    if (!due) {
+      due = document.createElement('option');
+      due.value = 'due';
+      due.textContent = 'Due date';
+      select.prepend(due);
+    }
+  } else if (due) {
+    due.remove();
+  }
   let option = select.querySelector('option[value="completed"]');
   if (view === 'completed') {
     if (!option) {
@@ -1575,7 +1587,10 @@ function syncSortDirLabels(fieldSelect, dirSelect) {
 // setting so nothing jumps.
 function viewSortKey(view) {
   if (typeof view === 'number') return `list:${view}`;
-  return String(view);
+  const raw = String(view);
+  const folder = raw.match(/^(notes|docs)-folder-(\d+)$/);
+  if (folder) return `${folder[1]}:${folder[2]}`;
+  return raw;
 }
 
 const DATED_VIEW_SORT = { field: 'due', dir: 'asc' };
@@ -1586,12 +1601,21 @@ function defaultSortFor(view) {
   return view === 'today' || view === 'scheduled' ? DATED_VIEW_SORT : state.sortDefault;
 }
 
+function tenantForView(view) {
+  if (view === 'notes' || String(view).startsWith('notes-folder-')) return 'notes';
+  if (view === 'docs' || String(view).startsWith('docs-folder-')) return 'docs';
+  return 'reminders';
+}
+
 function effectiveSort(view) {
   const key = viewSortKey(view);
   const override = key ? state.sortOverrides[key] : null;
   const fallback = defaultSortFor(view);
+  const tenant = tenantForView(view);
+  let field = override && override.field ? override.field : fallback.field;
+  if (tenant !== 'reminders' && field !== 'name' && field !== 'created') field = 'created';
   return {
-    field: override && override.field ? override.field : fallback.field,
+    field,
     dir: override && override.dir ? override.dir : fallback.dir,
   };
 }
@@ -1648,6 +1672,30 @@ function compareReminders(a, b, sort) {
 
 function sortItems(items, sort) {
   return [...items].sort((a, b) => compareReminders(a, b, sort));
+}
+
+function sortByNameOrCreated(items, sort, nameOf) {
+  const direction = sort.dir === 'desc' ? -1 : 1;
+  return [...items].sort((a, b) => {
+    const fallback = (a.id || 0) - (b.id || 0);
+    if (sort.field === 'name') {
+      const cmp = String(nameOf(a) || '').localeCompare(String(nameOf(b) || ''), undefined, {
+        sensitivity: 'base', numeric: true,
+      });
+      return cmp ? direction * cmp : fallback;
+    }
+    const av = new Date(a.created_at || 0).getTime();
+    const bv = new Date(b.created_at || 0).getTime();
+    return av === bv ? fallback : direction * (av - bv);
+  });
+}
+
+function sortNotes(items, sort) {
+  return sortByNameOrCreated(items, sort, (note) => note.title);
+}
+
+function sortDocs(items, sort) {
+  return sortByNameOrCreated(items, sort, (doc) => doc.name);
 }
 
 function viewItems() {
@@ -2615,11 +2663,9 @@ function renderMain() {
   const content = $('#content');
   content.replaceChildren();
   $('#view-menu').hidden = true;
-  const tenantView = view === 'notes' || view === 'docs'
-    || String(view).startsWith('notes-folder-') || String(view).startsWith('docs-folder-');
   const sortBar = $('#sort-bar');
   // Relevance-ranked search owns the order, so the Sort/Order bar steps aside.
-  sortBar.hidden = view === 'home' || Boolean(state.search) || tenantView;
+  sortBar.hidden = view === 'home' || Boolean(state.search);
   syncSortFieldOptions(view);
   if (!sortBar.hidden) {
     const sort = effectiveSort(view);
@@ -2752,7 +2798,7 @@ function renderNotesView(content, view) {
   const title = folder ? folder.name : 'All Notes';
   $('#view-title').textContent = title;
   document.title = `ToDo — ${title}`;
-  const notes = notesForView(view);
+  const notes = sortNotes(notesForView(view), effectiveSort(view));
   setPulseText($('#view-count'), notes.length ? String(notes.length) : '');
   if (folder) {
     $('#view-menu').hidden = false;
@@ -2783,7 +2829,7 @@ function renderDocsView(content, view) {
   const title = folder ? folder.name : 'All Files';
   $('#view-title').textContent = title;
   document.title = `ToDo — ${title}`;
-  const docs = docsForView(view);
+  const docs = sortDocs(docsForView(view), effectiveSort(view));
   setPulseText($('#view-count'), docs.length ? String(docs.length) : '');
   if (folder) {
     $('#view-menu').hidden = false;
@@ -6172,7 +6218,7 @@ async function saveAppSettings() {
       sortSnapshot = sort;
       render();
       message = message
-        ? `${message} Sorting applied to all lists.`
+        ? `${message} Sorting applied to all folders and views.`
         : 'Saved — sorting applied to all folders.';
     }
     if (appearanceDirty) {

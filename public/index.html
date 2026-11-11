@@ -686,23 +686,6 @@
           </label>
           <p class="settings-note"><strong>Applies to new reminders only.</strong> Existing reminders keep their current time model and zone. Floating items follow the last confirmed device zone.</p>
           <p class="notify-hint">Floating follows the last confirmed device zone; Anchored pins a named zone.</p>
-          <h4 class="settings-subhead">Sorting</h4>
-          <label class="settings-row" for="set-sort-field">
-            <span>Sort by</span>
-            <select id="set-sort-field">
-              <option value="due">Due date</option>
-              <option value="created" selected>Date added</option>
-              <option value="name">Name</option>
-            </select>
-          </label>
-          <label class="settings-row" for="set-sort-dir">
-            <span>Order</span>
-            <select id="set-sort-dir">
-              <option value="asc">Oldest on top</option>
-              <option value="desc" selected>Newest on top</option>
-            </select>
-          </label>
-          <p class="notify-hint">Saving applies this sorting to every Reminders folder and smart view except Today and Scheduled (Due date / Soonest on top, because only dated items appear there) and Completed (Date completed / Newest on top). Change those views from their own sort controls. Each folder can still choose its own sorting afterwards; sorting syncs across your devices.</p>
           <h4 class="settings-subhead">Notifications</h4>
           <label class="settings-row" for="set-repush">
             <span>Re-push missed items</span>
@@ -773,6 +756,25 @@ curl -X PATCH -H "Authorization: Bearer $TOKEN" \
   -d '{"completed":true}' \
   $HOST/api/reminders/123</pre>
           </details>
+        </div>
+        <div class="settings-group">
+          <h3>Sorting</h3>
+          <label class="settings-row" for="set-sort-field">
+            <span>Sort by</span>
+            <select id="set-sort-field">
+              <option value="due">Due date (Reminders)</option>
+              <option value="created" selected>Date added</option>
+              <option value="name">Name</option>
+            </select>
+          </label>
+          <label class="settings-row" for="set-sort-dir">
+            <span>Order</span>
+            <select id="set-sort-dir">
+              <option value="asc">Oldest on top</option>
+              <option value="desc" selected>Newest on top</option>
+            </select>
+          </label>
+          <p class="notify-hint">Saving sets the default sorting for Reminders, Notes and Docs. <strong>Date added</strong> and <strong>Name</strong> apply to all three; <strong>Due date</strong> applies to Reminders only, and Notes/Docs fall back to Date added. Today, Scheduled and Completed keep their fixed defaults. Each folder can still choose its own sorting afterwards; sorting syncs across your devices.</p>
         </div>
         <div class="settings-group">
           <h3>Storage</h3>
