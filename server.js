@@ -2522,6 +2522,19 @@ async function main() {
     res.json({ ok: true });
   });
 
+  app.patch('/api/docs/:id', async (req, res) => {
+    const id = parseId(req.params.id);
+    if (!id) return res.status(400).json({ error: 'Invalid file' });
+    const file = await db.get(
+      "SELECT id FROM attachments WHERE id = ? AND owner_type = 'doc'", [id]
+    );
+    if (!file) return res.status(404).json({ error: 'File not found' });
+    const folder = await folderRow(parseId(req.body.folder_id), 'docs');
+    if (!folder) return res.status(400).json({ error: 'Choose a Docs folder' });
+    await db.run('UPDATE attachments SET folder_id = ? WHERE id = ?', [folder.id, id]);
+    res.json({ ok: true, folder_id: folder.id });
+  });
+
   app.delete('/api/docs/:id', async (req, res) => {
     const id = parseId(req.params.id);
     if (!id) return res.status(400).json({ error: 'Invalid file' });

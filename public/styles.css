@@ -3305,10 +3305,17 @@ body.sheet-open .sidebar {
 
 .doc-icon .ic { width: 18px; height: 18px; }
 
+.doc-folder {
+  font-size: 0.75rem;
+  color: var(--text-3);
+}
+
 .doc-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
   font-size: 0.75rem;
   color: var(--text-3);
 }
@@ -3316,14 +3323,44 @@ body.sheet-open .sidebar {
 .doc-download {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  color: var(--accent);
-  font-size: 0.75rem;
-  font-weight: 600;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  color: var(--text-3);
   text-decoration: none;
 }
 
-.doc-download .ic { width: 12px; height: 12px; }
+.doc-download:hover { background: var(--fill); color: var(--text); }
+.doc-download .ic { width: 15px; height: 15px; }
+
+.doc-row .reminder-body > .reminder-title { grid-column: 1; grid-row: 1; }
+.doc-row .reminder-body > .doc-folder { grid-column: 1; grid-row: 2; }
+.doc-row .reminder-body > .doc-meta { grid-column: 2; grid-row: 1 / span 2; align-self: center; }
+
+.doc-sheet-file {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.doc-sheet-file .doc-icon { width: 42px; height: 42px; }
+.doc-sheet-file .doc-icon .ic { width: 22px; height: 22px; }
+.doc-sheet-info { min-width: 0; }
+.doc-sheet-info h3 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.doc-sheet-info p {
+  margin: 3px 0 0;
+  font-size: 0.75rem;
+  color: var(--text-3);
+}
+
+#doc-sheet-download { margin-top: 4px; }
 
 .attach-list {
   display: flex;

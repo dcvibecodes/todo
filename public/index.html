@@ -553,6 +553,39 @@
     </form>
   </div>
 
+  <div id="doc-sheet" class="sheet" hidden>
+    <div class="sheet-backdrop" data-close></div>
+    <form id="doc-form" class="sheet-card editor-card" novalidate>
+      <header class="sheet-head editor-head">
+        <button type="button" class="text-btn" data-close>Cancel</button>
+        <span>File</span>
+        <button type="submit" id="doc-save" class="text-btn strong" disabled>Save</button>
+      </header>
+      <div class="sheet-body editor-body">
+        <div class="doc-sheet-file">
+          <span class="doc-icon"><svg class="ic"><use href="#i-file"/></svg></span>
+          <div class="doc-sheet-info">
+            <h3 id="doc-title"></h3>
+            <p id="doc-meta"></p>
+          </div>
+        </div>
+        <div class="ed-section">
+          <div class="ed-section-label">Folder</div>
+          <div class="ed-group">
+            <div class="ed-row ed-list-row">
+              <span class="ed-list-ic"><svg class="ic"><use href="#i-list"/></svg></span>
+              <span class="ed-label">Folder</span>
+              <span class="ed-value" id="doc-folder-value"></span>
+              <svg class="ic ed-chevron"><use href="#i-chevron"/></svg>
+              <select id="doc-folder" aria-label="File folder"></select>
+            </div>
+          </div>
+        </div>
+        <a id="doc-sheet-download" class="secondary-btn" href="#" download>Download file</a>
+      </div>
+    </form>
+  </div>
+
   <input id="docs-file-input" type="file" multiple accept=".doc,.docx,.pdf,.xls,.xlsx,.txt,.md,.html,.htm" hidden>
 
   <div id="notify-sheet" class="sheet" hidden>

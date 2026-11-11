@@ -43,6 +43,8 @@ const state = {
   listTenant: 'reminders',
   noteEditingId: null,
   noteSnapshot: null,
+  docEditingId: null,
+  docSnapshot: null,
   notePendingFiles: [],
   noteRemovedFiles: [],
   editorPendingFiles: [],
@@ -2889,15 +2891,20 @@ function docRow(doc, options = {}) {
   const folder = listById(doc.folder_id);
   const body = el('div', { class: 'reminder-body' }, [
     el('div', { class: 'reminder-title', text: doc.name }),
+    folder ? el('div', { class: 'doc-folder meta-list', style: { '--c': colorVar(folder.color) } }, [
+      el('span', { class: 'meta-dot' }),
+      el('span', { text: folder.name }),
+    ]) : null,
     el('div', { class: 'doc-meta' }, [
-      options.showFolder && folder ? el('span', { text: folder.name }) : null,
       el('span', { text: fileTypeLabel(doc.name) }),
       el('span', { text: formatBytes(doc.size) }),
       el('a', {
         class: 'doc-download',
         href: '/api/files/' + doc.id,
         download: doc.name,
-        html: `${ICON('download', 'ic')}<span>Download</span>`,
+        title: 'Download',
+        'aria-label': `Download ${doc.name}`,
+        html: ICON('download', 'ic'),
       }),
     ]),
   ]);
@@ -2916,8 +2923,75 @@ function docRow(doc, options = {}) {
     label: doc.name,
     icon: 'file',
     onDelete: (button) => handleDocDelete(doc, button),
+    onClick: (event) => {
+      if (event.target.closest('a, button, input, textarea, select')) return;
+      if (Date.now() - lastSwipeEnd < 400) return;
+      if (event.currentTarget.classList.contains('swipe-open')) {
+        resetSwipe(event.currentTarget);
+        return;
+      }
+      openDocSheet(doc);
+    },
     content: [body, tools],
   });
+}
+
+function syncDocFolderVisual() {
+  const folder = listById(Number($('#doc-folder').value));
+  $('#doc-folder-value').textContent = folder ? folder.name : '';
+}
+
+function syncDocSave() {
+  const doc = state.docEditingId ? docById(state.docEditingId) : null;
+  const button = $('#doc-save');
+  if (!doc || !button) return;
+  button.disabled = Number($('#doc-folder').value) === doc.folder_id;
+}
+
+function openDocSheet(doc) {
+  state.docEditingId = doc.id;
+  state.docSnapshot = doc.folder_id;
+  $('#doc-title').textContent = doc.name;
+  $('#doc-meta').textContent = `${fileTypeLabel(doc.name)} · ${formatBytes(doc.size)}`;
+  const select = $('#doc-folder');
+  select.replaceChildren();
+  for (const folder of foldersFor('docs')) {
+    select.append(el('option', { value: String(folder.id), text: folder.name }));
+  }
+  select.value = String(doc.folder_id);
+  syncDocFolderVisual();
+  const download = $('#doc-sheet-download');
+  download.href = '/api/files/' + doc.id;
+  download.setAttribute('download', doc.name);
+  syncDocSave();
+  openSheet('#doc-sheet');
+}
+
+async function saveDoc(event) {
+  event.preventDefault();
+  const doc = state.docEditingId ? docById(state.docEditingId) : null;
+  if (!doc) return;
+  const folderId = Number($('#doc-folder').value);
+  if (!folderId || folderId === doc.folder_id) {
+    closeSheet('#doc-sheet');
+    return;
+  }
+  const button = $('#doc-save');
+  button.disabled = true;
+  button.textContent = 'Saving…';
+  try {
+    await api('/api/docs/' + doc.id, { method: 'PATCH', body: { folder_id: folderId } });
+    state.storage = null;
+    closeSheet('#doc-sheet');
+    await loadState();
+    render();
+    toast('File moved');
+  } catch (err) {
+    toast(err.message);
+  } finally {
+    button.textContent = 'Save';
+    syncDocSave();
+  }
 }
 
 function swipeRow({ class: extraClass, color, data, label, onDelete, content, icon, onClick }) {
@@ -6585,6 +6659,8 @@ $('#search-form').addEventListener('submit', (event) => {
 
 $('#editor-form').addEventListener('submit', saveEditor);
 $('#note-form').addEventListener('submit', saveNote);
+$('#doc-form').addEventListener('submit', saveDoc);
+$('#doc-folder').addEventListener('change', () => { syncDocFolderVisual(); syncDocSave(); });
 $('#n-delete').addEventListener('click', deleteNoteFromEditor);
 $('#n-folder').addEventListener('change', syncNoteFolderVisual);
 $('#e-files').addEventListener('change', (event) => {

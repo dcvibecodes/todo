@@ -2,6 +2,14 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v3.1.9
+
+- **Open a file from its card** - tapping a Docs file now opens a file sheet showing its info, a folder picker and a download link.
+- **Move files between folders** - choose a new folder in the file sheet and Save to move the file.
+- **Folder under the title** - file cards now show the folder below the title, matching Reminders and Notes.
+- **Download icon** - the row download control is now just an icon, not a text button.
+- Service worker cache bumped to `todo-v3.1.9`.
+
 ## What's New in v3.1.8
 
 - **Docs row polish** - file titles are no longer bold, the ambiguous copy-style icon is replaced with a single file icon, and file rows are vertically centred instead of top-aligned.
