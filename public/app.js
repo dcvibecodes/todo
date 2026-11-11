@@ -2884,7 +2884,7 @@ function safeNoteHtml(value, preview = false) {
   const root = doc.body.firstElementChild;
   if (!root) return '';
   const walk = (node) => {
-    if (node.nodeType === Node.TEXT_NODE) return escapeHtml(node.nodeValue || '');
+    if (node.nodeType === Node.TEXT_NODE) return escapeHtml(node.nodeValue || '').replace(/\n/g, '<br>');
     if (node.nodeType !== Node.ELEMENT_NODE) return '';
     const tag = node.tagName;
     const inner = Array.from(node.childNodes).map(walk).join('');
@@ -2902,12 +2902,54 @@ function safeNoteHtml(value, preview = false) {
         ? `<span class="note-md-heading note-md-h${tag[1]}">${inner}</span>`
         : `<${tag.toLowerCase()}>${inner}</${tag.toLowerCase()}>`;
     }
-    if (tag === 'P' || tag === 'DIV') return preview ? `${inner}<br>` : `<div>${inner}</div>`;
+    if (tag === 'P' || tag === 'DIV') {
+      if (!preview) return `<div>${inner}</div>`;
+      const block = inner.replace(/(?:<br>\s*)+$/, '');
+      return block ? `${block}<br>` : '<br>';
+    }
     if (tag === 'LI') return `• ${inner}<br>`;
     if (tag === 'SPAN') return `<span>${inner}</span>`;
     return inner;
   };
-  return walk(root).replace(/<br>\s*$/, '');
+  return walk(root)
+    .replace(/(?:\s*<br>){3,}/g, '<br><br>')
+    .replace(/^(?:\s*<br>)+/, '')
+    .replace(/(?:\s*<br>)+$/, '');
+}
+
+function normalizeNoteHtml(value) {
+  const doc = new DOMParser().parseFromString(`<div>${String(value || '')}</div>`, 'text/html');
+  const root = doc.body.firstElementChild;
+  if (!root) return '';
+  const walk = (node) => {
+    if (node.nodeType === Node.TEXT_NODE) return escapeHtml(node.nodeValue || '').replace(/\n/g, '<br>');
+    if (node.nodeType !== Node.ELEMENT_NODE) return '';
+    const tag = node.tagName;
+    const inner = Array.from(node.childNodes).map(walk).join('');
+    if (tag === 'BR') return '<br>';
+    if (tag === 'B' || tag === 'STRONG') return `<strong>${inner}</strong>`;
+    if (tag === 'I' || tag === 'EM') return `<em>${inner}</em>`;
+    if (tag === 'U') return `<u>${inner}</u>`;
+    if (tag === 'A') {
+      const href = node.getAttribute('href') || '';
+      if (!/^(https?:\/\/|mailto:)/i.test(href)) return inner;
+      return `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${inner}</a>`;
+    }
+    if (tag === 'H1' || tag === 'H2' || tag === 'H3') {
+      return `<${tag.toLowerCase()}>${inner}</${tag.toLowerCase()}>`;
+    }
+    if (tag === 'P' || tag === 'DIV') {
+      const block = inner.replace(/(?:<br>\s*)+$/, '');
+      return block ? `${block}<br>` : '<br>';
+    }
+    if (tag === 'LI') return `• ${inner}<br>`;
+    if (tag === 'SPAN') return `<span>${inner}</span>`;
+    return inner;
+  };
+  return walk(root)
+    .replace(/(?:\s*<br>){3,}/g, '<br><br>')
+    .replace(/^(?:\s*<br>)+/, '')
+    .replace(/(?:\s*<br>)+$/, '');
 }
 
 function noteRow(note, options = {}) {
@@ -5342,7 +5384,7 @@ function openNoteEditor(id) {
   $('#note-heading').textContent = note ? 'Edit Note' : 'New Note';
   $('#n-title').value = note ? note.title : '';
   $('#n-body').innerHTML = note
-    ? (note.body_format === 'html' ? safeNoteHtml(note.body, false) : noteMarkdownHtml(note.body))
+    ? (note.body_format === 'html' ? normalizeNoteHtml(note.body) : noteMarkdownHtml(note.body))
     : '';
   $('#n-delete').hidden = !note;
   $('#n-delete').textContent = 'Delete Note';
@@ -5422,7 +5464,7 @@ async function saveNote(event) {
     toast('Choose a Notes folder');
     return;
   }
-  const body = safeNoteHtml($('#n-body').innerHTML, false);
+  const body = normalizeNoteHtml($('#n-body').innerHTML);
   const submit = $('#note-submit');
   submit.disabled = true;
   submit.textContent = 'Saving…';
