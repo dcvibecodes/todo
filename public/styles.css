@@ -3630,6 +3630,10 @@ body.sheet-open .sidebar {
 
 @media (max-width: 899px) {
   #note-editor .sheet-card { width: 100%; }
+  /* iOS auto-zooms any focused field below 16px. Keep the editor body and
+     link field at 16px so tapping never changes the viewport scale. */
+  #note-editor .note-rich { font-size: 16px; }
+  #note-editor #note-link-url { font-size: 16px; }
 }
 
 .note-format-bar {
