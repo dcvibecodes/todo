@@ -1161,251 +1161,20 @@ function viewFolderId(view) {
 }
 
 
-const TENANT_ORDER = ['reminders', 'notes', 'docs'];
-let tenantIndicatorReady = false;
-let tenantDrag = null;
-let suppressTenantClickUntil = 0;
-
-function tenantTabMetrics(tenant) {
-  const button = $(`#tenant-switch .tenant-btn[data-tenant="${tenant}"]`);
-  return button ? { x: button.offsetLeft, width: button.offsetWidth } : { x: 0, width: 0 };
-}
-
-function setTenantIndicator(metrics, instant = false) {
-  const indicator = $('#tenant-indicator');
-  if (!indicator) return;
-  indicator.style.transition = instant ? 'none' : '';
-  indicator.style.transform = `translateX(${metrics.x}px)`;
-  indicator.style.width = `${metrics.width}px`;
-  if (instant) {
-    requestAnimationFrame(() => { indicator.style.transition = ''; });
-  }
-}
-
-function positionTenantIndicator(tenant, instant = false) {
-  const metrics = tenantTabMetrics(tenant);
-  if (!metrics.width) {
-    requestAnimationFrame(() => positionTenantIndicator(tenant, true));
-    return;
-  }
-  if (!tenantIndicatorReady) instant = true;
-  tenantIndicatorReady = true;
-  setTenantIndicator(metrics, instant);
-}
-
-function setTenant(tenant, options = {}) {
-  const next = TENANT_ORDER.includes(tenant) ? tenant : 'reminders';
+function setTenant(tenant) {
+  const next = ['reminders', 'notes', 'docs'].includes(tenant) ? tenant : 'reminders';
   state.tenant = next;
-  if (options.persist !== false) localStorage.setItem('todo.tenant', next);
+  localStorage.setItem('todo.tenant', next);
   state.search = '';
   $('#search').value = '';
   $('#main-search').value = '';
   clearSearchResults();
   setSearchOverlay(false);
   if (state.view !== 'home') {
-    if (options.persist !== false) go('home');
-    else render();
+    go('home');
     return;
   }
   render();
-}
-
-function animateTenantTab(target) {
-  finishNavAnimation();
-  const current = state.tenant;
-  const forward = TENANT_ORDER.indexOf(target) > TENANT_ORDER.indexOf(current);
-  const snapshot = screenSnapshot('.sidebar', 20);
-  const width = $('.sidebar') ? $('.sidebar').offsetWidth : window.innerWidth;
-  setTenant(target);
-  if (PAGE_SCROLL_MEDIA.matches) pageScroller().scrollTop = 0;
-  const sidebar = $('.sidebar');
-  if (!snapshot || !sidebar) {
-    finishNavAnimation();
-    return;
-  }
-  activeNavSnapshot = snapshot;
-  document.body.classList.add('nav-animating');
-  sidebar.classList.add('nav-incoming');
-  const oldEnd = forward ? -width : width;
-  const newStart = forward ? width : -width;
-  const easing = 'cubic-bezier(0.22, 1, 0.36, 1)';
-  const oldAnim = snapshot.animate(
-    [{ transform: 'translateX(0)' }, { transform: `translateX(${oldEnd}px)` }],
-    { duration: 260, easing },
-  );
-  const newAnim = sidebar.animate(
-    [{ transform: `translateX(${newStart}px)` }, { transform: 'translateX(0)' }],
-    { duration: 260, easing },
-  );
-  const finish = () => { oldAnim.cancel(); newAnim.cancel(); finishNavAnimation(); };
-  newAnim.onfinish = finish;
-  newAnim.oncancel = finish;
-}
-
-function handleTenantTab(target) {
-  if (!target || target === state.tenant || tenantDrag) return;
-  if (!NAV_MOBILE.matches || MOTION_REDUCED.matches
-    || document.body.dataset.screen !== 'home'
-    || $$('.sheet').some((sheet) => !sheet.hidden)) {
-    setTenant(target);
-    return;
-  }
-  animateTenantTab(target);
-}
-
-function tenantSwipeStart(event) {
-  if (tenantDrag || !NAV_MOBILE.matches || MOTION_REDUCED.matches) return;
-  if (document.body.dataset.screen !== 'home') return;
-  if ($('#search-form').classList.contains('open')) return;
-  if ($$('.sheet').some((sheet) => !sheet.hidden)) return;
-  if (event.touches.length !== 1) return;
-  if (event.target.closest('input, select, textarea, .list-grip, .icon-btn, .new-list-btn, .tenant-btn, a')) return;
-  const touch = event.touches[0];
-  tenantDrag = {
-    startX: touch.clientX,
-    startY: touch.clientY,
-    startTenant: state.tenant,
-    startAt: performance.now(),
-    startScroll: PAGE_SCROLL_MEDIA.matches ? pageScroller().scrollTop : 0,
-    active: false,
-    direction: 0,
-    target: null,
-    width: 0,
-    dx: 0,
-    snapshot: null,
-    sidebar: null,
-    fromIndicator: tenantTabMetrics(state.tenant),
-    toIndicator: null,
-    indicator: tenantTabMetrics(state.tenant),
-  };
-}
-
-function tenantSwipeMove(event) {
-  const drag = tenantDrag;
-  if (!drag) return;
-  if (event.touches.length !== 1) {
-    tenantDrag = null;
-    return;
-  }
-  const touch = event.touches[0];
-  const rawDx = touch.clientX - drag.startX;
-  const dy = touch.clientY - drag.startY;
-  if (!drag.active) {
-    if (Math.abs(rawDx) < 12 || Math.abs(rawDx) <= Math.abs(dy) * 1.2) {
-      if (Math.abs(dy) > 12 && Math.abs(dy) > Math.abs(rawDx)) tenantDrag = null;
-      return;
-    }
-    const direction = rawDx < 0 ? 1 : -1;
-    const index = TENANT_ORDER.indexOf(drag.startTenant);
-    const targetIndex = index + direction;
-    if (targetIndex < 0 || targetIndex >= TENANT_ORDER.length) return;
-    drag.active = true;
-    drag.direction = direction;
-    drag.target = TENANT_ORDER[targetIndex];
-    drag.width = $('.sidebar') ? $('.sidebar').offsetWidth : window.innerWidth;
-    drag.fromIndicator = tenantTabMetrics(drag.startTenant);
-    drag.snapshot = screenSnapshot('.sidebar', 20);
-    setTenant(drag.target, { persist: false });
-    drag.sidebar = $('.sidebar');
-    if (!drag.snapshot || !drag.sidebar) {
-      tenantDrag = null;
-      finishNavAnimation();
-      return;
-    }
-    drag.toIndicator = tenantTabMetrics(drag.target);
-    drag.sidebar.classList.add('nav-incoming');
-    document.body.classList.add('tenant-swiping');
-    if (PAGE_SCROLL_MEDIA.matches) pageScroller().scrollTop = 0;
-    setTenantIndicator(drag.fromIndicator, true);
-    drag.startAt = performance.now();
-    drag.lastTime = drag.startAt;
-  }
-  event.preventDefault();
-  let dx = touch.clientX - drag.startX;
-  dx = drag.direction === 1 ? Math.min(0, dx) : Math.max(0, dx);
-  dx = Math.max(-drag.width, Math.min(drag.width, dx));
-  drag.dx = dx;
-  const progress = Math.min(1, Math.abs(dx) / drag.width);
-  drag.snapshot.style.transform = `translateX(${dx}px)`;
-  const newX = drag.direction === 1 ? drag.width + dx : -drag.width + dx;
-  drag.sidebar.style.transform = `translateX(${newX}px)`;
-  drag.indicator = {
-    x: drag.fromIndicator.x + (drag.toIndicator.x - drag.fromIndicator.x) * progress,
-    width: drag.fromIndicator.width + (drag.toIndicator.width - drag.fromIndicator.width) * progress,
-  };
-  setTenantIndicator(drag.indicator, true);
-  drag.lastTime = performance.now();
-}
-
-function tenantSwipeEnd(event) {
-  const drag = tenantDrag;
-  if (!drag) return;
-  tenantDrag = null;
-  if (!drag.active) return;
-  event.preventDefault();
-  const elapsed = Math.max(1, performance.now() - drag.startAt);
-  const velocity = Math.abs(drag.dx) / elapsed;
-  const commit = Math.abs(drag.dx) > drag.width * 0.28 || velocity > 0.55;
-  suppressTenantClickUntil = Date.now() + 450;
-  if (commit) localStorage.setItem('todo.tenant', drag.target);
-  settleTenantDrag(drag, commit);
-}
-
-function tenantSwipeCancel() {
-  const drag = tenantDrag;
-  tenantDrag = null;
-  if (drag && drag.active) settleTenantDrag(drag, false);
-}
-
-function settleTenantDrag(drag, commit) {
-  const { snapshot, sidebar } = drag;
-  if (!snapshot || !sidebar) {
-    if (commit) localStorage.setItem('todo.tenant', drag.target);
-    setTenant(commit ? drag.target : drag.startTenant, { persist: false });
-    return;
-  }
-  document.body.classList.remove('tenant-swiping');
-  document.body.classList.add('nav-animating');
-  activeNavSnapshot = snapshot;
-  const width = drag.width;
-  const oldTo = commit ? -drag.direction * width : 0;
-  const newTo = commit ? 0 : drag.direction * width;
-  const finalIndicator = commit ? drag.toIndicator : drag.fromIndicator;
-  const easing = commit
-    ? 'cubic-bezier(0.22, 1, 0.36, 1)'
-    : 'cubic-bezier(0.4, 0, 0.2, 1)';
-  const duration = commit ? 240 : 220;
-  const oldAnim = snapshot.animate(
-    [{ transform: snapshot.style.transform || 'translateX(0)' }, { transform: `translateX(${oldTo}px)` }],
-    { duration, easing },
-  );
-  const newAnim = sidebar.animate(
-    [{ transform: sidebar.style.transform || `translateX(${drag.direction * width}px)` }, { transform: `translateX(${newTo}px)` }],
-    { duration, easing },
-  );
-  const indicator = $('#tenant-indicator');
-  const fromIndicator = drag.indicator || drag.fromIndicator;
-  const indAnim = indicator ? indicator.animate([
-    { transform: `translateX(${fromIndicator.x}px)`, width: `${fromIndicator.width}px` },
-    { transform: `translateX(${finalIndicator.x}px)`, width: `${finalIndicator.width}px` },
-  ], { duration, easing }) : null;
-  const finish = () => {
-    oldAnim.cancel();
-    newAnim.cancel();
-    if (indAnim) indAnim.cancel();
-    if (commit) {
-      setTenantIndicator(finalIndicator, true);
-      finishNavAnimation();
-      if (PAGE_SCROLL_MEDIA.matches) pageScroller().scrollTop = 0;
-    } else {
-      setTenant(drag.startTenant, { persist: false });
-      if (PAGE_SCROLL_MEDIA.matches) pageScroller().scrollTop = drag.startScroll;
-      finishNavAnimation();
-      positionTenantIndicator(drag.startTenant, true);
-    }
-  };
-  newAnim.onfinish = finish;
-  newAnim.oncancel = finish;
 }
 
 const SHOW_COMPLETED_KEY = 'todo.showCompleted';
@@ -2811,7 +2580,6 @@ function renderSidebar() {
 
   $('#notifications-label').textContent = state.subscription ? 'Notifications On' : 'Notifications';
   if (listFlip) animateListRects(listFlip);
-  if (!tenantDrag) positionTenantIndicator(state.tenant);
   renderDayPeek();
 }
 
@@ -6991,24 +6759,9 @@ $('#smart-nav').addEventListener('click', (event) => {
 $('#tenant-switch').addEventListener('click', (event) => {
   const btn = event.target.closest('.tenant-btn');
   if (!btn) return;
-  handleTenantTab(btn.dataset.tenant);
+  setTenant(btn.dataset.tenant);
   closeAccountMenu();
 });
-
-{
-  const surface = $('.sidebar');
-  if (surface) {
-    surface.addEventListener('touchstart', tenantSwipeStart, { passive: true });
-    surface.addEventListener('touchmove', tenantSwipeMove, { passive: false });
-    surface.addEventListener('touchend', tenantSwipeEnd, { passive: false });
-    surface.addEventListener('touchcancel', tenantSwipeCancel, { passive: true });
-    surface.addEventListener('click', (event) => {
-      if (Date.now() >= suppressTenantClickUntil) return;
-      event.preventDefault();
-      event.stopPropagation();
-    }, true);
-  }
-}
 
 
 $('#new-list-2').addEventListener('click', () => openListSheet(null));
@@ -7507,7 +7260,6 @@ window.addEventListener('hashchange', route);
 window.addEventListener('focus', refreshOnResume);
 let noteSyncTimer = null;
 window.addEventListener('resize', () => {
-  if (!tenantDrag) positionTenantIndicator(state.tenant, true);
   clearTimeout(noteSyncTimer);
   noteSyncTimer = setTimeout(() => {
     syncNoteExpanders();

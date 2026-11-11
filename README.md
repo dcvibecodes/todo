@@ -2,12 +2,10 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
-## What's New in v4.4.0
+## What's New in v4.4.1
 
-- **Fluid mobile tenant switch** - swipe left/right on Home to switch Reminders / Notes / Docs. The old and new screens track the finger, then settle with the same slide motion as folder navigation. Swiping clamps at the first and last tenant.
-- **Sliding tenant indicator** - the tenant bar's active background is now one sliding indicator. It follows the swipe and animates between tabs on tap.
-- **Animated tab taps** - tapping a tenant tab slides the whole screen as well as the indicator on mobile.
-- Service worker cache bumped to `workspace-v4.4.0`.
+- **Reverted v4.4.0** - removed the fluid tenant swipe, sliding tenant indicator and animated tab taps. Tenant switching is back to the previous stable tab behavior; folder navigation is unchanged.
+- Service worker cache bumped to `workspace-v4.4.1`.
 
 ## What's New in v4.3.1
 

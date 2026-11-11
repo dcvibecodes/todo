@@ -1214,8 +1214,7 @@ body.list-dragging .list-grip { cursor: grabbing; }
 
 .nav-snapshot.sidebar::-webkit-scrollbar { display: none; }
 
-.main.nav-incoming,
-.sidebar.nav-incoming { position: relative; z-index: 30; }
+.main.nav-incoming { position: relative; z-index: 30; }
 
 body.nav-animating .shell { pointer-events: none; }
 
@@ -3314,14 +3313,12 @@ body.sheet-open .sidebar {
   .skel { animation: none; }
   .e-more { transition: none; }
   .e-more-toggle .ic { transition: none; }
-  .tenant-indicator { transition: none; }
 }
 
 
 /* ---------------- Tenants: Reminders / Notes / Docs ---------------- */
 
 .tenant-switch {
-  position: relative;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 2px;
@@ -3332,23 +3329,7 @@ body.sheet-open .sidebar {
   background: color-mix(in srgb, var(--text) 5%, var(--surface));
 }
 
-.tenant-indicator {
-  position: absolute;
-  top: 3px;
-  bottom: 3px;
-  left: 0;
-  width: 0;
-  border-radius: 7px;
-  background: var(--surface);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
-  pointer-events: none;
-  transition: transform 0.26s cubic-bezier(0.22, 1, 0.36, 1),
-    width 0.26s cubic-bezier(0.22, 1, 0.36, 1);
-}
-
 .tenant-btn {
-  position: relative;
-  z-index: 1;
   min-height: 34px;
   padding: 0 6px;
   border: 0;
@@ -3364,23 +3345,9 @@ body.sheet-open .sidebar {
 .tenant-btn:hover { background: var(--hover); color: var(--text); }
 
 .tenant-btn.active {
-  background: transparent;
+  background: var(--surface);
   color: var(--text);
-  box-shadow: none;
-}
-
-.tenant-btn.active:hover { background: transparent; }
-
-body.tenant-swiping,
-body.tenant-swiping .sidebar,
-body.tenant-swiping .nav-snapshot {
-  user-select: none;
-  -webkit-user-select: none;
-}
-
-body.tenant-swiping .sidebar,
-body.tenant-swiping .nav-snapshot {
-  will-change: transform;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
 }
 
 .note-row .swipe-content { align-items: flex-start; }
