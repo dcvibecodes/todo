@@ -3791,5 +3791,4 @@ body.sheet-open .sidebar {
 
 .empty .docs-format-help details { width: 100%; }
 .empty .docs-format-help summary,
-.empty .docs-format-list,
-.empty .docs-format-help .notify-hint { width: 100%; text-align: center; }
+.empty .docs-format-list { width: 100%; text-align: center; }

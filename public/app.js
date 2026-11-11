@@ -3229,7 +3229,6 @@ function docsFormatHelp() {
     el('details', {}, [
       el('summary', { text: 'All formats' }),
       el('p', { class: 'docs-format-list', text: docsFormatExtensions() }),
-      el('p', { class: 'notify-hint', text: 'Files are stored for authenticated download. Preview, extraction, malware scanning and in-app opening are not provided.' }),
     ]),
   ]);
 }
