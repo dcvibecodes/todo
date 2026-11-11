@@ -28,7 +28,33 @@ const LIST_COLORS = new Set(['red', 'rose', 'orange', 'yellow', 'lime', 'green',
 const NOTES_MAX = 50000;
 const NOTE_BODY_MAX = 200000;
 const TENANTS = new Set(['reminders', 'notes', 'docs']);
-const DOC_EXTENSIONS = new Set(['.doc', '.docx', '.pdf', '.xls', '.xlsx', '.txt', '.md', '.html', '.htm']);
+const DOC_FORMAT_REGISTRY = [
+  { ext: '.doc', category: 'Word', label: 'Word document', mime: 'application/msword', icon: 'file', signature: 'ole' },
+  { ext: '.docx', category: 'Word', label: 'Word document', mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', icon: 'file', signature: 'zip' },
+  { ext: '.pdf', category: 'PDF', label: 'PDF', mime: 'application/pdf', icon: 'file', signature: 'pdf' },
+  { ext: '.xls', category: 'Excel', label: 'Excel spreadsheet', mime: 'application/vnd.ms-excel', icon: 'table', signature: 'ole' },
+  { ext: '.xlsx', category: 'Excel', label: 'Excel spreadsheet', mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', icon: 'table', signature: 'zip' },
+  { ext: '.txt', category: 'TXT', label: 'TXT', mime: 'text/plain', icon: 'file', signature: null },
+  { ext: '.md', category: 'Markdown', label: 'Markdown', mime: 'text/markdown', icon: 'file', signature: null },
+  { ext: '.html', category: 'HTML', label: 'HTML', mime: 'text/html', icon: 'file', signature: null },
+  { ext: '.htm', category: 'HTML', label: 'HTML', mime: 'text/html', icon: 'file', signature: null },
+  { ext: '.png', category: 'Images', label: 'PNG image', mime: 'image/png', icon: 'image', signature: 'png' },
+  { ext: '.jpg', category: 'Images', label: 'JPEG image', mime: 'image/jpeg', icon: 'image', signature: 'jpeg' },
+  { ext: '.gif', category: 'Images', label: 'GIF image', mime: 'image/gif', icon: 'image', signature: 'gif' },
+  { ext: '.webp', category: 'Images', label: 'WebP image', mime: 'image/webp', icon: 'image', signature: 'webp' },
+  { ext: '.bmp', category: 'Images', label: 'BMP image', mime: 'image/bmp', icon: 'image', signature: 'bmp' },
+  { ext: '.csv', category: 'CSV', label: 'CSV', mime: 'text/csv', icon: 'table', signature: null },
+  { ext: '.json', category: 'JSON', label: 'JSON', mime: 'application/json', icon: 'braces', signature: null },
+  { ext: '.zip', category: 'ZIP', label: 'ZIP archive', mime: 'application/zip', icon: 'archive', signature: 'zip' },
+];
+const DOC_FORMAT_MAP = new Map(DOC_FORMAT_REGISTRY.map((format) => [format.ext, format]));
+const DOC_EXTENSIONS = new Set(DOC_FORMAT_REGISTRY.map((format) => format.ext));
+const DOC_FORMATS_PUBLIC = DOC_FORMAT_REGISTRY.map(({ ext, category, label, mime, icon }) => ({
+  ext, category, label, mime, icon,
+}));
+const DOC_FORMAT_CATEGORIES = [...new Set(DOC_FORMAT_REGISTRY.map((format) => format.category))];
+const DOC_FORMAT_SUMMARY = DOC_FORMAT_CATEGORIES.join(', ');
+const DOC_FORMAT_EXTENSIONS = DOC_FORMAT_REGISTRY.map((format) => format.ext).join(', ');
 const UPLOAD_DIR = path.join(db.DATA_DIR, 'uploads');
 const UPLOAD_MAX_BYTES = 25 * 1024 * 1024;
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -54,16 +80,63 @@ function cleanFileName(value) {
   return (name || 'file').slice(0, 200);
 }
 
+function docFormatForName(name) {
+  return DOC_FORMAT_MAP.get(path.extname(String(name || '')).toLowerCase()) || null;
+}
+
 function docExtensionAllowed(name) {
-  return DOC_EXTENSIONS.has(path.extname(String(name || '')).toLowerCase());
+  return Boolean(docFormatForName(name));
+}
+
+function docsFormatError() {
+  return `Docs supports ${DOC_FORMAT_SUMMARY} files only (${DOC_FORMAT_EXTENSIONS}).`;
+}
+
+async function readFileHead(filePath, length = 16) {
+  const handle = await fs.promises.open(filePath, 'r');
+  try {
+    const buffer = Buffer.alloc(length);
+    const { bytesRead } = await handle.read(buffer, 0, length, 0);
+    return buffer.subarray(0, bytesRead);
+  } finally {
+    await handle.close().catch(() => {});
+  }
+}
+
+function signatureMatches(buffer, kind) {
+  if (!buffer || !buffer.length) return false;
+  const ascii = buffer.toString('latin1');
+  if (kind === 'pdf') return ascii.startsWith('%PDF-');
+  if (kind === 'png') return buffer.length >= 8
+    && buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+  if (kind === 'jpeg') return buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff;
+  if (kind === 'gif') return ascii.startsWith('GIF87a') || ascii.startsWith('GIF89a');
+  if (kind === 'webp') return buffer.length >= 12 && ascii.startsWith('RIFF') && ascii.slice(8, 12) === 'WEBP';
+  if (kind === 'bmp') return ascii.startsWith('BM');
+  if (kind === 'zip') return ascii.startsWith('PK\x03\x04') || ascii.startsWith('PK\x05\x06') || ascii.startsWith('PK\x07\x08');
+  if (kind === 'ole') return buffer.length >= 8
+    && buffer.subarray(0, 8).equals(Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]));
+  return true;
+}
+
+async function docContentMatches(filePath, format) {
+  if (!format || !format.signature) return true;
+  const head = await readFileHead(filePath);
+  return signatureMatches(head, format.signature);
 }
 
 async function removeStoredFiles(rows) {
-  await Promise.all((rows || []).map((row) => (
-    row && row.stored_name
-      ? fs.promises.unlink(path.join(UPLOAD_DIR, row.stored_name)).catch(() => {})
-      : Promise.resolve()
-  )));
+  const root = path.resolve(UPLOAD_DIR);
+  for (const row of rows || []) {
+    if (!row) continue;
+    let target = null;
+    if (row.stored_name) target = path.join(root, path.basename(row.stored_name));
+    else if (row.filename) target = path.join(root, path.basename(row.filename));
+    else if (row.path) target = path.resolve(row.path);
+    if (!target) continue;
+    if (path.dirname(target) !== root) continue;
+    await fs.promises.unlink(target).catch(() => {});
+  }
 }
 
 async function folderRow(id, tenant) {
@@ -1407,7 +1480,8 @@ async function main() {
       authenticated_as: owner ? 'owner-session' : 'bearer-token',
       capabilities: caps,
       limits: { upload_bytes: UPLOAD_MAX_BYTES, files_per_request: 10 },
-      docs_formats: [...DOC_EXTENSIONS],
+      docs_formats: DOC_FORMATS_PUBLIC.map((format) => format.ext),
+      docs_format_details: DOC_FORMATS_PUBLIC,
       search_fields: {
         reminders: 'title + notes',
         notes: 'title + body',
@@ -2360,6 +2434,7 @@ async function main() {
       notes: visibleNotes,
       docs: visibleDocs,
       attachments: visibleAttachments,
+      docs_formats: DOC_FORMATS_PUBLIC,
       settings,
       now: new Date().toISOString(),
       store_epoch: await getStoreEpoch(),
@@ -2909,17 +2984,27 @@ async function main() {
 
   async function saveUploads(req, { tenant, ownerType, ownerId, folderId }) {
     const rows = [];
-    for (const file of req.files || []) {
-      const name = cleanFileName(file.originalname);
-      const result = await db.run(
-        `INSERT INTO attachments (tenant, owner_type, owner_id, folder_id, name, stored_name, mime, size, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [tenant, ownerType, ownerId, folderId, name, file.filename,
-          file.mimetype || 'application/octet-stream', file.size || 0, new Date().toISOString()]
-      );
-      rows.push({ id: result.lastID, name, mime: file.mimetype, size: file.size });
+    try {
+      for (const file of req.files || []) {
+        const name = cleanFileName(file.originalname);
+        const format = tenant === 'docs' ? docFormatForName(name) : null;
+        const mime = format ? format.mime : (file.mimetype || 'application/octet-stream');
+        const result = await db.run(
+          `INSERT INTO attachments (tenant, owner_type, owner_id, folder_id, name, stored_name, mime, size, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [tenant, ownerType, ownerId, folderId, name, file.filename,
+            mime, file.size || 0, new Date().toISOString()]
+        );
+        rows.push({ id: result.lastID, name, mime, size: file.size });
+      }
+      return rows;
+    } catch (err) {
+      for (const row of rows) {
+        await db.run('DELETE FROM attachments WHERE id = ?', [row.id]).catch(() => {});
+      }
+      await removeStoredFiles(req.files);
+      throw err;
     }
-    return rows;
   }
 
   app.get('/api/reminders/:id/attachments', async (req, res) => {
@@ -3044,9 +3129,22 @@ async function main() {
     const unsupported = req.files.find((file) => !docExtensionAllowed(file.originalname));
     if (unsupported) {
       await removeStoredFiles(req.files);
-      return res.status(400).json({
-        error: 'Docs supports Word, PDF, Excel, TXT, Markdown and HTML files only',
-      });
+      return res.status(400).json({ error: docsFormatError() });
+    }
+    for (const file of req.files) {
+      const format = docFormatForName(file.originalname);
+      let matches = true;
+      try {
+        matches = await docContentMatches(file.path, format);
+      } catch {
+        matches = false;
+      }
+      if (!matches) {
+        await removeStoredFiles(req.files);
+        return res.status(400).json({
+          error: `File content does not match the ${format ? format.label : 'declared'} extension: ${cleanFileName(file.originalname)}`,
+        });
+      }
     }
     if (req.token) {
       const key = idempotencyKeyFrom(req);
@@ -4040,7 +4138,9 @@ async function main() {
     if (err instanceof multer.MulterError) {
       const message = err.code === 'LIMIT_FILE_SIZE'
         ? 'Each file must be 25 MB or smaller'
-        : 'Could not upload that file';
+        : err.code === 'LIMIT_FILE_COUNT'
+          ? 'Up to 10 files per upload'
+          : 'Could not upload that file';
       return res.status(400).json({ error: message });
     }
     console.error(err);

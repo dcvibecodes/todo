@@ -115,6 +115,22 @@
       <path d="M6 3h8l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
       <path d="M14 3v5h5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
     </symbol>
+    <symbol id="i-image" viewBox="0 0 24 24">
+      <rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/>
+      <circle cx="9" cy="9.5" r="1.6" fill="none" stroke="currentColor" stroke-width="1.8"/>
+      <path d="M4 18l5-5 3 3 2-2 6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="i-table" viewBox="0 0 24 24">
+      <rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/>
+      <path d="M3 9h18M9 9v11M15 9v11M3 14.5h18" fill="none" stroke="currentColor" stroke-width="1.8"/>
+    </symbol>
+    <symbol id="i-braces" viewBox="0 0 24 24">
+      <path d="M9 4H7.5A2.5 2.5 0 0 0 5 6.5v3A2.5 2.5 0 0 1 2.5 12 2.5 2.5 0 0 1 5 14.5v3A2.5 2.5 0 0 0 7.5 20H9M15 4h1.5A2.5 2.5 0 0 1 19 6.5v3a2.5 2.5 0 0 0 2.5 2.5A2.5 2.5 0 0 0 19 14.5v3a2.5 2.5 0 0 1-2.5 2.5H15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="i-archive" viewBox="0 0 24 24">
+      <path d="M4 7h16v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+      <path d="M3 4h18v3H3zM10 11h4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
     <symbol id="i-note" viewBox="0 0 24 24">
       <path d="M6 3h8l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
       <path d="M14 3v5h5M8 12h8M8 16h6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
@@ -348,6 +364,7 @@
             <svg class="ic"><use href="#i-files"/></svg>
             <span>Add files</span>
           </label>
+          <p class="notify-hint">Any file type, up to 25 MB each. Reminder attachments are stored for download; preview is not provided.</p>
         </div>
 
         <div class="ed-section">
@@ -561,6 +578,7 @@
             <svg class="ic"><use href="#i-files"/></svg>
             <span>Add files</span>
           </label>
+          <p class="notify-hint">Any file type, up to 25 MB each. Note attachments are stored for download; preview is not provided.</p>
         </div>
         <button type="button" id="n-delete" class="danger-btn" hidden>Delete Note</button>
       </div>
@@ -577,7 +595,7 @@
       </header>
       <div class="sheet-body editor-body">
         <div class="doc-sheet-file">
-          <span class="doc-icon"><svg class="ic"><use href="#i-file"/></svg></span>
+          <span class="doc-icon"><svg class="ic"><use id="doc-sheet-icon-use" href="#i-file"/></svg></span>
           <div class="doc-sheet-info">
             <h3 id="doc-title"></h3>
             <p id="doc-meta"></p>
@@ -600,7 +618,7 @@
     </form>
   </div>
 
-  <input id="docs-file-input" type="file" multiple accept=".doc,.docx,.pdf,.xls,.xlsx,.txt,.md,.html,.htm" hidden>
+  <input id="docs-file-input" type="file" multiple hidden>
 
   <div id="notify-sheet" class="sheet" hidden>
     <div class="sheet-backdrop" data-close></div>

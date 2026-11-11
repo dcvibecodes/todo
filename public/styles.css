@@ -3760,3 +3760,22 @@ body.sheet-open .sidebar {
     gap: 4px;
   }
 }
+
+.docs-format-help {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  margin-bottom: 12px;
+  font-size: 0.75rem;
+  color: var(--text-3);
+}
+
+.docs-format-help details { flex-basis: 100%; }
+.docs-format-help summary { cursor: pointer; color: var(--text-2); }
+.docs-format-list {
+  margin: 6px 0 4px;
+  font-size: 0.72rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}

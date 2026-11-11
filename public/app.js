@@ -19,6 +19,7 @@ const state = {
   reminders: [],
   notes: [],
   docs: [],
+  docFormats: [],
   attachments: [],
   storage: null,
   tenant: ['reminders', 'notes', 'docs'].includes(localStorage.getItem('todo.tenant'))
@@ -845,7 +846,9 @@ async function loadState() {
   state.reminders = data.reminders || [];
   state.notes = data.notes || [];
   state.docs = data.docs || [];
+  state.docFormats = data.docs_formats || [];
   state.attachments = data.attachments || [];
+  applyDocsFormatUI();
   state.settings = data.settings || {};
   await syncListProgressWithServer();
   await syncSortWithServer();
@@ -2846,11 +2849,12 @@ function renderDocsView(content, view) {
     $('#view-menu').hidden = false;
     $('#view-menu').onclick = () => openListSheet(folder);
   }
+  content.append(docsFormatHelp());
   if (!docs.length) {
     content.append(el('div', { class: 'empty' }, [
       el('span', { html: ICON('file') }),
       el('h3', { class: 'empty-heading', text: 'No files yet' }),
-      el('p', { text: 'Add Word, PDF, Excel, TXT, Markdown or HTML files to this folder.' }),
+      el('p', { text: docsFormatSummary() }),
       el('button', {
         type: 'button',
         class: 'primary-btn',
@@ -3103,7 +3107,7 @@ function docRow(doc, options = {}) {
     color: folder ? colorVar(folder.color) : colorVar('gray'),
     data: { 'data-doc-id': doc.id },
     label: doc.name,
-    icon: 'file',
+    icon: docIconForName(doc.name),
     onDelete: (button) => handleDocDelete(doc, button),
     onClick: (event) => {
       if (event.target.closest('a, button, input, textarea, select')) return;
@@ -3199,10 +3203,48 @@ function swipeRow({ class: extraClass, color, data, label, onDelete, content, ic
   }, [background, el('div', { class: 'swipe-content' }, [...leading, ...content])]);
 }
 
+function docFormatInfo(name) {
+  const ext = '.' + String(name || '').split('.').pop().toLowerCase();
+  return (state.docFormats || []).find((format) => format.ext === ext) || null;
+}
+
+function docsFormatSummary() {
+  const categories = [...new Set((state.docFormats || []).map((format) => format.category))];
+  return categories.length ? `Supports ${categories.join(', ')} files.` : 'Supports documents, images and archives.';
+}
+
+function docsFormatExtensions() {
+  return (state.docFormats || []).map((format) => format.ext).join(', ');
+}
+
+function applyDocsFormatUI() {
+  const input = $('#docs-file-input');
+  if (!input) return;
+  const extensions = (state.docFormats || []).map((format) => format.ext);
+  if (extensions.length) input.setAttribute('accept', extensions.join(','));
+}
+
+function docsFormatHelp() {
+  return el('div', { class: 'docs-format-help' }, [
+    el('span', { text: docsFormatSummary() }),
+    el('details', {}, [
+      el('summary', { text: 'All formats' }),
+      el('p', { class: 'docs-format-list', text: docsFormatExtensions() }),
+      el('p', { class: 'notify-hint', text: 'Files are stored for authenticated download. Preview, extraction, malware scanning and in-app opening are not provided.' }),
+    ]),
+  ]);
+}
+
 function fileTypeLabel(name) {
-  const ext = String(name || '').split('.').pop().toLowerCase();
-  const labels = { doc: 'Word', docx: 'Word', pdf: 'PDF', xls: 'Excel', xlsx: 'Excel', txt: 'TXT', md: 'Markdown', html: 'HTML', htm: 'HTML' };
-  return labels[ext] || 'File';
+  const format = docFormatInfo(name);
+  if (format) return format.label;
+  const ext = String(name || '').split('.').pop().toUpperCase();
+  return ext || 'File';
+}
+
+function docIconForName(name) {
+  const format = docFormatInfo(name);
+  return format && format.icon ? format.icon : 'file';
 }
 
 function fileChip(file) {

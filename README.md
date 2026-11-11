@@ -2,6 +2,16 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v4.5.0
+
+- **More standalone Docs formats** - Docs now accepts the original Word, PDF, Excel, TXT, Markdown and HTML set plus PNG, JPG, GIF, WebP, BMP, CSV, JSON and ZIP. The full explicit list is `.doc .docx .pdf .xls .xlsx .txt .md .html .htm .png .jpg .gif .webp .bmp .csv .json .zip`; no extra aliases are claimed.
+- **One format registry** - server validation, `/api/capabilities`, the file picker, Docs help, error messages, labels and icons all read the same registry.
+- **Honest format handling** - binary formats get signature checks (PNG/JPEG/GIF/WebP/BMP/PDF/ZIP/OLE); DOCX/XLSX are checked as ZIP containers and legacy DOC/XLS by OLE header; text formats are not content-validated. Downloads remain authenticated attachment responses with `no-store` and `nosniff`; there is no preview, extraction, execution or malware scanning.
+- **Docs UI guidance** - Docs shows a category summary with an expandable full extension list. Image, CSV, JSON and ZIP rows get matching labels/icons.
+- **Attachment policy kept separate** - reminder and note attachments still accept any file type within the 25 MiB / 10-file limits and are stored for download, not promised as previews.
+- **Upload cleanup fixed** - rejected, mixed, mismatched, replayed, conflicting-epoch, invalid-folder and database-failure uploads now remove both newly received and partially inserted records/files without deleting successful originals.
+- Service worker cache bumped to `workspace-v4.5.0`.
+
 ## What's New in v4.4.2
 
 - **Docs empty state icon** - the “No files yet” state now uses the single-file icon instead of the copy-style multi-file icon.
@@ -903,9 +913,9 @@ Additional tenant permissions are opt-in scopes on the same token record. Existi
 
 - Notes/Docs reads use `GET /api/notes`, `/api/notes/:id`, `/api/docs`, `/api/docs/:id`; Docs search matches filenames only.
 - Notes create/edit needs `notes:write`; Notes delete needs `notes:delete`. Docs upload/move needs `docs:write`; Docs delete needs `docs:delete`. Note/reminder attachments follow the parent: read to list/download, write to upload, `notes:delete`/`docs:delete` to delete.
-- `GET /api/files/:id` is authorized by the owning parent, never by file ID alone. Downloads are private/no-store and use attachment disposition.
+- `GET /api/files/:id` is authorized by the owning parent, never by file ID alone. Downloads are private/no-store and use attachment disposition. Docs extensions are `.doc .docx .pdf .xls .xlsx .txt .md .html .htm .png .jpg .gif .webp .bmp .csv .json .zip`; reminder/note attachments remain unrestricted by extension within the upload limits.
 - `/api/state`, `/api/lists`, `/api/search`, `/api/storage` and largest-file results are filtered for token callers; unauthorized arrays are empty, and responses include `filtered: true`. A query parameter only narrows access.
-- `/api/capabilities` reports effective capabilities, supported Docs formats (Word, PDF, Excel, TXT, Markdown, HTML), upload limits (25 MiB per file, 10 files per request), search fields and JSON-backup scope.
+- `/api/capabilities` reports effective capabilities, the exact Docs format list plus category/label/MIME details, upload limits (25 MiB per file, 10 files per request), search fields and JSON-backup scope.
 
 `GET /api/tokens` shows each token's profile and additional scopes (never hashes). Deleting reminders, managing folders, settings, token management, import/export, password, and push stay session-only for every profile.
 
@@ -914,6 +924,8 @@ Additional tenant permissions are opt-in scopes on the same token record. Existi
 **Recurring series (write profile).** `PATCH {"completed": true}` and `POST …/skip` on a recurring reminder must include `occurrence_at`. If it equals the current `due_at`, the operation proceeds (same-occurrence duplicates are harmless). If it differs and that occurrence is already recorded done, the server answers `200 {"ok": true, "alreadyDone": true}` without advancing again (this recognition bypasses only the revision check, never the epoch guard). Otherwise → `409 {"error": "Stale occurrence", "currentDue"}`.
 
 **Change tracking.** Every reminder carries `revision` (monotonic integer, bumped by every content/state mutation including UI edits and occurrence-scope edits — never by push bookkeeping) and `updated_at`/`notified_at`. `GET /api/reminders` with NO filters returns the COMPLETE snapshot (every row, `ORDER BY id`, `complete: true`, top-level `store_epoch`): diff two snapshots by `id` to see everything, including hand edits from the UI. Only absence from that unfiltered snapshot implies deletion; filtered/limited responses are convenience reads, not change signals. No cursors, no feeds, no polling promises.
+
+**Docs format caveat.** Storage/download support is not preview support. DOCX/XLSX signature checks only prove a ZIP container; legacy DOC/XLS only prove an OLE header; text formats are not content-validated. Zero-byte text files are accepted, zero-byte binary files are rejected. No ZIP extraction or malware scanning occurs.
 
 **Backup caveat.** Settings → Backup is a JSON text/metadata export: it does not include uploaded file bytes. A complete Workspace restore needs both `data/todo.db` and `data/uploads` from the same point in time. Storage figures are logical counters (file sizes plus SQLite text bytes), not a physical disk audit.
 
