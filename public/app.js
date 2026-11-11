@@ -1097,6 +1097,21 @@ function go(view) {
   location.hash = hash;
 }
 
+function viewKeyForPath(path) {
+  const raw = String(path);
+  if (raw.startsWith('list/')) return Number(raw.slice(5));
+  if (raw.startsWith('notes/folder/')) return 'notes-folder-' + raw.slice(13);
+  if (raw.startsWith('docs/folder/')) return 'docs-folder-' + raw.slice(12);
+  return raw;
+}
+
+function goOrRender(view) {
+  const target = viewKeyForPath(view);
+  const sameView = state.view === target;
+  go(view);
+  if (sameView) render();
+}
+
 function clearSearch() {
   if (!state.search) return;
   state.search = '';
@@ -1124,7 +1139,7 @@ function parseRoute() {
     return folder && tenantOf(folder) === 'notes' ? 'notes-folder-' + id : 'notes';
   }
   if (raw.startsWith('docs/folder/')) {
-    const id = Number(raw.slice(13));
+    const id = Number(raw.slice(12));
     const folder = listById(id);
     return folder && tenantOf(folder) === 'docs' ? 'docs-folder-' + id : 'docs';
   }
@@ -5205,7 +5220,7 @@ async function saveNote(event) {
     state.storage = null;
     closeSheet('#note-editor');
     await loadState();
-    go('notes/folder/' + folderId);
+    goOrRender('notes/folder/' + folderId);
     toast(state.noteEditingId ? 'Note saved' : 'Note added');
   } catch (err) {
     toast(err.message);
@@ -6633,7 +6648,7 @@ $('#docs-file-input').addEventListener('change', async (event) => {
     await uploadFiles('/api/docs', files, { folder_id: folderId });
     state.storage = null;
     await loadState();
-    go('docs/folder/' + folderId);
+    goOrRender('docs/folder/' + folderId);
     toast(`${files.length} file${files.length === 1 ? '' : 's'} added`);
   } catch (err) {
     toast(err.message);

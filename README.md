@@ -2,6 +2,13 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v3.1.6
+
+- **Saved notes update immediately** - saving a note now refreshes its row preview without a manual page refresh, including when you stay in the same folder.
+- **Docs update immediately** - uploading files while inside a Docs folder now shows them in the list straight away.
+- **Docs folders open correctly** - opening a Docs folder from the sidebar now shows that folder instead of falling back to All Files.
+- Service worker cache bumped to `todo-v3.1.6`.
+
 ## What's New in v3.1.5
 
 - **Notes rows match reminders** - the note title now sits above a two-line note preview with an ellipsis instead of appearing beside it.
