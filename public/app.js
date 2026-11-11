@@ -2938,7 +2938,10 @@ function safeNoteHtml(value, preview = false) {
       const block = inner.replace(/(?:<br>\s*)+$/, '');
       return block ? `${block}<br>` : '<br>';
     }
-    if (tag === 'LI') return `• ${inner}<br>`;
+    if (tag === 'UL' || tag === 'OL') {
+      return preview ? inner : `<${tag.toLowerCase()}>${inner}</${tag.toLowerCase()}>`;
+    }
+    if (tag === 'LI') return preview ? `• ${inner}<br>` : `<li>${inner}</li>`;
     if (tag === 'SPAN') return `<span>${inner}</span>`;
     return inner;
   };
@@ -2973,7 +2976,10 @@ function normalizeNoteHtml(value) {
       const block = inner.replace(/(?:<br>\s*)+$/, '');
       return block ? `${block}<br>` : '<br>';
     }
-    if (tag === 'LI') return `• ${inner}<br>`;
+    if (tag === 'UL' || tag === 'OL') {
+      return `<${tag.toLowerCase()}>${inner}</${tag.toLowerCase()}>`;
+    }
+    if (tag === 'LI') return `<li>${inner}</li>`;
     if (tag === 'SPAN') return `<span>${inner}</span>`;
     return inner;
   };
@@ -5370,7 +5376,8 @@ function applyNoteFormat(kind) {
     document.execCommand('formatBlock', false, current === 'h2' ? 'p' : 'h2');
     return;
   }
-  document.execCommand(kind, false, null);
+  const command = kind === 'ul' ? 'insertUnorderedList' : kind === 'ol' ? 'insertOrderedList' : kind;
+  document.execCommand(command, false, null);
 }
 
 function applyNoteLink() {

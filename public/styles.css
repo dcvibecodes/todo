@@ -3720,6 +3720,9 @@ body.sheet-open .sidebar {
 }
 .note-rich h3 { font-size: 1em; }
 .note-rich p { margin: 0 0 0.45em; }
+.note-rich ul,
+.note-rich ol { margin: 0.4em 0; padding-left: 1.5em; }
+.note-rich li { margin: 0 0 0.2em; }
 .note-rich a { color: var(--accent); text-decoration: underline; }
 
 .reminder-notes h1,
@@ -3742,6 +3745,15 @@ body.sheet-open .sidebar {
   }
   html body #note-editor .e-title {
     font-size: 1.25rem !important;
+  }
+  /* Sort/Order values use the notes-preview size, not title size. */
+  html body .sort-control select {
+    font-size: 0.8125rem !important;
+  }
+  /* While focused, temporarily use the iOS-safe 16px so opening a picker
+     cannot trigger focus zoom; it returns to 13px on blur. */
+  html body .sort-control select:focus {
+    font-size: 16px !important;
   }
 }
 
