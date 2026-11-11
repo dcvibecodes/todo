@@ -2,6 +2,12 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v3.1.1
+
+- **Tenant bar at the top** - Reminders / Notes / Docs now share the top bar with Refresh and the hamburger menu.
+- **Search spacing** - the search bar has proper space above and below, with matching input and scope-selector padding.
+- Service worker cache bumped to `todo-v3.1.1`.
+
 ## What's New in v3.1.0
 
 - **All keyboard shortcuts removed** - the Shortcuts sheet, its header button and the S/N/Cmd+K/Cmd+Shift+M/Esc shortcuts are gone. Sheets close with Cancel, Done, the backdrop or Back.

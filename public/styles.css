@@ -328,9 +328,12 @@ body.gate-open {
 .sidebar-head {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  gap: 10px;
   padding: 0;
 }
+
+.sidebar-head .tenant-switch { flex: 1; min-width: 0; margin: 0; }
+.sidebar-head .head-actions { gap: 12px; align-self: center; }
 
 .head-actions {
   display: flex;
@@ -486,7 +489,7 @@ body.gate-open {
   position: relative;
   display: flex;
   align-items: center;
-  margin: 10px 0 0;
+  margin: 12px 0 16px;
 }
 
 .search-ic {
@@ -504,7 +507,7 @@ body.gate-open {
   width: 100%;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
-  padding: 7px 10px 7px 32px;
+  padding: 9px 10px 9px 32px;
   background: var(--elev);
   color: var(--text);
   font-size: 0.8125rem;
@@ -519,7 +522,7 @@ body.gate-open {
 
 .search-scope {
   flex: none;
-  height: 34px;
+  height: 36px;
   margin-left: 6px;
   padding: 0 8px;
   border: 1px solid var(--line);
@@ -2702,7 +2705,7 @@ body.sheet-open .sidebar {
     width: 100%;
     border: 1px solid var(--line);
     border-radius: var(--radius-sm);
-    padding: 7px 10px 7px 32px;
+    padding: 9px 10px 9px 32px;
     background: var(--elev);
     color: var(--text);
     font-size: 0.8125rem;
@@ -2800,7 +2803,7 @@ body.sheet-open .sidebar {
   /* Home and detail headers share the same height so the menu button never
      shifts vertically when opening a list. */
   .sidebar-head, .main-head { min-height: 33px; }
-  .sidebar-head { align-items: flex-start; }
+  .sidebar-head { align-items: center; }
 
   .main-head {
     flex-wrap: wrap;
@@ -2877,7 +2880,7 @@ body.sheet-open .sidebar {
     width: 100%;
     border: 1px solid var(--line);
     border-radius: var(--radius-sm);
-    padding: 7px 10px 7px 32px;
+    padding: 9px 10px 9px 32px;
     background: var(--elev);
     color: var(--text);
     -webkit-appearance: none;
@@ -3199,7 +3202,7 @@ body.sheet-open .sidebar {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 2px;
-  margin: 0 0 10px;
+  margin: 0;
   padding: 3px;
   border: 1px solid var(--line-soft);
   border-radius: 10px;
@@ -3413,7 +3416,6 @@ body.sheet-open .sidebar {
 .storage-file .storage-file-meta { flex: none; color: var(--text-3); }
 
 @media (max-width: 899px) {
-  .tenant-switch { margin-top: 4px; }
   .tenant-btn { min-height: 40px; }
   .swipe-content { padding: 13px 12px; }
 }
