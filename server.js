@@ -2118,14 +2118,21 @@ async function main() {
         return res.status(400).json({ error: 'limit must be 1 to 500' });
       }
     }
+    const scope = req.query.scope === undefined ? 'all' : String(req.query.scope);
+    if (!['all', 'reminders', 'notes', 'docs'].includes(scope)) {
+      return res.status(400).json({ error: 'Invalid search scope' });
+    }
+    const includeReminders = scope === 'all' || scope === 'reminders';
+    const includeNotes = scope === 'all' || scope === 'notes';
+    const includeDocs = scope === 'all' || scope === 'docs';
     const cutoffs = retentionCutoffs();
-    const [openRows, completedRows, storeEpoch] = await Promise.all([
-      db.all(
+    const [openRows, completedRows, noteRows, docRows, storeEpoch] = await Promise.all([
+      includeReminders ? db.all(
         `SELECT r.* FROM reminders r
          WHERE r.completed = 0
          ORDER BY r.sort_order, r.id`
-      ),
-      db.all(
+      ) : [],
+      includeReminders ? db.all(
         `SELECT r.* FROM reminders r JOIN lists l ON l.id = r.list_id
          WHERE r.completed = 1 AND (r.completed_at IS NULL OR r.completed_at >=
            CASE l.completed_retention
@@ -2134,21 +2141,48 @@ async function main() {
            END)
          ORDER BY r.completed_at DESC, r.id DESC`,
         [cutoffs['1m'], cutoffs['3m'], cutoffs['6m'], cutoffs['12m']]
-      ),
+      ) : [],
+      includeNotes ? db.all(
+        `SELECT n.id, n.folder_id, n.title, n.body, n.created_at, n.updated_at,
+                l.name AS folder_name, l.color AS folder_color
+         FROM notes n JOIN lists l ON l.id = n.folder_id
+         WHERE instr(lower(n.title), lower(?)) > 0 OR instr(lower(n.body), lower(?)) > 0
+         ORDER BY n.updated_at DESC, n.id DESC`,
+        [query, query]
+      ) : [],
+      includeDocs ? db.all(
+        `SELECT a.id, a.folder_id, a.name, a.mime, a.size, a.created_at,
+                l.name AS folder_name, l.color AS folder_color
+         FROM attachments a JOIN lists l ON l.id = a.folder_id
+         WHERE a.owner_type = 'doc' AND instr(lower(a.name), lower(?)) > 0
+         ORDER BY a.created_at DESC, a.id DESC`,
+        [query]
+      ) : [],
       getStoreEpoch(),
     ]);
     // rank() is stable for equal scores, so the SQL ordering above is the tie-break.
-    const openMatches = fuzzy.rank(openRows, query);
-    const completedMatches = fuzzy.rank(completedRows, query);
+    const openMatches = includeReminders ? fuzzy.rank(openRows, query) : [];
+    const completedMatches = includeReminders ? fuzzy.rank(completedRows, query) : [];
     const open = openMatches.slice(0, limit).map((entry) => entry.reminder);
     const completed = completedMatches.slice(0, limit).map((entry) => entry.reminder);
+    const notes = noteRows.slice(0, limit);
+    const docs = docRows.slice(0, limit);
     await applyOccurrenceOverrides(open);
     res.json({
       query,
+      scope,
       open,
       completed,
-      totals: { open: openMatches.length, completed: completedMatches.length },
-      truncated: openMatches.length > open.length || completedMatches.length > completed.length,
+      notes,
+      docs,
+      totals: {
+        open: openMatches.length,
+        completed: completedMatches.length,
+        notes: noteRows.length,
+        docs: docRows.length,
+      },
+      truncated: openMatches.length > open.length || completedMatches.length > completed.length
+        || noteRows.length > notes.length || docRows.length > docs.length,
       store_epoch: storeEpoch,
     });
   });

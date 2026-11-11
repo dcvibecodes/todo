@@ -4,7 +4,6 @@ const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selector));
 const ICON = (name, cls = 'ic') => `<svg class="${cls}"><use href="#i-${name}"/></svg>`;
 
-const IS_MAC = /Mac|iPhone|iPad|iPod/.test(navigator.platform || navigator.userAgent || '');
 
 const COLORS = ['red', 'rose', 'orange', 'yellow', 'lime', 'green', 'teal', 'cyan', 'blue', 'indigo', 'purple', 'pink', 'brown', 'slate', 'gray'];
 const colorVar = (color) => `var(--list-${COLORS.includes(color) ? color : 'blue'})`;
@@ -27,9 +26,13 @@ const state = {
   settings: {},
   view: 'today',
   search: '',
+  searchScope: ['all', 'reminders', 'notes', 'docs'].includes(localStorage.getItem('todo.searchScope'))
+    ? localStorage.getItem('todo.searchScope') : 'all',
   searchOpen: [],
   searchCompleted: [],
-  searchTotals: { open: 0, completed: 0 },
+  searchNotes: [],
+  searchDocs: [],
+  searchTotals: { open: 0, completed: 0, notes: 0, docs: 0 },
   searchTruncated: false,
   searchLoading: false,
   searchOffline: false,
@@ -119,12 +122,6 @@ function repeatLabel(rule) {
   return 'Repeats';
 }
 
-function announce(message) {
-  const node = $('#live');
-  if (!node) return;
-  node.textContent = '';
-  setTimeout(() => { node.textContent = message; }, 30);
-}
 
 const DENSITY_KEY = 'todo-density';
 const LIST_PROGRESS_KEY = 'todo.listProgress';
@@ -1148,11 +1145,6 @@ function viewFolderId(view) {
   return match ? Number(match[1]) : null;
 }
 
-function homeViewForTenant(tenant) {
-  if (tenant === 'notes') return 'notes';
-  if (tenant === 'docs') return 'docs';
-  return 'all';
-}
 
 function setTenant(tenant) {
   const next = ['reminders', 'notes', 'docs'].includes(tenant) ? tenant : 'reminders';
@@ -1992,29 +1984,6 @@ function persistListOrder(ids, tenant = state.tenant) {
   });
 }
 
-// Keyboard alternative to drag-and-drop (WCAG 2.2 AA): focus a list's grip
-// and use arrow keys to move it. Every move is announced.
-function moveListKeyboard(listId, direction) {
-  const siblings = foldersFor(state.tenant);
-  const from = siblings.findIndex((item) => item.id === listId);
-  if (from === -1 || siblings[from].is_system) return;
-  const minIndex = siblings[0] && siblings[0].is_system ? 1 : 0;
-  const to = Math.max(minIndex, Math.min(siblings.length - 1, from + direction));
-  if (to === from) return;
-  const ids = siblings.map((item) => item.id);
-  const [moved] = ids.splice(from, 1);
-  ids.splice(to, 0, moved);
-  const reordered = ids.map((id) => listById(id));
-  state.lists = [...state.lists.filter((item) => tenantOf(item) !== state.tenant), ...reordered];
-  requestListAnimation();
-  renderSidebar();
-  persistListOrder(ids, state.tenant);
-  const list = listById(listId);
-  announce(`${list ? list.name : 'Folder'} moved to position ${to + 1} of ${ids.length}`);
-  const grip = $(`#lists .list-grip[data-list-id="${listId}"]`);
-  if (grip) grip.focus();
-}
-
 function isOverdue(reminder) {
   if (!reminder.due_at || reminder.completed) return false;
   const due = formatDue(reminder);
@@ -2521,19 +2490,6 @@ function renderSidebar() {
       });
       grip.addEventListener('pointerdown', (event) => startListDrag(event, list, row, grip));
       grip.addEventListener('click', (event) => event.stopPropagation());
-      grip.addEventListener('keydown', (event) => {
-        if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
-          event.preventDefault();
-          event.stopPropagation();
-          moveListKeyboard(list.id, event.key === 'ArrowUp' ? -1 : 1);
-        } else if (event.key === 'Home' || event.key === 'End') {
-          event.preventDefault();
-          event.stopPropagation();
-          const siblings = foldersFor(tenant);
-          const from = siblings.findIndex((item) => item.id === list.id);
-          moveListKeyboard(list.id, (event.key === 'Home' ? 0 : siblings.length - 1) - from);
-        }
-      });
       row.append(grip);
     }
     if (progressMode === 'bar' && total > 0 && tenant === 'reminders') {
@@ -2556,34 +2512,20 @@ function renderSearchResults(content) {
   document.title = 'ToDo — Search';
   $('#view-title').textContent = 'Search';
   $('#view-menu').hidden = true;
-  if (state.tenant === 'notes' || state.tenant === 'docs') {
-    const results = state.searchOpen || [];
-    setPulseText($('#view-count'), results.length ? String(results.length) : '');
-    if (!results.length) {
-      content.append(emptySearchState());
-      return;
-    }
-    const group = el('div', { class: 'reminder-group' });
-    for (const item of results) {
-      group.append(state.tenant === 'notes' ? noteRow(item, { showFolder: true }) : docRow(item, { showFolder: true }));
-    }
-    content.append(el('h3', { class: 'group-title', text: `Results (${results.length})` }), group);
-    return;
-  }
-  const totals = state.searchTotals || { open: 0, completed: 0 };
-  const total = totals.open + totals.completed;
-  setPulseText($('#view-count'), total ? String(total) : '');
-
-  // /api/search returns both groups in relevance order; offline results are
-  // ranked the same way locally, so never re-sort them here.
+  const totals = state.searchTotals || { open: 0, completed: 0, notes: 0, docs: 0 };
   const open = state.searchOpen || [];
   const completed = state.searchCompleted || [];
+  const notes = state.searchNotes || [];
+  const docs = state.searchDocs || [];
+  const total = (totals.open || 0) + (totals.completed || 0)
+    + (totals.notes || 0) + (totals.docs || 0);
+  setPulseText($('#view-count'), total ? String(total) : '');
 
   if (state.searchLoading && state.searchQuery !== state.search) {
     content.append(el('p', { class: 'search-status', text: 'Searching…' }));
     return;
   }
-  if (!open.length && !completed.length) {
+  if (!open.length && !completed.length && !notes.length && !docs.length) {
     content.append(emptySearchState());
     return;
   }
@@ -2594,19 +2536,30 @@ function renderSearchResults(content) {
     content.append(el('p', { class: 'search-status', text: 'Showing the first results — refine the search to see the rest.' }));
   }
   if (open.length) {
-    content.append(el('h3', { class: 'group-title', text: `Open (${totals.open})` }));
+    content.append(el('h3', { class: 'group-title', text: `Open reminders (${totals.open})` }));
     const group = el('div', { class: 'reminder-group' });
     for (const reminder of open) group.append(reminderRow(reminder, { showList: true }));
     content.append(group);
   }
   if (completed.length) {
-    content.append(el('h3', { class: 'group-title', text: `Completed (${totals.completed})` }));
+    content.append(el('h3', { class: 'group-title', text: `Completed reminders (${totals.completed})` }));
     const group = el('div', { class: 'reminder-group' });
     for (const reminder of completed) group.append(reminderRow(reminder, { showList: true }));
     content.append(group);
   }
+  if (notes.length) {
+    content.append(el('h3', { class: 'group-title', text: `Notes (${totals.notes})` }));
+    const group = el('div', { class: 'reminder-group' });
+    for (const note of notes) group.append(noteRow(note, { showFolder: true }));
+    content.append(group);
+  }
+  if (docs.length) {
+    content.append(el('h3', { class: 'group-title', text: `Docs (${totals.docs})` }));
+    const group = el('div', { class: 'reminder-group' });
+    for (const doc of docs) group.append(docRow(doc, { showFolder: true }));
+    content.append(group);
+  }
 }
-
 function emptySearchState() {
   return el('div', { class: 'empty' }, [
     el('span', { html: ICON('search') }),
@@ -6034,10 +5987,6 @@ async function openStorage() {
   renderStorageSettings();
 }
 
-function openShortcuts() {
-  closeAccountMenu();
-  openSheet('#shortcuts-sheet');
-}
 
 async function openSettings() {
   closeAccountMenu();
@@ -6436,7 +6385,6 @@ $('#back-btn').addEventListener('click', () => {
 $('#logout-btn').addEventListener('click', logout);
 $('#notifications-btn').addEventListener('click', openNotifySheet);
 $('#settings-btn').addEventListener('click', openSettings);
-$$('.shortcuts-btn').forEach((btn) => btn.addEventListener('click', openShortcuts));
 $('#password-form').addEventListener('submit', changePassword);
 $('#username-form').addEventListener('submit', changeUsername);
 $('#gate-form').addEventListener('submit', submitUsernameGate);
@@ -6507,7 +6455,9 @@ function clearSearchResults() {
   state.searchSeq += 1;
   state.searchOpen = [];
   state.searchCompleted = [];
-  state.searchTotals = { open: 0, completed: 0 };
+  state.searchNotes = [];
+  state.searchDocs = [];
+  state.searchTotals = { open: 0, completed: 0, notes: 0, docs: 0 };
   state.searchTruncated = false;
   state.searchLoading = false;
   state.searchOffline = false;
@@ -6521,10 +6471,6 @@ function scheduleSearch() {
     return;
   }
   state.searchLoading = true;
-  if (state.tenant !== 'reminders') {
-    runSearch(state.search).then((ok) => { if (ok) render(); });
-    return;
-  }
   searchTimer = setTimeout(async () => {
     const ok = await runSearch(state.search);
     if (ok) render();
@@ -6535,44 +6481,50 @@ function scheduleSearch() {
 // cutoff), so the server searches the database. On a network failure fall
 // back to the loaded reminders and say the history is incomplete.
 async function runSearch(query) {
-  if (state.tenant !== 'reminders') {
-    const needle = query.toLowerCase();
-    state.searchQuery = query;
-    state.searchOpen = state.tenant === 'notes'
-      ? state.notes.filter((note) => note.title.toLowerCase().includes(needle)
-        || (note.body || '').toLowerCase().includes(needle))
-      : state.docs.filter((doc) => doc.name.toLowerCase().includes(needle));
-    state.searchCompleted = [];
-    state.searchTotals = { open: state.searchOpen.length, completed: 0 };
-    state.searchTruncated = false;
-    state.searchOffline = false;
-    state.searchLoading = false;
-    return true;
-  }
   const seq = ++state.searchSeq;
+  const scope = state.searchScope;
+  const includeReminders = scope === 'all' || scope === 'reminders';
+  const includeNotes = scope === 'all' || scope === 'notes';
+  const includeDocs = scope === 'all' || scope === 'docs';
   try {
-    const data = await api(`/api/search?q=${encodeURIComponent(query)}&limit=500`);
+    const data = await api(`/api/search?q=${encodeURIComponent(query)}&limit=500&scope=${encodeURIComponent(scope)}`);
     if (seq !== state.searchSeq || query !== state.search) return false;
     state.searchQuery = query;
     state.searchOpen = data.open || [];
     state.searchCompleted = data.completed || [];
+    state.searchNotes = data.notes || [];
+    state.searchDocs = data.docs || [];
     state.searchTotals = data.totals || {
       open: state.searchOpen.length,
       completed: state.searchCompleted.length,
+      notes: state.searchNotes.length,
+      docs: state.searchDocs.length,
     };
     state.searchTruncated = Boolean(data.truncated);
     state.searchOffline = false;
   } catch {
     if (seq !== state.searchSeq || query !== state.search) return false;
     state.searchQuery = query;
-    const local = window.TodoFuzzy
-      ? window.TodoFuzzy.rank(state.reminders, state.search).map((entry) => entry.reminder)
-      : sortItems(state.reminders.filter(matchesSearch), effectiveSort(state.view));
+    const needle = query.toLowerCase();
+    const local = includeReminders
+      ? (window.TodoFuzzy
+        ? window.TodoFuzzy.rank(state.reminders, state.search).map((entry) => entry.reminder)
+        : sortItems(state.reminders.filter(matchesSearch), effectiveSort(state.view)))
+      : [];
     state.searchOpen = local.filter((reminder) => !reminder.completed);
     state.searchCompleted = local.filter((reminder) => reminder.completed);
+    state.searchNotes = includeNotes
+      ? state.notes.filter((note) => note.title.toLowerCase().includes(needle)
+        || (note.body || '').toLowerCase().includes(needle))
+      : [];
+    state.searchDocs = includeDocs
+      ? state.docs.filter((doc) => doc.name.toLowerCase().includes(needle))
+      : [];
     state.searchTotals = {
       open: state.searchOpen.length,
       completed: state.searchCompleted.length,
+      notes: state.searchNotes.length,
+      docs: state.searchDocs.length,
     };
     state.searchTruncated = false;
     state.searchOffline = true;
@@ -6592,14 +6544,51 @@ function setSearch(value, source) {
   scheduleSearch();
   if (state.search && state.view === 'home') {
     state.searchKeepNavigation = true;
-    go(homeViewForTenant(state.tenant));
+    go(state.searchScope === 'notes' || state.searchScope === 'docs'
+      ? state.searchScope : 'all');
     return;
   }
   render();
 }
 
+function syncSearchScopeUI() {
+  const scope = state.searchScope;
+  for (const id of ['#search-scope', '#main-search-scope']) {
+    const select = $(id);
+    if (select) select.value = scope;
+  }
+  const label = scope === 'all' ? 'Search all tenants'
+    : scope === 'reminders' ? 'Search reminders'
+      : scope === 'notes' ? 'Search notes' : 'Search docs';
+  for (const id of ['#search', '#main-search']) {
+    const input = $(id);
+    if (input) input.placeholder = label;
+  }
+}
+
+function setSearchScope(value) {
+  const next = ['all', 'reminders', 'notes', 'docs'].includes(value) ? value : 'all';
+  state.searchScope = next;
+  localStorage.setItem('todo.searchScope', next);
+  syncSearchScopeUI();
+  if (state.search) {
+    state.searchLoading = true;
+    const target = next === 'notes' || next === 'docs' ? next : 'all';
+    if (state.view !== 'home' && state.view !== target) {
+      state.searchKeepNavigation = true;
+      go(target);
+      return;
+    }
+    scheduleSearch();
+    render();
+  }
+}
+
 $('#search').addEventListener('input', (event) => setSearch(event.target.value, 'sidebar'));
 $('#main-search').addEventListener('input', (event) => setSearch(event.target.value, 'main'));
+$('#search-scope').addEventListener('change', (event) => setSearchScope(event.target.value));
+$('#main-search-scope').addEventListener('change', (event) => setSearchScope(event.target.value));
+syncSearchScopeUI();
 
 $('#main-search-form').addEventListener('submit', (event) => {
   event.preventDefault();
@@ -6675,13 +6664,6 @@ $('#e-time').addEventListener('change', () => {
   syncDateHistoryHint();
 });
 $('#e-list').addEventListener('change', updateEditorListVisual);
-$('#e-title').addEventListener('keydown', (event) => {
-  if (event.key !== 'Enter' || event.shiftKey || event.isComposing) return;
-  if (state.editingId) return; // editing keeps Enter as a plain newline
-  event.preventDefault();
-  if ($('#editor-submit').disabled) return;
-  $('#editor-form').requestSubmit();
-});
 
 $('#e-more-toggle').addEventListener('click', toggleEditorMore);
 
@@ -6855,50 +6837,9 @@ document.addEventListener('pointerdown', (event) => {
 }, true);
 
 document.addEventListener('keydown', (event) => {
+  if (event.key !== 'Tab') return;
   if ($('#username-gate') && !$('#username-gate').hidden) return;
-  if (event.key === 'Tab') {
-    trapSheetTab(event);
-    return;
-  }
-  if (event.key === 'Escape') {
-    if (closeTopSheet()) return;
-    closeAccountMenu();
-    if (state.search) {
-      setSearch('', 'both');
-      return;
-    }
-    if (document.body.dataset.screen === 'detail') {
-      clearSearch();
-      go('home');
-    }
-    return;
-  }
-  // This one must work while typing in the title/notes, so it runs before the
-  // input guard. Only the new-item sheet has a collapsible More options.
-  if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key.toLowerCase() === 'm') {
-    if (!event.repeat && !$('#editor').hidden && $('#editor').classList.contains('is-new')) {
-      event.preventDefault();
-      toggleEditorMore();
-    }
-    return;
-  }
-  const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
-  if (typing) return;
-  if ($$('.sheet').some((sheet) => !sheet.hidden)) return;
-  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
-    event.preventDefault();
-    const target = $('#main-search').offsetParent ? $('#main-search') : $('#search');
-    target.focus();
-  } else if (event.key.toLowerCase() === 's' && !event.repeat) {
-    event.preventDefault();
-    openShortcuts();
-  } else if (event.key.toLowerCase() === 'n' && !event.repeat) {
-    event.preventDefault();
-    closeAccountMenu();
-    if (state.tenant === 'notes') openNoteEditor(null);
-    else if (state.tenant === 'docs') chooseDocsFiles();
-    else openEditor(null);
-  }
+  trapSheetTab(event);
 });
 
 async function refreshOnResume() {
@@ -6927,11 +6868,7 @@ document.addEventListener('visibilitychange', () => {
 
 applyDensity();
 syncMenuButtons();
-$$('[data-mod-key]').forEach((node) => {
-  node.textContent = node.dataset.modKey === 'search'
-    ? (IS_MAC ? '⌘K' : 'Ctrl+K')
-    : (IS_MAC ? '⌘⇧M' : 'Ctrl+Shift+M');
-});
+
 initPullToRefresh();
 initDayPeek();
 function onScrollActivity() {
