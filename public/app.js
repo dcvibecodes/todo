@@ -1848,6 +1848,8 @@ function toggleAccountMenu() {
     return;
   }
   syncMenuButtons();
+  updateAccountStorageTotal();
+  ensureStorage();
 }
 
 function closeAccountMenu() {
@@ -3027,8 +3029,9 @@ function ensureStorage() {
   state.storageLoading = true;
   api('/api/storage').then((data) => {
     state.storage = data;
+    updateAccountStorageTotal();
     if (state.tenant === 'docs' || state.view === 'docs' || String(state.view).startsWith('docs-folder-')) render();
-    if (!$('#settings-sheet').hidden) renderStorageSettings();
+    if (!$('#storage-sheet').hidden) renderStorageSettings();
   }).catch(() => {}).finally(() => { state.storageLoading = false; });
 }
 
@@ -3061,6 +3064,7 @@ function renderStorageSettings() {
       el('span', { text: detail }),
     ]));
   }
+  updateAccountStorageTotal();
   largest.replaceChildren();
   if (!storage.largest.length) {
     largest.append(el('p', { class: 'notify-hint', text: 'No uploaded files yet.' }));
@@ -6016,6 +6020,20 @@ function updateSettingsDirty(preserveMessage = false) {
   if (dirty && !preserveMessage) $('#settings-msg').hidden = true;
 }
 
+function updateAccountStorageTotal() {
+  const total = $('#account-storage-total');
+  if (!total) return;
+  total.textContent = state.storage ? formatBytes(state.storage.total) : '';
+}
+
+async function openStorage() {
+  closeAccountMenu();
+  renderStorageSettings();
+  openSheet('#storage-sheet');
+  try { state.storage = await api('/api/storage'); } catch { /* keep cached usage */ }
+  renderStorageSettings();
+}
+
 function openShortcuts() {
   closeAccountMenu();
   openSheet('#shortcuts-sheet');
@@ -6051,9 +6069,6 @@ async function openSettings() {
   $('#set-sort-dir').value = state.sortDefault.dir;
   syncSortDirLabels($('#set-sort-field'), $('#set-sort-dir'));
   renderDeviceZoneRow();
-  renderStorageSettings();
-  try { state.storage = await api('/api/storage'); } catch { /* keep cached usage */ }
-  renderStorageSettings();
   $('#token-once').hidden = true;
   $('#token-name').value = '';
   await renderTokenList();
@@ -6475,6 +6490,7 @@ $('#fab-add').addEventListener('click', () => {
 $('#menu-btn').addEventListener('click', handleMenuButton);
 $('#sidebar-menu-btn').addEventListener('click', toggleAccountMenu);
 $('#account-notifications').addEventListener('click', () => { closeAccountMenu(); openNotifySheet(); });
+$('#account-storage').addEventListener('click', openStorage);
 $('#account-settings').addEventListener('click', () => { closeAccountMenu(); openSettings(); });
 $('#account-logout').addEventListener('click', () => { closeAccountMenu(); logout(); });
 document.addEventListener('click', (event) => {
@@ -6879,7 +6895,9 @@ document.addEventListener('keydown', (event) => {
   } else if (event.key.toLowerCase() === 'n' && !event.repeat) {
     event.preventDefault();
     closeAccountMenu();
-    openEditor(null);
+    if (state.tenant === 'notes') openNoteEditor(null);
+    else if (state.tenant === 'docs') chooseDocsFiles();
+    else openEditor(null);
   }
 });
 

@@ -151,7 +151,6 @@
     <aside class="sidebar">
       <div class="sidebar-top">
       <div class="sidebar-head">
-        <h1 class="wordmark">To-dos</h1>
         <div class="head-actions">
           <button id="refresh-btn-side" class="icon-btn refresh-btn" title="Refresh items" aria-label="Refresh items">
             <svg class="ic"><use href="#i-refresh"/></svg>
@@ -214,12 +213,12 @@
           <span class="nav-label">Completed</span>
         </button>
         <button class="nav-row" data-view="notes" hidden>
-          <span class="nav-ic all"><svg class="ic"><use href="#i-list"/></svg></span>
+          <span class="nav-ic all"><svg class="ic"><use href="#i-all"/></svg></span>
           <span class="nav-label">All Notes</span>
           <span class="badge" id="count-notes"></span>
         </button>
         <button class="nav-row" data-view="docs" hidden>
-          <span class="nav-ic all"><svg class="ic"><use href="#i-files"/></svg></span>
+          <span class="nav-ic all"><svg class="ic"><use href="#i-all"/></svg></span>
           <span class="nav-label">All Files</span>
           <span class="badge" id="count-docs"></span>
         </button>
@@ -703,16 +702,6 @@
           <button type="button" id="zone-use-device" class="secondary-btn" hidden>Use this device's time zone</button>
         </div>
         <div class="settings-group">
-          <h3>Storage</h3>
-          <p class="notify-hint" id="storage-summary">Loading storage&hellip;</p>
-          <div id="storage-breakdown" class="storage-breakdown"></div>
-          <details class="token-examples" id="storage-largest-wrap">
-            <summary>Largest files</summary>
-            <div id="storage-largest" class="storage-largest"></div>
-          </details>
-          <p class="notify-hint">Usage counters only — nothing is deleted automatically.</p>
-        </div>
-        <div class="settings-group">
           <h3>Backup</h3>
           <button type="button" id="export-btn" class="secondary-btn">Download backup (JSON)</button>
           <button type="button" id="import-btn" class="secondary-btn">Import backup…</button>
@@ -789,6 +778,26 @@ curl -X PATCH -H "Authorization: Bearer $TOKEN" \
     </div>
   </div>
 
+  <div id="storage-sheet" class="sheet" hidden>
+    <div class="sheet-backdrop" data-close></div>
+    <div class="sheet-card">
+      <header class="sheet-head">
+        <span></span>
+        <span>Storage</span>
+        <button type="button" class="text-btn strong" data-close>Done</button>
+      </header>
+      <div class="sheet-body">
+        <p class="notify-hint" id="storage-summary">Loading storage&hellip;</p>
+        <div id="storage-breakdown" class="storage-breakdown"></div>
+        <details class="token-examples" id="storage-largest-wrap">
+          <summary>Largest files</summary>
+          <div id="storage-largest" class="storage-largest"></div>
+        </details>
+        <p class="notify-hint">Usage counters only — nothing is deleted automatically.</p>
+      </div>
+    </div>
+  </div>
+
   <div id="shortcuts-sheet" class="sheet" hidden>
     <div class="sheet-backdrop" data-close></div>
     <div class="sheet-card">
@@ -798,9 +807,9 @@ curl -X PATCH -H "Authorization: Bearer $TOKEN" \
       </header>
       <div class="sheet-body shortcut-list">
         <div class="shortcut-row"><span>Show this shortcuts menu</span><span class="shortcut-keys"><kbd class="kbd">S</kbd></span></div>
-        <div class="shortcut-row"><span>New item</span><span class="shortcut-keys"><kbd class="kbd">N</kbd></span></div>
+        <div class="shortcut-row"><span>New in the current tenant</span><span class="shortcut-keys"><kbd class="kbd">N</kbd></span></div>
         <div class="shortcut-row"><span>Search</span><span class="shortcut-keys"><kbd class="kbd" data-mod-key="search">⌘K</kbd></span></div>
-        <div class="shortcut-row"><span>More options while adding</span><span class="shortcut-keys"><kbd class="kbd" data-mod-key="more">⌘⇧M</kbd></span></div>
+        <div class="shortcut-row"><span>More options while adding a Reminder</span><span class="shortcut-keys"><kbd class="kbd" data-mod-key="more">⌘⇧M</kbd></span></div>
         <div class="shortcut-row"><span>Close a sheet, clear search, or go Back</span><span class="shortcut-keys"><kbd class="kbd">Esc</kbd></span></div>
         <p class="notify-hint">Keyboard shortcuts work in the desktop and web app.</p>
       </div>
@@ -824,6 +833,11 @@ curl -X PATCH -H "Authorization: Bearer $TOKEN" \
     <button type="button" id="account-notifications" class="text-btn">
       <span class="foot-ic"><svg class="ic"><use href="#i-bell"/></svg></span>
       <span>Notifications</span>
+    </button>
+    <button type="button" id="account-storage" class="text-btn">
+      <span class="foot-ic"><svg class="ic"><use href="#i-files"/></svg></span>
+      <span>Storage</span>
+      <span id="account-storage-total" class="storage-total"></span>
     </button>
     <button type="button" id="account-settings" class="text-btn">
       <span class="foot-ic"><svg class="ic"><use href="#i-settings"/></svg></span>
