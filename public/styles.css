@@ -3744,3 +3744,12 @@ body.sheet-open .sidebar {
     font-size: 1.25rem !important;
   }
 }
+
+/* Mobile rows: stack Copy above Edit so the note/title preview keeps its width. */
+@media (max-width: 899px) {
+  .row-tools {
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+}
