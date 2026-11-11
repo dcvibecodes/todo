@@ -3614,6 +3614,14 @@ body.sheet-open .sidebar {
   gap: 10px;
 }
 
+#note-editor .e-title {
+  font-size: 1.25rem;
+  line-height: 1.25;
+  font-weight: 600;
+}
+
+#note-editor .note-rich { font-size: 0.9375rem; }
+
 #note-editor .note-body {
   min-height: 45dvh;
   max-height: none;
@@ -3668,10 +3676,15 @@ body.sheet-open .sidebar {
   font-size: 0.8125rem;
 }
 
-.note-md-heading { font-weight: 700; }
-.note-md-h1 { font-size: 1.08em; }
-.note-md-h2 { font-size: 1em; }
-.note-md-h3 { font-size: 0.96em; }
+.note-md-heading {
+  display: block;
+  margin: 4px 0 2px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+.note-md-h1 { font-size: 1.16em; }
+.note-md-h2 { font-size: 1.08em; }
+.note-md-h3 { font-size: 0.98em; }
 .reminder-notes a { color: var(--accent); text-decoration: underline; }
 
 .note-rich {
@@ -3695,9 +3708,13 @@ body.sheet-open .sidebar {
   line-height: 1.25;
 }
 
-.note-rich h1 { font-size: 1.15em; }
-.note-rich h2 { font-size: 1.05em; }
-.note-rich h3 { font-size: 0.98em; }
+.note-rich h1 { font-size: 1.25em; }
+.note-rich h2 {
+  margin: 0.6em 0 0.25em;
+  font-size: 1.1333em;
+  font-weight: 700;
+}
+.note-rich h3 { font-size: 1em; }
 .note-rich p { margin: 0 0 0.45em; }
 .note-rich a { color: var(--accent); text-decoration: underline; }
 

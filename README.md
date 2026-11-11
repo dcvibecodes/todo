@@ -2,6 +2,12 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v4.2.5
+
+- **H2 is distinct from bold** - the Note title is 20px, H2 is 17px and bold body text stays 15px, so section headings read as headings. On note cards the title is 15px, H2 14px and body text 13px.
+- **H2 hierarchy** - H2 is deliberately smaller than the note title but larger than body text.
+- Service worker cache bumped to `workspace-v4.2.5`.
+
 ## What's New in v4.2.4
 
 - **Note line spacing fixed** - rich-note HTML is normalised on save and display: block wrappers are flattened, trailing empty lines are removed, and runs of blank lines collapse to one consistent blank line.
