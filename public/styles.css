@@ -3305,6 +3305,22 @@ body.sheet-open .sidebar {
 
 .doc-icon .ic { width: 18px; height: 18px; }
 
+.doc-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.doc-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
 .doc-folder {
   font-size: 0.75rem;
   color: var(--text-3);
@@ -3334,15 +3350,11 @@ body.sheet-open .sidebar {
 .doc-download:hover { background: var(--fill); color: var(--text); }
 .doc-download .ic { width: 15px; height: 15px; }
 
-.doc-row .reminder-body > .reminder-title {
-  grid-column: 1;
-  grid-row: 1;
+.doc-row .reminder-title {
   font-size: 0.9375rem;
   font-weight: 400;
   line-height: 1.35;
 }
-.doc-row .reminder-body > .doc-folder { grid-column: 1; grid-row: 2; }
-.doc-row .reminder-body > .doc-meta { grid-column: 2; grid-row: 1 / span 2; align-self: center; }
 
 .doc-sheet-file {
   display: flex;
@@ -3488,5 +3500,7 @@ body.sheet-open .sidebar {
 
 @media (max-width: 899px) {
   .tenant-btn { min-height: 40px; }
+  .doc-body { flex-direction: column; align-items: flex-start; gap: 6px; }
+  .doc-meta { justify-content: flex-start; }
   .swipe-content { padding: 13px 12px; }
 }

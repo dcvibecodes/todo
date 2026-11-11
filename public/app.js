@@ -2889,12 +2889,14 @@ function noteRow(note, options = {}) {
 
 function docRow(doc, options = {}) {
   const folder = listById(doc.folder_id);
-  const body = el('div', { class: 'reminder-body' }, [
-    el('div', { class: 'reminder-title', text: doc.name }),
-    folder ? el('div', { class: 'doc-folder meta-list', style: { '--c': colorVar(folder.color) } }, [
-      el('span', { class: 'meta-dot' }),
-      el('span', { text: folder.name }),
-    ]) : null,
+  const body = el('div', { class: 'doc-body' }, [
+    el('div', { class: 'doc-main' }, [
+      el('div', { class: 'reminder-title', text: doc.name }),
+      folder ? el('div', { class: 'doc-folder meta-list', style: { '--c': colorVar(folder.color) } }, [
+        el('span', { class: 'meta-dot' }),
+        el('span', { text: folder.name }),
+      ]) : null,
+    ]),
     el('div', { class: 'doc-meta' }, [
       el('span', { text: fileTypeLabel(doc.name) }),
       el('span', { text: formatBytes(doc.size) }),
