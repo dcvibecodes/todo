@@ -2,6 +2,11 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v4.2.10
+
+- **Copied titles are real headings** - rich-clipboard copies now write the title as an H1 followed by a blank paragraph, so pasting shows a distinct title above the body instead of title-styled text.
+- Service worker cache bumped to `workspace-v4.2.10`.
+
 ## What's New in v4.2.9
 
 - **Copy includes a blank line** - copied reminder and note text is now Title, one blank line, then the body.

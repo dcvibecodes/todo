@@ -2875,8 +2875,8 @@ function htmlToPlainText(html) {
 
 async function copyRichItem(title, plainBody, htmlBody) {
   const plain = [title, String(plainBody || '').trim()].filter(Boolean).join('\n\n');
-  const html = `<div>${escapeHtml(title)}</div>`
-    + (htmlBody ? `<div><br></div>${htmlBody}` : '');
+  const html = `<h1>${escapeHtml(title)}</h1>`
+    + (htmlBody ? `<p><br></p>${htmlBody}` : '');
   try {
     if (htmlBody && navigator.clipboard?.write && typeof ClipboardItem !== 'undefined') {
       await navigator.clipboard.write([new ClipboardItem({
