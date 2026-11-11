@@ -2866,6 +2866,19 @@ function renderDocsView(content, view) {
 }
 
 
+function noteMarkdownHtml(value) {
+  let html = escapeHtml(String(value || ''));
+  html = html.replace(/^(#{1,3})[ \t]+(.+)$/gm, (match, hashes, text) => (
+    `<span class="note-md-heading note-md-h${hashes.length}">${text}</span>`
+  ));
+  html = html.replace(/&lt;u&gt;([\s\S]*?)&lt;\/u&gt;/g, '<u>$1</u>');
+  html = html.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+  html = html.replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, '$1<em>$2</em>');
+  html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+|mailto:[^\s)]+)\)/g,
+    (match, label, url) => `<a href="${url}" target="_blank" rel="noopener noreferrer">${label}</a>`);
+  return html.replace(/\n/g, '<br>');
+}
+
 function noteRow(note, options = {}) {
   const folder = listById(note.folder_id);
   const attachments = attachmentsFor('note', note.id);
@@ -2882,7 +2895,7 @@ function noteRow(note, options = {}) {
         ? el('span', { class: 'meta-repeat', html: `${ICON('files', 'ic')}<span>${attachments.length} file${attachments.length === 1 ? '' : 's'}</span>` })
         : null,
     ]),
-    note.body ? el('div', { class: 'reminder-notes', text: note.body }) : null,
+    note.body ? el('div', { class: 'reminder-notes', html: noteMarkdownHtml(note.body) }) : null,
   ]);
   if (attachments.length) {
     const chips = el('div', { class: 'reminder-links' });
@@ -5219,8 +5232,74 @@ function noteEditorFolderId() {
   return Number($('#n-folder').value) || (systemFolder('notes') ? systemFolder('notes').id : null);
 }
 
+let noteLinkSelection = null;
+
+function applyNoteFormat(kind) {
+  const body = $('#n-body');
+  if (!body) return;
+  const start = body.selectionStart;
+  const end = body.selectionEnd;
+  const value = body.value;
+  if (kind === 'link') {
+    noteLinkSelection = { start, end };
+    $('#note-link-url').value = '';
+    $('#note-link-row').hidden = false;
+    $('#note-link-url').focus();
+    return;
+  }
+  if (kind === 'heading') {
+    const lineStart = value.lastIndexOf('\n', Math.max(0, start - 1)) + 1;
+    const lineEnd = value.indexOf('\n', start);
+    const stop = lineEnd === -1 ? value.length : lineEnd;
+    const line = value.slice(lineStart, stop);
+    const replacement = line.startsWith('## ') ? line.slice(3) : `## ${line}`;
+    const next = value.slice(0, lineStart) + replacement + value.slice(stop);
+    body.value = next;
+    body.selectionStart = body.selectionEnd = lineStart + replacement.length;
+    body.focus();
+    return;
+  }
+  const markers = {
+    bold: ['**', '**'],
+    italic: ['*', '*'],
+    underline: ['<u>', '</u>'],
+  }[kind];
+  if (!markers) return;
+  const [prefix, suffix] = markers;
+  const selected = value.slice(start, end);
+  if (selected.startsWith(prefix) && selected.endsWith(suffix)) {
+    const inner = selected.slice(prefix.length, selected.length - suffix.length);
+    body.value = value.slice(0, start) + inner + value.slice(end);
+    body.selectionStart = start;
+    body.selectionEnd = start + inner.length;
+  } else {
+    body.value = value.slice(0, start) + prefix + selected + suffix + value.slice(end);
+    body.selectionStart = start + prefix.length;
+    body.selectionEnd = end + prefix.length;
+  }
+  body.focus();
+}
+
+function applyNoteLink() {
+  const body = $('#n-body');
+  if (!body || !noteLinkSelection) return;
+  let url = $('#note-link-url').value.trim();
+  if (!url) return;
+  if (!/^(https?:\/\/|mailto:)/i.test(url)) url = 'https://' + url;
+  const { start, end } = noteLinkSelection;
+  const value = body.value;
+  const label = value.slice(start, end) || url;
+  body.value = value.slice(0, start) + `[${label}](${url})` + value.slice(end);
+  body.selectionStart = body.selectionEnd = start + label.length + url.length + 4;
+  body.focus();
+  noteLinkSelection = null;
+  $('#note-link-row').hidden = true;
+}
+
 function openNoteEditor(id) {
   const note = id ? noteById(id) : null;
+  noteLinkSelection = null;
+  $('#note-link-row').hidden = true;
   state.noteEditingId = note ? note.id : null;
   state.notePendingFiles = [];
   state.noteRemovedFiles = [];
@@ -5635,7 +5714,6 @@ async function enableNotifications() {
     });
     state.subscription = subscription;
     updateNotifyUI();
-    toast('Notifications enabled');
   } catch (err) {
     toast(err.message || 'Could not enable notifications');
   }
@@ -6785,6 +6863,20 @@ $('#search-form').addEventListener('submit', (event) => {
 
 $('#editor-form').addEventListener('submit', saveEditor);
 $('#note-form').addEventListener('submit', saveNote);
+$$('.note-format-btn').forEach((button) => {
+  button.addEventListener('mousedown', (event) => event.preventDefault());
+  button.addEventListener('click', () => applyNoteFormat(button.dataset.noteFormat));
+});
+$('#note-link-apply').addEventListener('click', applyNoteLink);
+$('#note-link-cancel').addEventListener('click', () => {
+  noteLinkSelection = null;
+  $('#note-link-row').hidden = true;
+});
+$('#note-link-url').addEventListener('keydown', (event) => {
+  if (event.key !== 'Enter') return;
+  event.preventDefault();
+  applyNoteLink();
+});
 $('#doc-form').addEventListener('submit', saveDoc);
 $('#doc-folder').addEventListener('change', () => { syncDocFolderVisual(); syncDocSave(); });
 $('#n-delete').addEventListener('click', deleteNoteFromEditor);
