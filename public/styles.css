@@ -3334,7 +3334,13 @@ body.sheet-open .sidebar {
 .doc-download:hover { background: var(--fill); color: var(--text); }
 .doc-download .ic { width: 15px; height: 15px; }
 
-.doc-row .reminder-body > .reminder-title { grid-column: 1; grid-row: 1; }
+.doc-row .reminder-body > .reminder-title {
+  grid-column: 1;
+  grid-row: 1;
+  font-size: 0.9375rem;
+  font-weight: 400;
+  line-height: 1.35;
+}
 .doc-row .reminder-body > .doc-folder { grid-column: 1; grid-row: 2; }
 .doc-row .reminder-body > .doc-meta { grid-column: 2; grid-row: 1 / span 2; align-self: center; }
 
@@ -3350,8 +3356,9 @@ body.sheet-open .sidebar {
 .doc-sheet-info { min-width: 0; }
 .doc-sheet-info h3 {
   margin: 0;
-  font-size: 1rem;
-  font-weight: 500;
+  font-size: 0.9375rem;
+  font-weight: 400;
+  line-height: 1.35;
   overflow-wrap: anywhere;
 }
 .doc-sheet-info p {
