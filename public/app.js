@@ -2584,7 +2584,7 @@ function renderSidebar() {
 }
 
 function renderSearchResults(content) {
-  document.title = 'ToDo — Search';
+  document.title = 'Workspace — Search';
   $('#view-title').textContent = 'Search';
   $('#view-menu').hidden = true;
   const totals = state.searchTotals || { open: 0, completed: 0, notes: 0, docs: 0 };
@@ -2699,7 +2699,7 @@ function renderMain() {
   }
 
   if (view === 'home') {
-    document.title = 'ToDo';
+    document.title = 'Workspace';
     syncNoteExpanders();
     return;
   }
@@ -2737,7 +2737,7 @@ function renderMain() {
     $('#view-menu').hidden = false;
     $('#view-menu').onclick = () => openListSheet(list);
   }
-  document.title = `ToDo — ${title}`;
+  document.title = `Workspace — ${title}`;
 
   if (!items.length) {
     content.append(emptyState(view));
@@ -2808,7 +2808,7 @@ function renderNotesView(content, view) {
   const folder = folderId ? listById(folderId) : null;
   const title = folder ? folder.name : 'All Notes';
   $('#view-title').textContent = title;
-  document.title = `ToDo — ${title}`;
+  document.title = `Workspace — ${title}`;
   const notes = sortNotes(notesForView(view), effectiveSort(view));
   setPulseText($('#view-count'), notes.length ? String(notes.length) : '');
   if (folder) {
@@ -2839,7 +2839,7 @@ function renderDocsView(content, view) {
   const folder = folderId ? listById(folderId) : null;
   const title = folder ? folder.name : 'All Files';
   $('#view-title').textContent = title;
-  document.title = `ToDo — ${title}`;
+  document.title = `Workspace — ${title}`;
   const docs = sortDocs(docsForView(view), effectiveSort(view));
   setPulseText($('#view-count'), docs.length ? String(docs.length) : '');
   if (folder) {
@@ -5582,7 +5582,7 @@ function updateNotifyUI() {
   const enabled = Boolean(state.subscription);
   $('#notify-status').textContent = enabled
     ? 'Notifications are on for this device. You will be notified when an item is due.'
-    : 'Allow ToDo to send a notification when an item is due.';
+    : 'Allow Workspace to send a notification when an item is due.';
   $('#notify-enable').hidden = enabled;
   $('#notify-test').hidden = !enabled;
   $('#notify-disable').hidden = !enabled;
@@ -5603,7 +5603,7 @@ function openNotifySheet() {
     enable.disabled = true;
   } else if (isIOS && !standalone) {
     hint.hidden = false;
-    hint.textContent = 'On iPhone or iPad, notifications only work after adding ToDo to your Home Screen: tap Share, then Add to Home Screen, and open it from there.';
+    hint.textContent = 'On iPhone or iPad, notifications only work after adding Workspace to your Home Screen: tap Share, then Add to Home Screen, and open it from there.';
     enable.disabled = true;
   } else {
     hint.hidden = true;
@@ -6392,7 +6392,7 @@ async function exportBackup() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `todo-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    link.download = `workspace-backup-${new Date().toISOString().slice(0, 10)}.json`;
     document.body.append(link);
     link.click();
     link.remove();

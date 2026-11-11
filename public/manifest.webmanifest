@@ -1,7 +1,7 @@
 {
-  "name": "ToDo",
-  "short_name": "ToDo",
-  "description": "A self-hosted, Apple Reminders-style task app.",
+  "name": "Workspace",
+  "short_name": "Workspace",
+  "description": "A self-hosted workspace for reminders, notes and documents.",
   "id": "/",
   "start_url": "/",
   "scope": "/",

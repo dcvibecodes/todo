@@ -1572,7 +1572,7 @@ async function main() {
     if (req.token) return denyToken(res);
     const data = req.body.data;
     if (!data || typeof data !== 'object' || !['todo', 'remember', 'done'].includes(data.app)) {
-      return res.status(400).json({ error: 'That is not a ToDo backup file' });
+      return res.status(400).json({ error: 'That is not a Workspace backup file' });
     }
     const counts = { listsAdded: 0, listsSkipped: 0, remindersAdded: 0, remindersSkipped: 0, occurrencesAdded: 0, occurrencesSkipped: 0, notesAdded: 0, notesSkipped: 0 };
     const knownLists = new Set((await db.all('SELECT id FROM lists')).map((r) => r.id));
@@ -3275,7 +3275,7 @@ async function main() {
 
   app.post('/api/push/test', async (req, res) => {
     const result = await push.sendToAll({
-      title: 'ToDo',
+      title: 'Workspace',
       body: 'Notifications are working.',
       url: '/#/today',
       tag: 'todo-test',
@@ -3305,7 +3305,7 @@ async function main() {
   });
 
   app.listen(PORT, HOST, () => {
-    console.log(`ToDo ${VERSION} listening on http://${HOST}:${PORT}`);
+    console.log(`Workspace ${VERSION} listening on http://${HOST}:${PORT}`);
   });
 
   function inQuietHours(nowMs, zone, start, end) {

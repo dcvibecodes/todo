@@ -1,6 +1,13 @@
-# ToDo
+# Workspace
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
+
+## What's New in v4.0.0
+
+- **Renamed to Workspace** - the app is now Workspace everywhere: browser title, sign-in screen, PWA name, notification copy, backup filename and service-worker cache.
+- **New W icon** - the app icon and favicon are a single Fraunces W, keeping the existing dark rounded-square style.
+- **New address** - the app now lives at its new Workspace address; the previous ToDo address is retired.
+- Service worker cache bumped to `workspace-v4.0.0`.
 
 ## What's New in v3.1.13
 

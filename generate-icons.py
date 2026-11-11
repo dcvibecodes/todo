@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Generate the ToDo app icons: stacked TO / DO wordmark in Fraunces on a dark
-rounded square, matching the Spend Less / Invest More icon set."""
+"""Generate the Workspace app icon: a single W in Fraunces on a dark rounded
+square, matching the Spend Less / Invest More icon set."""
 import os
 
 from PIL import Image, ImageDraw, ImageFont
@@ -18,13 +18,10 @@ CANVAS = 512
 CORNER_RADIUS = 128
 BACKGROUND = '#12110F'
 ROW_GAP = 8
-ROW1_SIZE = 140
-ROW2_SIZE = 208
-ROW1_COLOR = '#f5efe6'
-ROW2_COLOR = '#fcfaf3'
+ROW_SIZE = 300
+ROW_COLOR = '#fcfaf3'
 ROWS = [
-    ('TO', ROW1_SIZE, ROW1_COLOR),
-    ('DO', ROW2_SIZE, ROW2_COLOR),
+    ('W', ROW_SIZE, ROW_COLOR),
 ]
 OUTPUTS = [
     ('favicon.svg', None),
