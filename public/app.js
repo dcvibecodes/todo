@@ -2806,7 +2806,7 @@ function docsForView(view) {
 function renderNotesView(content, view) {
   const folderId = viewFolderId(view);
   const folder = folderId ? listById(folderId) : null;
-  const title = folder ? folder.name : 'All Notes';
+  const title = folder ? folder.name : 'All';
   $('#view-title').textContent = title;
   document.title = `Workspace — ${title}`;
   const notes = sortNotes(notesForView(view), effectiveSort(view));
@@ -2837,7 +2837,7 @@ function renderNotesView(content, view) {
 function renderDocsView(content, view) {
   const folderId = viewFolderId(view);
   const folder = folderId ? listById(folderId) : null;
-  const title = folder ? folder.name : 'All Files';
+  const title = folder ? folder.name : 'All';
   $('#view-title').textContent = title;
   document.title = `Workspace — ${title}`;
   const docs = sortDocs(docsForView(view), effectiveSort(view));
@@ -2848,7 +2848,7 @@ function renderDocsView(content, view) {
   }
   if (!docs.length) {
     content.append(el('div', { class: 'empty' }, [
-      el('span', { html: ICON('files') }),
+      el('span', { html: ICON('file') }),
       el('h3', { class: 'empty-heading', text: 'No files yet' }),
       el('p', { text: 'Add Word, PDF, Excel, TXT, Markdown or HTML files to this folder.' }),
       el('button', {
