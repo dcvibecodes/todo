@@ -2,6 +2,11 @@
 
 A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due dates, urgent flags, recurring reminders, natural-language quick add, smart lists, floating time zones, a token API for external agents, completed history, dark mode, and web push. No frontend framework and no build step.
 
+## What's New in v2.13.35
+
+- **Copy an item from its row** - a copy button now sits before the pencil on every reminder row. It copies the title to the clipboard, followed by the note on a new line when one exists, and shows a **Copied** toast.
+- Service worker cache bumped to `todo-v2.13.35`.
+
 ## What's New in v2.13.31
 
 - **The Shortcuts sheet no longer auto-focuses Done** - opening it with **S** or the toolbar button leaves focus where it was, so Done has no focus ring. Esc and Done still close the sheet.

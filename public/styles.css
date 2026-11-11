@@ -485,6 +485,7 @@ body.gate-open {
   .icon-btn::after,
   .back-btn::after,
   .check::after,
+  .row-copy::after,
   .row-edit::after,
   .row-delete::after,
   .list-grip::after,
@@ -504,6 +505,7 @@ body.gate-open {
   .history-undo::after { inset: -10px -6px; }
   .check::after { inset: -10px; }
   .sort-completed-filter::after { inset: -8px -4px; }
+  .row-copy::after { inset: -5px; }
   .row-edit::after { inset: -5px; }
   .row-delete::after { inset: -5px; }
   .list-grip::after { inset: -11px; }
@@ -1354,6 +1356,7 @@ body.flipping .reminder-group { overflow: visible; }
   gap: 8px;
 }
 
+.row-copy,
 .row-edit {
   position: relative;
   flex: none;
@@ -1370,11 +1373,15 @@ body.flipping .reminder-group { overflow: visible; }
   transition: opacity 0.15s, background 0.15s, color 0.15s;
 }
 
+.row-copy .ic,
 .row-edit .ic { width: 15px; height: 15px; }
 
+.reminder:hover .row-copy,
+.row-copy:focus-visible,
 .reminder:hover .row-edit,
 .row-edit:focus-visible { opacity: 0.9; }
 
+.row-copy:hover,
 .row-edit:hover { background: var(--fill); color: var(--text); opacity: 1; }
 
 .row-delete {

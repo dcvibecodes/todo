@@ -3120,6 +3120,27 @@ function reminderRow(reminder, options = {}) {
     toggleCompleted(reminder, event.currentTarget.closest('.reminder'));
   });
 
+  // Copy puts the title on the clipboard, followed by the note on a new line
+  // when one exists. It sits beside the pencil so both row controls are equal.
+  const copy = el('button', {
+    type: 'button',
+    class: 'row-copy',
+    title: 'Copy item',
+    'aria-label': `Copy ${reminder.title}`,
+    html: ICON('copy', 'ic'),
+    onclick: async (event) => {
+      event.stopPropagation();
+      const note = (reminder.notes || '').trim();
+      const text = [reminder.title, note].filter(Boolean).join('\n');
+      try {
+        await navigator.clipboard.writeText(text);
+        toast('Copied');
+      } catch {
+        toast('Copy failed');
+      }
+    },
+  });
+
   // Editing is explicit: the pencil is the only row control that opens the
   // editor. A tap anywhere else on the row is inert (or closes a parked swipe).
   const edit = el('button', {
@@ -3149,7 +3170,7 @@ function reminderRow(reminder, options = {}) {
     },
   });
 
-  const tools = el('div', { class: 'row-tools' }, [edit, remove]);
+  const tools = el('div', { class: 'row-tools' }, [copy, edit, remove]);
 
   const deleteAction = el('button', {
     type: 'button',
