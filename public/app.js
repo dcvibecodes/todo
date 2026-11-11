@@ -1231,6 +1231,48 @@ function finishNavAnimation() {
     main.classList.remove('nav-incoming');
     main.style.transform = '';
   }
+  const sidebar = $('.sidebar');
+  if (sidebar) {
+    sidebar.getAnimations().forEach((animation) => animation.cancel());
+    sidebar.classList.remove('nav-incoming');
+    sidebar.style.transform = '';
+  }
+}
+
+function animateTenantTransition(nextTenant, forward) {
+  if (!NAV_MOBILE.matches || MOTION_REDUCED.matches || document.body.dataset.screen !== 'home') {
+    setTenant(nextTenant);
+    return;
+  }
+  finishNavAnimation();
+  const snapshot = screenSnapshot('.sidebar', forward ? 20 : 30);
+  const sidebar = $('.sidebar');
+  setTenant(nextTenant);
+  document.body.classList.add('nav-animating');
+  if (forward && sidebar) {
+    activeNavSnapshot = snapshot;
+    sidebar.classList.add('nav-incoming');
+    const animation = sidebar.animate(
+      [{ transform: 'translateX(100%)' }, { transform: 'none' }],
+      { duration: 260, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' },
+    );
+    const finish = () => finishNavAnimation();
+    animation.onfinish = finish;
+    animation.oncancel = finish;
+    return;
+  }
+  if (snapshot) {
+    activeNavSnapshot = snapshot;
+    const animation = snapshot.animate(
+      [{ transform: 'none' }, { transform: 'translateX(100%)' }],
+      { duration: 260, easing: 'cubic-bezier(0.4, 0, 0.2, 1)' },
+    );
+    const finish = () => finishNavAnimation();
+    animation.onfinish = finish;
+    animation.oncancel = finish;
+  } else {
+    finishNavAnimation();
+  }
 }
 
 function screenSnapshot(selector, zIndex) {
@@ -6599,7 +6641,7 @@ let tenantSwipeStart = null;
       event.preventDefault();
       const index = order.indexOf(state.tenant);
       if (index === -1) return;
-      setTenant(order[(index + (dx < 0 ? 1 : order.length - 1)) % order.length]);
+      animateTenantTransition(order[(index + (dx < 0 ? 1 : order.length - 1)) % order.length], dx < 0);
     }, { passive: false });
     sidebar.addEventListener('touchcancel', () => { tenantSwipeStart = null; });
   }

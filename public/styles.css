@@ -1214,7 +1214,8 @@ body.list-dragging .list-grip { cursor: grabbing; }
 
 .nav-snapshot.sidebar::-webkit-scrollbar { display: none; }
 
-.main.nav-incoming { position: relative; z-index: 30; }
+.main.nav-incoming,
+.sidebar.nav-incoming { position: relative; z-index: 30; }
 
 body.nav-animating .shell { pointer-events: none; }
 
