@@ -1682,6 +1682,7 @@ html.deleting-row #content { overflow-anchor: none; }
   .reminder-body > .reminder-due,
   .reminder-body > .reminder-title,
   .reminder-body > .reminder-meta,
+  .reminder-body > .reminder-notes,
   .reminder-body > .note-wrap,
   .reminder-body > .reminder-links { grid-column: 1; }
   /* One block holds Snooze and Reschedule: its top lines up with the
@@ -3282,16 +3283,7 @@ body.sheet-open .sidebar {
 
 .note-row .reminder-title { font-weight: 600; }
 
-.note-preview {
-  font-size: 0.8125rem;
-  line-height: 1.4;
-  color: var(--text-2);
-  white-space: pre-line;
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-line-clamp: 4;
-  -webkit-box-orient: vertical;
-}
+
 
 .note-row .row-edit { opacity: 0.6; }
 

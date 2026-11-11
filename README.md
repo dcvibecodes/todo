@@ -2,6 +2,13 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v3.1.5
+
+- **Notes rows match reminders** - the note title now sits above a two-line note preview with an ellipsis instead of appearing beside it.
+- **Expand notes on the card** - tapping a long note expands and collapses it exactly like a reminder note.
+- **Copy notes** - every note row now has the same copy icon as reminder items.
+- Service worker cache bumped to `todo-v3.1.5`.
+
 ## What's New in v3.1.4
 
 - **Collapsible search** - the search bar is now a search icon in the tenant bar, placed before Refresh. Tapping it expands the search over the bar from the right edge to the left, Scrawl-style, with a close ×.

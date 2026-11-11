@@ -2635,6 +2635,7 @@ function renderMain() {
 
   if (view === 'notes' || String(view).startsWith('notes-folder-')) {
     renderNotesView(content, view);
+    syncNoteExpanders();
     return;
   }
   if (view === 'docs' || String(view).startsWith('docs-folder-')) {
@@ -2812,7 +2813,7 @@ function noteRow(note, options = {}) {
   const attachments = attachmentsFor('note', note.id);
   const body = el('div', { class: 'reminder-body' }, [
     el('div', { class: 'reminder-title', text: note.title }),
-    note.body ? el('div', { class: 'note-preview', text: note.body }) : null,
+    note.body ? el('div', { class: 'reminder-notes', text: note.body }) : null,
     el('div', { class: 'reminder-meta' }, [
       options.showFolder && folder
         ? el('span', { class: 'meta-list', style: { '--c': colorVar(folder.color) } }, [
@@ -2830,6 +2831,23 @@ function noteRow(note, options = {}) {
     for (const file of attachments) chips.append(fileChip(file));
     body.append(chips);
   }
+  const copy = el('button', {
+    type: 'button',
+    class: 'row-copy',
+    title: 'Copy note',
+    'aria-label': `Copy ${note.title}`,
+    html: ICON('copy', 'ic'),
+    onclick: async (event) => {
+      event.stopPropagation();
+      const text = [note.title, (note.body || '').trim()].filter(Boolean).join('\n');
+      try {
+        await navigator.clipboard.writeText(text);
+        toast('Copied');
+      } catch {
+        toast('Copy failed');
+      }
+    },
+  });
   const edit = el('button', {
     type: 'button',
     class: 'row-edit',
@@ -2845,17 +2863,24 @@ function noteRow(note, options = {}) {
     html: ICON('x', 'ic'),
     onclick: (event) => { event.stopPropagation(); handleNoteDelete(note, event.currentTarget); },
   });
-  const tools = el('div', { class: 'row-tools' }, [edit, remove]);
+  const tools = el('div', { class: 'row-tools' }, [copy, edit, remove]);
   return swipeRow({
     class: 'note-row',
     color: folder ? colorVar(folder.color) : colorVar('gray'),
-    data: { 'data-note-id': note.id },
+    data: { 'data-note-id': note.id, 'data-reminder-id': 'note-' + note.id },
     label: note.title,
     onDelete: (button) => handleNoteDelete(note, button),
     onClick: (event) => {
+      const row = event.currentTarget;
       if (event.target.closest('a, button, input, textarea, select')) return;
       if (Date.now() - lastSwipeEnd < 400) return;
-      openNoteEditor(note.id);
+      if (row.classList.contains('swipe-open')) {
+        resetSwipe(row);
+        return;
+      }
+      if (!row.classList.contains('has-long-note')) return;
+      const noteEl = row.querySelector('.reminder-notes');
+      if (noteEl) toggleNoteForRow(row, noteEl);
     },
     content: [body, tools],
   });
