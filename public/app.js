@@ -2914,7 +2914,7 @@ function docRow(doc, options = {}) {
     color: folder ? colorVar(folder.color) : colorVar('gray'),
     data: { 'data-doc-id': doc.id },
     label: doc.name,
-    icon: 'files',
+    icon: 'file',
     onDelete: (button) => handleDocDelete(doc, button),
     content: [body, tools],
   });
