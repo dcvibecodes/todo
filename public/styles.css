@@ -329,11 +329,21 @@ body.gate-open {
   display: flex;
   align-items: center;
   gap: 10px;
+  margin: 0 0 12px;
   padding: 0;
 }
 
 .sidebar-head .tenant-switch { flex: 1; min-width: 0; margin: 0; }
-.sidebar-head .head-actions { gap: 12px; align-self: center; }
+
+.search-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 0 14px;
+}
+
+.search-row .search { flex: 1; min-width: 0; margin: 0; }
+.search-row .head-actions { gap: 12px; align-self: center; }
 
 .head-actions {
   display: flex;
@@ -489,7 +499,7 @@ body.gate-open {
   position: relative;
   display: flex;
   align-items: center;
-  margin: 12px 0 16px;
+  margin: 0;
 }
 
 .search-ic {
