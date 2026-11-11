@@ -2879,6 +2879,37 @@ function noteMarkdownHtml(value) {
   return html.replace(/\n/g, '<br>');
 }
 
+function safeNoteHtml(value, preview = false) {
+  const doc = new DOMParser().parseFromString(`<div>${String(value || '')}</div>`, 'text/html');
+  const root = doc.body.firstElementChild;
+  if (!root) return '';
+  const walk = (node) => {
+    if (node.nodeType === Node.TEXT_NODE) return escapeHtml(node.nodeValue || '');
+    if (node.nodeType !== Node.ELEMENT_NODE) return '';
+    const tag = node.tagName;
+    const inner = Array.from(node.childNodes).map(walk).join('');
+    if (tag === 'BR') return '<br>';
+    if (tag === 'B' || tag === 'STRONG') return `<strong>${inner}</strong>`;
+    if (tag === 'I' || tag === 'EM') return `<em>${inner}</em>`;
+    if (tag === 'U') return `<u>${inner}</u>`;
+    if (tag === 'A') {
+      const href = node.getAttribute('href') || '';
+      if (!/^(https?:\/\/|mailto:)/i.test(href)) return inner;
+      return `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${inner}</a>`;
+    }
+    if (tag === 'H1' || tag === 'H2' || tag === 'H3') {
+      return preview
+        ? `<span class="note-md-heading note-md-h${tag[1]}">${inner}</span>`
+        : `<${tag.toLowerCase()}>${inner}</${tag.toLowerCase()}>`;
+    }
+    if (tag === 'P' || tag === 'DIV') return preview ? `${inner}<br>` : `<div>${inner}</div>`;
+    if (tag === 'LI') return `• ${inner}<br>`;
+    if (tag === 'SPAN') return `<span>${inner}</span>`;
+    return inner;
+  };
+  return walk(root).replace(/<br>\s*$/, '');
+}
+
 function noteRow(note, options = {}) {
   const folder = listById(note.folder_id);
   const attachments = attachmentsFor('note', note.id);
@@ -2895,7 +2926,10 @@ function noteRow(note, options = {}) {
         ? el('span', { class: 'meta-repeat', html: `${ICON('files', 'ic')}<span>${attachments.length} file${attachments.length === 1 ? '' : 's'}</span>` })
         : null,
     ]),
-    note.body ? el('div', { class: 'reminder-notes', html: noteMarkdownHtml(note.body) }) : null,
+    note.body ? el('div', {
+      class: 'reminder-notes',
+      html: note.body_format === 'html' ? safeNoteHtml(note.body, true) : noteMarkdownHtml(note.body),
+    }) : null,
   ]);
   if (attachments.length) {
     const chips = el('div', { class: 'reminder-links' });
@@ -5232,80 +5266,80 @@ function noteEditorFolderId() {
   return Number($('#n-folder').value) || (systemFolder('notes') ? systemFolder('notes').id : null);
 }
 
-let noteLinkSelection = null;
+let noteLinkRange = null;
+
+function noteSelectedRange() {
+  const selection = window.getSelection();
+  if (!selection || !selection.rangeCount) return null;
+  const range = selection.getRangeAt(0);
+  const body = $('#n-body');
+  if (!body || !body.contains(range.commonAncestorContainer)) return null;
+  return range.cloneRange();
+}
+
+function restoreNoteRange(range) {
+  if (!range) return;
+  const selection = window.getSelection();
+  selection.removeAllRanges();
+  selection.addRange(range);
+}
 
 function applyNoteFormat(kind) {
   const body = $('#n-body');
   if (!body) return;
-  const start = body.selectionStart;
-  const end = body.selectionEnd;
-  const value = body.value;
+  body.focus();
   if (kind === 'link') {
-    noteLinkSelection = { start, end };
+    noteLinkRange = noteSelectedRange();
     $('#note-link-url').value = '';
     $('#note-link-row').hidden = false;
     $('#note-link-url').focus();
     return;
   }
   if (kind === 'heading') {
-    const lineStart = value.lastIndexOf('\n', Math.max(0, start - 1)) + 1;
-    const lineEnd = value.indexOf('\n', start);
-    const stop = lineEnd === -1 ? value.length : lineEnd;
-    const line = value.slice(lineStart, stop);
-    const replacement = line.startsWith('## ') ? line.slice(3) : `## ${line}`;
-    const next = value.slice(0, lineStart) + replacement + value.slice(stop);
-    body.value = next;
-    body.selectionStart = body.selectionEnd = lineStart + replacement.length;
-    body.focus();
+    const current = document.queryCommandValue('formatBlock').toLowerCase();
+    document.execCommand('formatBlock', false, current === 'h2' ? 'p' : 'h2');
     return;
   }
-  const markers = {
-    bold: ['**', '**'],
-    italic: ['*', '*'],
-    underline: ['<u>', '</u>'],
-  }[kind];
-  if (!markers) return;
-  const [prefix, suffix] = markers;
-  const selected = value.slice(start, end);
-  if (selected.startsWith(prefix) && selected.endsWith(suffix)) {
-    const inner = selected.slice(prefix.length, selected.length - suffix.length);
-    body.value = value.slice(0, start) + inner + value.slice(end);
-    body.selectionStart = start;
-    body.selectionEnd = start + inner.length;
-  } else {
-    body.value = value.slice(0, start) + prefix + selected + suffix + value.slice(end);
-    body.selectionStart = start + prefix.length;
-    body.selectionEnd = end + prefix.length;
-  }
-  body.focus();
+  document.execCommand(kind, false, null);
 }
 
 function applyNoteLink() {
   const body = $('#n-body');
-  if (!body || !noteLinkSelection) return;
+  if (!body) return;
   let url = $('#note-link-url').value.trim();
   if (!url) return;
   if (!/^(https?:\/\/|mailto:)/i.test(url)) url = 'https://' + url;
-  const { start, end } = noteLinkSelection;
-  const value = body.value;
-  const label = value.slice(start, end) || url;
-  body.value = value.slice(0, start) + `[${label}](${url})` + value.slice(end);
-  body.selectionStart = body.selectionEnd = start + label.length + url.length + 4;
   body.focus();
-  noteLinkSelection = null;
+  const link = document.createElement('a');
+  link.href = url;
+  if (noteLinkRange && !noteLinkRange.collapsed) {
+    link.textContent = noteLinkRange.toString();
+    noteLinkRange.deleteContents();
+    noteLinkRange.insertNode(link);
+  } else {
+    link.textContent = url;
+    if (noteLinkRange) {
+      noteLinkRange.insertNode(link);
+    } else {
+      body.append(link);
+    }
+  }
+  noteLinkRange = null;
   $('#note-link-row').hidden = true;
 }
 
 function openNoteEditor(id) {
   const note = id ? noteById(id) : null;
-  noteLinkSelection = null;
+  noteLinkRange = null;
   $('#note-link-row').hidden = true;
   state.noteEditingId = note ? note.id : null;
   state.notePendingFiles = [];
   state.noteRemovedFiles = [];
   $('#note-heading').textContent = note ? 'Edit Note' : 'New Note';
   $('#n-title').value = note ? note.title : '';
-  $('#n-body').value = note ? note.body : '';
+  $('#n-body').innerHTML = note
+    ? (note.body_format === 'html' ? safeNoteHtml(note.body, false) : noteMarkdownHtml(note.body))
+    : '';
   $('#n-delete').hidden = !note;
   $('#n-delete').textContent = 'Delete Note';
   const folderSelect = $('#n-folder');
@@ -5384,16 +5418,16 @@ async function saveNote(event) {
     toast('Choose a Notes folder');
     return;
   }
-  const body = $('#n-body').value;
+  const body = safeNoteHtml($('#n-body').innerHTML, false);
   const submit = $('#note-submit');
   submit.disabled = true;
   submit.textContent = 'Saving…';
   try {
     let id = state.noteEditingId;
     if (id) {
-      await api('/api/notes/' + id, { method: 'PATCH', body: { title, body, folder_id: folderId } });
+      await api('/api/notes/' + id, { method: 'PATCH', body: { title, body, body_format: 'html', folder_id: folderId } });
     } else {
-      const created = await api('/api/notes', { method: 'POST', body: { title, body, folder_id: folderId } });
+      const created = await api('/api/notes', { method: 'POST', body: { title, body, body_format: 'html', folder_id: folderId } });
       id = created.id;
     }
     for (const fileId of state.noteRemovedFiles) {
@@ -6869,8 +6903,17 @@ $$('.note-format-btn').forEach((button) => {
 });
 $('#note-link-apply').addEventListener('click', applyNoteLink);
 $('#note-link-cancel').addEventListener('click', () => {
-  noteLinkSelection = null;
+  noteLinkRange = null;
   $('#note-link-row').hidden = true;
+});
+$('#n-body').addEventListener('click', (event) => {
+  const link = event.target.closest('a');
+  if (link) event.preventDefault();
+});
+$('#n-body').addEventListener('paste', (event) => {
+  event.preventDefault();
+  const text = event.clipboardData.getData('text/plain');
+  document.execCommand('insertText', false, text);
 });
 $('#note-link-url').addEventListener('keydown', (event) => {
   if (event.key !== 'Enter') return;

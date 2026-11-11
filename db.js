@@ -304,6 +304,9 @@ async function init() {
   if (!noteColumns.some((column) => column.name === 'revision')) {
     await run('ALTER TABLE notes ADD COLUMN revision INTEGER NOT NULL DEFAULT 0');
   }
+  if (!noteColumns.some((column) => column.name === 'body_format')) {
+    await run("ALTER TABLE notes ADD COLUMN body_format TEXT NOT NULL DEFAULT 'text'");
+  }
   // Every uploaded file: Docs rows themselves (owner_type = 'doc') plus
   // attachments owned by a reminder or a note. `stored_name` is an opaque
   // filename under data/uploads; the original name is display metadata.

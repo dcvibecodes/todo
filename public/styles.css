@@ -3669,3 +3669,39 @@ body.sheet-open .sidebar {
 .note-md-h2 { font-size: 1em; }
 .note-md-h3 { font-size: 0.96em; }
 .reminder-notes a { color: var(--accent); text-decoration: underline; }
+
+.note-rich {
+  min-height: 45dvh;
+  max-height: none;
+  overflow-y: auto;
+  white-space: normal;
+  cursor: text;
+}
+
+.note-rich:empty::before {
+  content: attr(data-placeholder);
+  color: var(--text-3);
+  pointer-events: none;
+}
+
+.note-rich h1,
+.note-rich h2,
+.note-rich h3 {
+  margin: 0.4em 0 0.2em;
+  line-height: 1.25;
+}
+
+.note-rich h1 { font-size: 1.15em; }
+.note-rich h2 { font-size: 1.05em; }
+.note-rich h3 { font-size: 0.98em; }
+.note-rich p { margin: 0 0 0.45em; }
+.note-rich a { color: var(--accent); text-decoration: underline; }
+
+.reminder-notes h1,
+.reminder-notes h2,
+.reminder-notes h3 {
+  margin: 0;
+  font-size: inherit;
+  font-weight: 700;
+  display: inline;
+}

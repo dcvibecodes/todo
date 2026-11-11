@@ -1784,7 +1784,7 @@ async function main() {
       `SELECT reminder_id, occurrence_at, status, title, notes, list_id, urgent,
          completed_at, created_at FROM reminder_occurrences ORDER BY id`
     );
-    const notes = await db.all('SELECT id, folder_id, title, body, created_at, updated_at FROM notes ORDER BY id');
+    const notes = await db.all('SELECT id, folder_id, title, body, body_format, created_at, updated_at FROM notes ORDER BY id');
     res.json({
       app: 'todo',
       format: 1,
@@ -1929,9 +1929,10 @@ async function main() {
       }
       try {
         await db.run(
-          'INSERT INTO notes (id, folder_id, title, body, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+          'INSERT INTO notes (id, folder_id, title, body, body_format, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
           [note.id, note.folder_id, String(note.title).slice(0, 500),
             String(note.body || '').slice(0, NOTE_BODY_MAX),
+            note.body_format === 'html' ? 'html' : 'text',
             typeof note.created_at === 'string' ? note.created_at : new Date().toISOString(),
             typeof note.updated_at === 'string' ? note.updated_at : new Date().toISOString()]
         );
@@ -2312,7 +2313,7 @@ async function main() {
       FROM lists l ORDER BY l.tenant, l.sort_order, l.id
     `, [thirtyDayCutoff]);
     const notes = await db.all(`
-      SELECT n.id, n.folder_id, n.title, n.body, n.revision, n.created_at, n.updated_at,
+      SELECT n.id, n.folder_id, n.title, n.body, n.body_format, n.revision, n.created_at, n.updated_at,
              l.name AS folder_name, l.color AS folder_color
       FROM notes n JOIN lists l ON l.id = n.folder_id
       ORDER BY n.updated_at DESC, n.id DESC
@@ -2414,7 +2415,7 @@ async function main() {
         [cutoffs['1m'], cutoffs['3m'], cutoffs['6m'], cutoffs['12m']]
       ) : [],
       includeNotes ? db.all(
-        `SELECT n.id, n.folder_id, n.title, n.body, n.revision, n.created_at, n.updated_at,
+        `SELECT n.id, n.folder_id, n.title, n.body, n.body_format, n.revision, n.created_at, n.updated_at,
                 l.name AS folder_name, l.color AS folder_color
          FROM notes n JOIN lists l ON l.id = n.folder_id
          WHERE instr(lower(n.title), lower(?)) > 0 OR instr(lower(n.body), lower(?)) > 0
@@ -2641,8 +2642,8 @@ async function main() {
 
   /* ---------------- Notes tenant ---------------- */
 
-  const NOTE_COLUMNS = 'id, folder_id, title, body, revision, created_at, updated_at';
-  const NOTE_WRITE_FIELDS = ['title', 'body', 'folder_id', 'base_revision', 'base_epoch', 'idempotency_key'];
+  const NOTE_COLUMNS = 'id, folder_id, title, body, body_format, revision, created_at, updated_at';
+  const NOTE_WRITE_FIELDS = ['title', 'body', 'body_format', 'folder_id', 'base_revision', 'base_epoch', 'idempotency_key'];
 
   async function loadNoteRow(id) {
     return db.get(`SELECT ${NOTE_COLUMNS} FROM notes WHERE id = ?`, [id]);
@@ -2664,6 +2665,9 @@ async function main() {
     }
     if (body.title !== undefined && typeof body.title !== 'string') return 'Invalid title';
     if (body.body !== undefined && typeof body.body !== 'string') return 'Invalid body';
+    if (body.body_format !== undefined && !['text', 'html'].includes(body.body_format)) {
+      return 'Invalid body_format';
+    }
     if (body.folder_id !== undefined && (!Number.isInteger(body.folder_id) || body.folder_id <= 0)) {
       return 'Invalid folder_id';
     }
@@ -2729,6 +2733,7 @@ async function main() {
           const title = text(req.body.title, 500);
           if (!title) return { status: 400, body: { error: 'Note title is required' } };
           const body = typeof req.body.body === 'string' ? req.body.body.slice(0, NOTE_BODY_MAX) : '';
+          const bodyFormat = req.body.body_format === 'html' ? 'html' : 'text';
           const folderId = req.body.folder_id === undefined || req.body.folder_id === null
             ? await systemFolderId('notes')
             : req.body.folder_id;
@@ -2736,8 +2741,8 @@ async function main() {
           if (!folder) return { status: 400, body: { error: 'Choose a Notes folder' } };
           const now = new Date().toISOString();
           const result = await db.run(
-            'INSERT INTO notes (folder_id, title, body, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
-            [folder.id, title, body, now, now]
+            'INSERT INTO notes (folder_id, title, body, body_format, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+            [folder.id, title, body, bodyFormat, now, now]
           );
           const note = await loadNoteRow(result.lastID);
           return { status: 201, body: { id: result.lastID, note } };
@@ -2747,6 +2752,7 @@ async function main() {
     const title = text(req.body.title, 500);
     if (!title) return res.status(400).json({ error: 'Note title is required' });
     const body = typeof req.body.body === 'string' ? req.body.body.slice(0, NOTE_BODY_MAX) : '';
+    const bodyFormat = req.body.body_format === 'html' ? 'html' : 'text';
     const folderId = req.body.folder_id === undefined || req.body.folder_id === null
       ? await systemFolderId('notes')
       : parseId(req.body.folder_id);
@@ -2754,8 +2760,8 @@ async function main() {
     if (!folder) return res.status(400).json({ error: 'Choose a Notes folder' });
     const now = new Date().toISOString();
     const result = await db.run(
-      'INSERT INTO notes (folder_id, title, body, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
-      [folder.id, title, body, now, now]
+      'INSERT INTO notes (folder_id, title, body, body_format, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+      [folder.id, title, body, bodyFormat, now, now]
     );
     res.status(201).json({ id: result.lastID });
   });
@@ -2792,6 +2798,10 @@ async function main() {
             fields.push('body = ?');
             params.push(req.body.body.slice(0, NOTE_BODY_MAX));
           }
+          if (req.body.body_format !== undefined) {
+            fields.push('body_format = ?');
+            params.push(req.body.body_format);
+          }
           if (req.body.folder_id !== undefined) {
             const folder = await folderRow(req.body.folder_id, 'notes');
             if (!folder) return { status: 400, body: { error: 'Choose a Notes folder' } };
@@ -2825,6 +2835,13 @@ async function main() {
     if (req.body.body !== undefined) {
       fields.push('body = ?');
       params.push(typeof req.body.body === 'string' ? req.body.body.slice(0, NOTE_BODY_MAX) : '');
+    }
+    if (req.body.body_format !== undefined) {
+      if (!['text', 'html'].includes(req.body.body_format)) {
+        return res.status(400).json({ error: 'Invalid body_format' });
+      }
+      fields.push('body_format = ?');
+      params.push(req.body.body_format);
     }
     if (req.body.folder_id !== undefined) {
       const folder = await folderRow(parseId(req.body.folder_id), 'notes');

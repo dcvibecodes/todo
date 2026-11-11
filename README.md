@@ -2,6 +2,13 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v4.2.1
+
+- **True rich-text Note editor** - bold, italic, underline, H2 headings and links now format live inside the editor instead of showing Markdown syntax.
+- **Formatting on note cards** - saved formatting renders in both the collapsed preview and the expanded note, with safe HTML sanitising.
+- **Note format migration** - notes now carry a text/HTML body format; existing text notes are converted to rich HTML when next saved, and JSON backup preserves the format.
+- Service worker cache bumped to `workspace-v4.2.1`.
+
 ## What's New in v4.2.0
 
 - **Full-screen Note editor** - editing a Note now opens a full-height editor with the note body as the main area. Reminder editing keeps its existing sheet.
