@@ -523,6 +523,8 @@
         <button type="submit" id="note-submit" class="text-btn strong">Save</button>
       </header>
       <div class="sheet-body editor-body">
+        <div class="editor-fields">
+          <input id="n-title" class="e-title" placeholder="Note title" maxlength="500" required autocomplete="off">
         <div class="note-format-bar" role="toolbar" aria-label="Note formatting">
           <button type="button" class="note-format-btn" data-note-format="bold" title="Bold" aria-label="Bold"><strong>B</strong></button>
           <button type="button" class="note-format-btn" data-note-format="italic" title="Italic" aria-label="Italic"><em>I</em></button>
@@ -535,8 +537,6 @@
           <button type="button" id="note-link-apply" class="mini-btn">Add link</button>
           <button type="button" id="note-link-cancel" class="mini-btn">Cancel</button>
         </div>
-        <div class="editor-fields">
-          <input id="n-title" class="e-title" placeholder="Note title" maxlength="500" required autocomplete="off">
           <div id="n-body" class="e-notes note-body note-rich" contenteditable="true" role="textbox" aria-multiline="true" data-placeholder="Write your note"></div>
         </div>
         <div class="ed-section">
