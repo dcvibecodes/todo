@@ -5267,6 +5267,7 @@ function noteEditorFolderId() {
 }
 
 let noteLinkRange = null;
+let noteSavedRange = null;
 
 function noteSelectedRange() {
   const selection = window.getSelection();
@@ -5287,9 +5288,11 @@ function restoreNoteRange(range) {
 function applyNoteFormat(kind) {
   const body = $('#n-body');
   if (!body) return;
+  const saved = noteSavedRange;
   body.focus();
+  if (saved) restoreNoteRange(saved);
   if (kind === 'link') {
-    noteLinkRange = noteSelectedRange();
+    noteLinkRange = noteSelectedRange() || saved;
     $('#note-link-url').value = '';
     $('#note-link-row').hidden = false;
     $('#note-link-url').focus();
@@ -5331,6 +5334,7 @@ function applyNoteLink() {
 function openNoteEditor(id) {
   const note = id ? noteById(id) : null;
   noteLinkRange = null;
+  noteSavedRange = null;
   $('#note-link-row').hidden = true;
   state.noteEditingId = note ? note.id : null;
   state.notePendingFiles = [];
@@ -6914,6 +6918,12 @@ $('#n-body').addEventListener('paste', (event) => {
   event.preventDefault();
   const text = event.clipboardData.getData('text/plain');
   document.execCommand('insertText', false, text);
+});
+document.addEventListener('selectionchange', () => {
+  const body = $('#n-body');
+  if (!body || !body.contains(window.getSelection()?.anchorNode)) return;
+  const range = noteSelectedRange();
+  if (range) noteSavedRange = range;
 });
 $('#note-link-url').addEventListener('keydown', (event) => {
   if (event.key !== 'Enter') return;
