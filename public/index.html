@@ -549,7 +549,7 @@
     </form>
   </div>
 
-  <input id="docs-file-input" type="file" multiple accept=".doc,.docx,.pdf,.xls,.xlsx,.txt,.md" hidden>
+  <input id="docs-file-input" type="file" multiple accept=".doc,.docx,.pdf,.xls,.xlsx,.txt,.md,.html,.htm" hidden>
 
   <div id="notify-sheet" class="sheet" hidden>
     <div class="sheet-backdrop" data-close></div>
@@ -609,8 +609,12 @@
             </select>
           </label>
           <p class="notify-hint">Theme and density preview instantly on this device — Save to keep, Cancel to undo.</p>
+        </div>
+        <div class="settings-group">
+          <h3>Reminders</h3>
+          <h4 class="settings-subhead">Folder progress</h4>
           <label class="settings-row" for="set-list-progress">
-            <span>Folder progress</span>
+            <span>Style</span>
             <select id="set-list-progress">
               <option value="bar">Bar with counts</option>
               <option value="ring">Ring on the dot</option>
@@ -618,16 +622,14 @@
             </select>
           </label>
           <label class="settings-row" for="set-list-progress-range">
-            <span>Progress counts</span>
+            <span>Counts</span>
             <select id="set-list-progress-range">
               <option value="all">All completed</option>
               <option value="30d">Last 30 days</option>
             </select>
           </label>
           <p class="notify-hint">Bar and ring compare each Reminders folder's open items with its completed ones — all time, or the last 30 days. Previews instantly — Save to sync these choices to your other devices, Cancel to undo.</p>
-        </div>
-        <div class="settings-group">
-          <h3>New items</h3>
+          <h4 class="settings-subhead">New reminders</h4>
           <label class="settings-row" for="set-default-model">
             <span>Default time model</span>
             <select id="set-default-model">
@@ -645,11 +647,9 @@
             <span>Date-only time</span>
             <input id="set-default-time" type="time">
           </label>
-          <p class="settings-note"><strong>Applies to new items only.</strong> Existing items keep their current time model and zone. Floating items follow the last confirmed device zone.</p>
+          <p class="settings-note"><strong>Applies to new reminders only.</strong> Existing reminders keep their current time model and zone. Floating items follow the last confirmed device zone.</p>
           <p class="notify-hint">Floating follows the last confirmed device zone; Anchored pins a named zone.</p>
-        </div>
-        <div class="settings-group">
-          <h3>Sorting</h3>
+          <h4 class="settings-subhead">Sorting</h4>
           <label class="settings-row" for="set-sort-field">
             <span>Sort by</span>
             <select id="set-sort-field">
@@ -666,9 +666,7 @@
             </select>
           </label>
           <p class="notify-hint">Saving applies this sorting to every Reminders folder and smart view except Today and Scheduled (Due date / Soonest on top, because only dated items appear there) and Completed (Date completed / Newest on top). Change those views from their own sort controls. Each folder can still choose its own sorting afterwards; sorting syncs across your devices.</p>
-        </div>
-        <div class="settings-group">
-          <h3>Notifications</h3>
+          <h4 class="settings-subhead">Notifications</h4>
           <label class="settings-row" for="set-repush">
             <span>Re-push missed items</span>
             <input id="set-repush" type="checkbox">
@@ -690,23 +688,11 @@
             <input id="set-quiet-end" type="time">
           </label>
           <p class="notify-hint">Re-push is off by default. First notifications always fire, even in quiet hours; only repeats stay silent.</p>
-        </div>
-        <div class="settings-group">
-          <h3>Time zone</h3>
+          <h4 class="settings-subhead">Time zone</h4>
           <p class="notify-hint" id="device-zone-label">Time zone: unknown yet.</p>
           <button type="button" id="zone-use-device" class="secondary-btn" hidden>Use this device's time zone</button>
-        </div>
-        <div class="settings-group">
-          <h3>Backup</h3>
-          <button type="button" id="export-btn" class="secondary-btn">Download backup (JSON)</button>
-          <button type="button" id="import-btn" class="secondary-btn">Import backup…</button>
-          <input id="import-file" type="file" accept="application/json,.json" hidden>
-          <p id="import-msg" class="form-msg" hidden></p>
-          <p class="notify-hint">Import adds missing folders and items; it never overwrites or deletes anything.</p>
-        </div>
-        <div class="settings-group">
-          <h3>API tokens</h3>
-          <p class="notify-hint">Tokens let your other agents work with items — no browser needed. A token can never delete, manage folders, or change the password.</p>
+          <h4 class="settings-subhead">API tokens</h4>
+          <p class="notify-hint">Tokens let your other agents work with reminder items — no browser needed. A token can never delete, manage folders, or change the password.</p>
           <label class="settings-row" for="token-name">
             <span>Name</span>
             <input id="token-name" type="text" placeholder="e.g. friday-agent" maxlength="80" autocomplete="off">
@@ -752,6 +738,24 @@ curl -X PATCH -H "Authorization: Bearer $TOKEN" \
           </details>
         </div>
         <div class="settings-group">
+          <h3>Storage</h3>
+        <p class="notify-hint" id="storage-summary">Loading storage&hellip;</p>
+        <div id="storage-breakdown" class="storage-breakdown"></div>
+        <details class="token-examples" id="storage-largest-wrap">
+          <summary>Largest files</summary>
+          <div id="storage-largest" class="storage-largest"></div>
+        </details>
+        <p class="notify-hint">Usage counters only — nothing is deleted automatically.</p>
+        </div>
+        <div class="settings-group">
+          <h3>Backup</h3>
+          <button type="button" id="export-btn" class="secondary-btn">Download backup (JSON)</button>
+          <button type="button" id="import-btn" class="secondary-btn">Import backup…</button>
+          <input id="import-file" type="file" accept="application/json,.json" hidden>
+          <p id="import-msg" class="form-msg" hidden></p>
+          <p class="notify-hint">Import adds missing folders and items; it never overwrites or deletes anything.</p>
+        </div>
+        <div class="settings-group">
           <h3>Username</h3>
           <p id="username-display" class="notify-hint">Username: not set</p>
           <form id="username-form" novalidate>
@@ -773,26 +777,6 @@ curl -X PATCH -H "Authorization: Bearer $TOKEN" \
     </div>
   </div>
 
-  <div id="storage-sheet" class="sheet" hidden>
-    <div class="sheet-backdrop" data-close></div>
-    <div class="sheet-card">
-      <header class="sheet-head">
-        <span></span>
-        <span>Storage</span>
-        <button type="button" class="text-btn strong" data-close>Done</button>
-      </header>
-      <div class="sheet-body">
-        <p class="notify-hint" id="storage-summary">Loading storage&hellip;</p>
-        <div id="storage-breakdown" class="storage-breakdown"></div>
-        <details class="token-examples" id="storage-largest-wrap">
-          <summary>Largest files</summary>
-          <div id="storage-largest" class="storage-largest"></div>
-        </details>
-        <p class="notify-hint">Usage counters only — nothing is deleted automatically.</p>
-      </div>
-    </div>
-  </div>
-
   <div id="username-gate" class="gate-overlay" hidden>
     <div class="gate-card" role="dialog" aria-modal="true" aria-labelledby="gate-title">
       <h2 id="gate-title">Choose your username</h2>
@@ -810,11 +794,6 @@ curl -X PATCH -H "Authorization: Bearer $TOKEN" \
     <button type="button" id="account-notifications" class="text-btn">
       <span class="foot-ic"><svg class="ic"><use href="#i-bell"/></svg></span>
       <span>Notifications</span>
-    </button>
-    <button type="button" id="account-storage" class="text-btn">
-      <span class="foot-ic"><svg class="ic"><use href="#i-files"/></svg></span>
-      <span>Storage</span>
-      <span id="account-storage-total" class="storage-total"></span>
     </button>
     <button type="button" id="account-settings" class="text-btn">
       <span class="foot-ic"><svg class="ic"><use href="#i-settings"/></svg></span>

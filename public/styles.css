@@ -2414,6 +2414,17 @@ body.sheet-open .sidebar {
 
 /* ---------- Settings ---------- */
 
+.settings-subhead {
+  margin: 18px 0 4px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.settings-subhead:first-of-type { margin-top: 2px; }
+
 .settings-group {
   display: flex;
   flex-direction: column;
@@ -2679,13 +2690,6 @@ body.sheet-open .sidebar {
 }
 
 .account-menu .text-btn { width: 100%; }
-
-.account-menu .storage-total {
-  margin-left: auto;
-  color: var(--text-3);
-  font-size: 0.6875rem;
-  font-variant-numeric: tabular-nums;
-}
 
 /* ---------- Desktop: mirror the mobile Home ---------- */
 @media (min-width: 900px) {
@@ -3404,21 +3408,6 @@ body.sheet-open .sidebar {
   white-space: pre-wrap;
 }
 
-.docs-storage {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 8px 16px;
-  margin-bottom: 12px;
-  padding: 12px 14px;
-  border: 1px solid var(--line-soft);
-  border-radius: var(--radius);
-  background: var(--surface);
-  color: var(--text-2);
-  font-size: 0.8125rem;
-}
-
-.docs-storage strong { color: var(--text); font-size: 1rem; }
 
 .storage-breakdown {
   display: grid;

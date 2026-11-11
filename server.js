@@ -28,7 +28,7 @@ const LIST_COLORS = new Set(['red', 'rose', 'orange', 'yellow', 'lime', 'green',
 const NOTES_MAX = 50000;
 const NOTE_BODY_MAX = 200000;
 const TENANTS = new Set(['reminders', 'notes', 'docs']);
-const DOC_EXTENSIONS = new Set(['.doc', '.docx', '.pdf', '.xls', '.xlsx', '.txt', '.md']);
+const DOC_EXTENSIONS = new Set(['.doc', '.docx', '.pdf', '.xls', '.xlsx', '.txt', '.md', '.html', '.htm']);
 const UPLOAD_DIR = path.join(db.DATA_DIR, 'uploads');
 const UPLOAD_MAX_BYTES = 25 * 1024 * 1024;
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -2485,7 +2485,7 @@ async function main() {
     if (unsupported) {
       await removeStoredFiles(req.files);
       return res.status(400).json({
-        error: 'Docs supports Word, PDF, Excel, TXT and Markdown files only',
+        error: 'Docs supports Word, PDF, Excel, TXT, Markdown and HTML files only',
       });
     }
     const rows = await saveUploads(req, {

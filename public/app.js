@@ -48,7 +48,6 @@ const state = {
   editorPendingFiles: [],
   editorRemovedFiles: [],
   docsUploadFolder: null,
-  storageLoading: false,
   justAddedId: null,
   selectedColor: 'blue',
   csrfToken: null,
@@ -1857,8 +1856,6 @@ function toggleAccountMenu() {
     return;
   }
   syncMenuButtons();
-  updateAccountStorageTotal();
-  ensureStorage();
 }
 
 function closeAccountMenu() {
@@ -2790,13 +2787,11 @@ function renderDocsView(content, view) {
     $('#view-menu').hidden = false;
     $('#view-menu').onclick = () => openListSheet(folder);
   }
-  ensureStorage();
-  content.append(docsStoragePanel(docs));
   if (!docs.length) {
     content.append(el('div', { class: 'empty' }, [
       el('span', { html: ICON('files') }),
       el('h3', { class: 'empty-heading', text: 'No files yet' }),
-      el('p', { text: 'Add Word, PDF, Excel, TXT or Markdown files to this folder.' }),
+      el('p', { text: 'Add Word, PDF, Excel, TXT, Markdown or HTML files to this folder.' }),
       el('button', {
         type: 'button',
         class: 'primary-btn',
@@ -2811,24 +2806,12 @@ function renderDocsView(content, view) {
   content.append(group);
 }
 
-function docsStoragePanel(docs) {
-  const storage = state.storage;
-  const count = docs.length;
-  const bytes = docs.reduce((sum, doc) => sum + (doc.size || 0), 0);
-  return el('div', { class: 'docs-storage' }, [
-    el('span', { html: `${ICON('files')} <strong>${escapeHtml(formatBytes(bytes))}</strong> in ${count} file${count === 1 ? '' : 's'}` }),
-    storage
-      ? el('span', { text: `Docs total ${formatBytes(storage.tenants.docs.total)} · app total ${formatBytes(storage.total)}` })
-      : el('span', { text: 'Loading app storage…' }),
-  ]);
-}
 
 function noteRow(note, options = {}) {
   const folder = listById(note.folder_id);
   const attachments = attachmentsFor('note', note.id);
   const body = el('div', { class: 'reminder-body' }, [
     el('div', { class: 'reminder-title', text: note.title }),
-    note.body ? el('div', { class: 'reminder-notes', text: note.body }) : null,
     el('div', { class: 'reminder-meta' }, [
       options.showFolder && folder
         ? el('span', { class: 'meta-list', style: { '--c': colorVar(folder.color) } }, [
@@ -2840,6 +2823,7 @@ function noteRow(note, options = {}) {
         ? el('span', { class: 'meta-repeat', html: `${ICON('files', 'ic')}<span>${attachments.length} file${attachments.length === 1 ? '' : 's'}</span>` })
         : null,
     ]),
+    note.body ? el('div', { class: 'reminder-notes', text: note.body }) : null,
   ]);
   if (attachments.length) {
     const chips = el('div', { class: 'reminder-links' });
@@ -2960,7 +2944,7 @@ function swipeRow({ class: extraClass, color, data, label, onDelete, content, ic
 
 function fileTypeLabel(name) {
   const ext = String(name || '').split('.').pop().toLowerCase();
-  const labels = { doc: 'Word', docx: 'Word', pdf: 'PDF', xls: 'Excel', xlsx: 'Excel', txt: 'TXT', md: 'Markdown' };
+  const labels = { doc: 'Word', docx: 'Word', pdf: 'PDF', xls: 'Excel', xlsx: 'Excel', txt: 'TXT', md: 'Markdown', html: 'HTML', htm: 'HTML' };
   return labels[ext] || 'File';
 }
 
@@ -3019,16 +3003,6 @@ async function handleDocDelete(doc, button) {
   }
 }
 
-function ensureStorage() {
-  if (state.storage || state.storageLoading) return;
-  state.storageLoading = true;
-  api('/api/storage').then((data) => {
-    state.storage = data;
-    updateAccountStorageTotal();
-    if (state.tenant === 'docs' || state.view === 'docs' || String(state.view).startsWith('docs-folder-')) render();
-    if (!$('#storage-sheet').hidden) renderStorageSettings();
-  }).catch(() => {}).finally(() => { state.storageLoading = false; });
-}
 
 function renderStorageSettings() {
   const summary = $('#storage-summary');
@@ -3059,7 +3033,6 @@ function renderStorageSettings() {
       el('span', { text: detail }),
     ]));
   }
-  updateAccountStorageTotal();
   largest.replaceChildren();
   if (!storage.largest.length) {
     largest.append(el('p', { class: 'notify-hint', text: 'No uploaded files yet.' }));
@@ -6015,21 +5988,6 @@ function updateSettingsDirty(preserveMessage = false) {
   if (dirty && !preserveMessage) $('#settings-msg').hidden = true;
 }
 
-function updateAccountStorageTotal() {
-  const total = $('#account-storage-total');
-  if (!total) return;
-  total.textContent = state.storage ? formatBytes(state.storage.total) : '';
-}
-
-async function openStorage() {
-  closeAccountMenu();
-  renderStorageSettings();
-  openSheet('#storage-sheet');
-  try { state.storage = await api('/api/storage'); } catch { /* keep cached usage */ }
-  renderStorageSettings();
-}
-
-
 async function openSettings() {
   closeAccountMenu();
   applyTheme(themePreference, false);
@@ -6060,6 +6018,9 @@ async function openSettings() {
   $('#set-sort-dir').value = state.sortDefault.dir;
   syncSortDirLabels($('#set-sort-field'), $('#set-sort-dir'));
   renderDeviceZoneRow();
+  renderStorageSettings();
+  try { state.storage = await api('/api/storage'); } catch { /* keep cached usage */ }
+  renderStorageSettings();
   $('#token-once').hidden = true;
   $('#token-name').value = '';
   await renderTokenList();
@@ -6480,7 +6441,6 @@ $('#fab-add').addEventListener('click', () => {
 $('#menu-btn').addEventListener('click', handleMenuButton);
 $('#sidebar-menu-btn').addEventListener('click', toggleAccountMenu);
 $('#account-notifications').addEventListener('click', () => { closeAccountMenu(); openNotifySheet(); });
-$('#account-storage').addEventListener('click', openStorage);
 $('#account-settings').addEventListener('click', () => { closeAccountMenu(); openSettings(); });
 $('#account-logout').addEventListener('click', () => { closeAccountMenu(); logout(); });
 document.addEventListener('click', (event) => {
