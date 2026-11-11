@@ -2461,6 +2461,23 @@ body.sheet-open .sidebar {
 .settings-group input:focus { outline: none; border-color: var(--accent); }
 .settings-group .primary-btn { margin-top: 2px; }
 
+#username-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.settings-input-row {
+  display: flex;
+  gap: 10px;
+}
+
+.settings-input-row input {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+}
+
 .theme-toggle-row {
   display: flex;
   gap: 2px;
@@ -2690,6 +2707,13 @@ body.sheet-open .sidebar {
 }
 
 .account-menu .text-btn { width: 100%; }
+
+.account-menu .storage-total {
+  margin-left: auto;
+  color: var(--text-3);
+  font-size: 0.6875rem;
+  font-variant-numeric: tabular-nums;
+}
 
 /* ---------- Desktop: mirror the mobile Home ---------- */
 @media (min-width: 900px) {

@@ -798,8 +798,10 @@ curl -X PATCH -H "Authorization: Bearer $TOKEN" \
           <h3>Username</h3>
           <p id="username-display" class="notify-hint">Username: not set</p>
           <form id="username-form" novalidate>
-            <input id="username-new" type="text" placeholder="New username" maxlength="50" autocomplete="username" required>
-            <input id="username-current-password" type="password" placeholder="Current password" autocomplete="current-password" required>
+            <div class="settings-input-row">
+              <input id="username-new" type="text" placeholder="New username" maxlength="50" autocomplete="username" required>
+              <input id="username-current-password" type="password" placeholder="Current password" autocomplete="current-password" required>
+            </div>
             <p id="username-msg" class="form-msg" hidden></p>
             <button type="submit" class="primary-btn">Update Username</button>
           </form>
@@ -833,6 +835,11 @@ curl -X PATCH -H "Authorization: Bearer $TOKEN" \
     <button type="button" id="account-notifications" class="text-btn">
       <span class="foot-ic"><svg class="ic"><use href="#i-bell"/></svg></span>
       <span>Notifications</span>
+    </button>
+    <button type="button" id="account-storage" class="text-btn">
+      <span class="foot-ic"><svg class="ic"><use href="#i-files"/></svg></span>
+      <span>Storage</span>
+      <span id="account-storage-total" class="storage-total"></span>
     </button>
     <button type="button" id="account-settings" class="text-btn">
       <span class="foot-ic"><svg class="ic"><use href="#i-settings"/></svg></span>
