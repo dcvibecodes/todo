@@ -2866,6 +2866,37 @@ function renderDocsView(content, view) {
 }
 
 
+function htmlToPlainText(html) {
+  const doc = new DOMParser().parseFromString(`<div>${String(html || '')}</div>`, 'text/html');
+  doc.querySelectorAll('br').forEach((node) => node.replaceWith('\n'));
+  doc.querySelectorAll('div,p,h1,h2,h3,li,blockquote').forEach((node) => node.append('\n'));
+  return (doc.body.textContent || '').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+async function copyRichItem(title, plainBody, htmlBody) {
+  const plain = [title, String(plainBody || '').trim()].filter(Boolean).join('\n\n');
+  const html = `<div>${escapeHtml(title)}</div>`
+    + (htmlBody ? `<div><br></div>${htmlBody}` : '');
+  try {
+    if (htmlBody && navigator.clipboard?.write && typeof ClipboardItem !== 'undefined') {
+      await navigator.clipboard.write([new ClipboardItem({
+        'text/plain': new Blob([plain], { type: 'text/plain' }),
+        'text/html': new Blob([html], { type: 'text/html' }),
+      })]);
+    } else {
+      await navigator.clipboard.writeText(plain);
+    }
+    toast('Copied');
+  } catch {
+    try {
+      await navigator.clipboard.writeText(plain);
+      toast('Copied');
+    } catch {
+      toast('Copy failed');
+    }
+  }
+}
+
 function noteMarkdownHtml(value) {
   let html = escapeHtml(String(value || ''));
   html = html.replace(/^(#{1,3})[ \t]+(.+)$/gm, (match, hashes, text) => (
@@ -2986,13 +3017,10 @@ function noteRow(note, options = {}) {
     html: ICON('copy', 'ic'),
     onclick: async (event) => {
       event.stopPropagation();
-      const text = [note.title, (note.body || '').trim()].filter(Boolean).join('\n');
-      try {
-        await navigator.clipboard.writeText(text);
-        toast('Copied');
-      } catch {
-        toast('Copy failed');
-      }
+      const htmlBody = note.body_format === 'html'
+        ? safeNoteHtml(note.body, false)
+        : noteMarkdownHtml(note.body);
+      await copyRichItem(note.title, htmlToPlainText(htmlBody), htmlBody);
     },
   });
   const edit = el('button', {
@@ -3852,13 +3880,10 @@ function reminderRow(reminder, options = {}) {
     onclick: async (event) => {
       event.stopPropagation();
       const note = (reminder.notes || '').trim();
-      const text = [reminder.title, note].filter(Boolean).join('\n');
-      try {
-        await navigator.clipboard.writeText(text);
-        toast('Copied');
-      } catch {
-        toast('Copy failed');
-      }
+      const htmlBody = note
+        ? `<div>${escapeHtml(note).replace(/\n/g, '<br>')}</div>`
+        : '';
+      await copyRichItem(reminder.title, note, htmlBody);
     },
   });
 
