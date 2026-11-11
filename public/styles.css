@@ -520,21 +520,7 @@ body.gate-open {
 .search input:focus { outline: none; border-color: var(--accent); }
 .search input::-webkit-search-cancel-button { -webkit-appearance: none; }
 
-.search-scope {
-  flex: none;
-  height: 36px;
-  margin-left: 6px;
-  padding: 0 8px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: var(--elev);
-  color: var(--text-2);
-  font-family: inherit;
-  font-size: 0.75rem;
-  font-weight: 500;
-}
 
-.search-scope:focus { outline: none; border-color: var(--accent); }
 
 /* ---------- Day Peek ---------- */
 
@@ -2819,7 +2805,7 @@ body.sheet-open .sidebar {
   .view-count { font-size: 0.8125rem; }
   .head-actions { order: 3; align-self: flex-start; }
 
-  .search input, .main-search input, .search-scope,
+  .search input, .main-search input,
   .auth-card input, .gate-card input, .settings-group input, .e-title, .e-notes,
   #editor .e-title, #editor .e-notes,
   .ed-subrow input[type="date"], .ed-subrow input[type="time"],

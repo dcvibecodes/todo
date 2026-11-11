@@ -26,8 +26,6 @@ const state = {
   settings: {},
   view: 'today',
   search: '',
-  searchScope: ['all', 'reminders', 'notes', 'docs'].includes(localStorage.getItem('todo.searchScope'))
-    ? localStorage.getItem('todo.searchScope') : 'all',
   searchOpen: [],
   searchCompleted: [],
   searchNotes: [],
@@ -6482,12 +6480,11 @@ function scheduleSearch() {
 // back to the loaded reminders and say the history is incomplete.
 async function runSearch(query) {
   const seq = ++state.searchSeq;
-  const scope = state.searchScope;
-  const includeReminders = scope === 'all' || scope === 'reminders';
-  const includeNotes = scope === 'all' || scope === 'notes';
-  const includeDocs = scope === 'all' || scope === 'docs';
+  const includeReminders = true;
+  const includeNotes = true;
+  const includeDocs = true;
   try {
-    const data = await api(`/api/search?q=${encodeURIComponent(query)}&limit=500&scope=${encodeURIComponent(scope)}`);
+    const data = await api(`/api/search?q=${encodeURIComponent(query)}&limit=500&scope=all`);
     if (seq !== state.searchSeq || query !== state.search) return false;
     state.searchQuery = query;
     state.searchOpen = data.open || [];
@@ -6544,51 +6541,15 @@ function setSearch(value, source) {
   scheduleSearch();
   if (state.search && state.view === 'home') {
     state.searchKeepNavigation = true;
-    go(state.searchScope === 'notes' || state.searchScope === 'docs'
-      ? state.searchScope : 'all');
+    go('all');
     return;
   }
   render();
 }
 
-function syncSearchScopeUI() {
-  const scope = state.searchScope;
-  for (const id of ['#search-scope', '#main-search-scope']) {
-    const select = $(id);
-    if (select) select.value = scope;
-  }
-  const label = scope === 'all' ? 'Search all tenants'
-    : scope === 'reminders' ? 'Search reminders'
-      : scope === 'notes' ? 'Search notes' : 'Search docs';
-  for (const id of ['#search', '#main-search']) {
-    const input = $(id);
-    if (input) input.placeholder = label;
-  }
-}
-
-function setSearchScope(value) {
-  const next = ['all', 'reminders', 'notes', 'docs'].includes(value) ? value : 'all';
-  state.searchScope = next;
-  localStorage.setItem('todo.searchScope', next);
-  syncSearchScopeUI();
-  if (state.search) {
-    state.searchLoading = true;
-    const target = next === 'notes' || next === 'docs' ? next : 'all';
-    if (state.view !== 'home' && state.view !== target) {
-      state.searchKeepNavigation = true;
-      go(target);
-      return;
-    }
-    scheduleSearch();
-    render();
-  }
-}
 
 $('#search').addEventListener('input', (event) => setSearch(event.target.value, 'sidebar'));
 $('#main-search').addEventListener('input', (event) => setSearch(event.target.value, 'main'));
-$('#search-scope').addEventListener('change', (event) => setSearchScope(event.target.value));
-$('#main-search-scope').addEventListener('change', (event) => setSearchScope(event.target.value));
-syncSearchScopeUI();
 
 $('#main-search-form').addEventListener('submit', (event) => {
   event.preventDefault();

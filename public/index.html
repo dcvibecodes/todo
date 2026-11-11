@@ -146,6 +146,11 @@
   <div id="shell" class="shell" hidden>
     <aside class="sidebar">
       <div class="sidebar-top">
+      <form id="search-form" class="search" role="search">
+        <svg class="ic search-ic"><use href="#i-search"/></svg>
+        <input id="search" type="search" placeholder="Search all tenants" autocomplete="off" aria-label="Search items">
+      </form>
+
       <div class="sidebar-head">
         <div id="tenant-switch" class="tenant-switch" role="tablist" aria-label="View">
           <button type="button" class="tenant-btn active" data-tenant="reminders" role="tab" aria-selected="true">Reminders</button>
@@ -162,16 +167,6 @@
         </div>
       </div>
 
-      <form id="search-form" class="search" role="search">
-        <svg class="ic search-ic"><use href="#i-search"/></svg>
-        <input id="search" type="search" placeholder="Search all tenants" autocomplete="off" aria-label="Search items">
-        <select id="search-scope" class="search-scope" aria-label="Search in">
-          <option value="all" selected>All tenants</option>
-          <option value="reminders">Reminders</option>
-          <option value="notes">Notes</option>
-          <option value="docs">Docs</option>
-        </select>
-      </form>
 
 
       </div>
@@ -273,12 +268,6 @@
       <form id="main-search-form" class="main-search" role="search">
         <svg class="ic search-ic"><use href="#i-search"/></svg>
         <input id="main-search" type="search" placeholder="Search all tenants" autocomplete="off" aria-label="Search items">
-        <select id="main-search-scope" class="search-scope" aria-label="Search in">
-          <option value="all" selected>All tenants</option>
-          <option value="reminders">Reminders</option>
-          <option value="notes">Notes</option>
-          <option value="docs">Docs</option>
-        </select>
       </form>
 
       <div id="sort-bar" class="sort-bar" hidden>
