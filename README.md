@@ -1,6 +1,16 @@
 # ToDo
 
-A self-hosted, single-user task app in the spirit of Apple Reminders. Lists, due dates, urgent flags, recurring reminders, natural-language quick add, smart lists, floating time zones, a token API for external agents, completed history, dark mode, and web push. No frontend framework and no build step.
+A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
+
+## What's New in v3.0.0
+
+- **Three tenants: Reminders, Notes and Docs** - the main page now has a Reminders / Notes / Docs selector. The old To-do tenant is Reminders.
+- **Folders everywhere** - existing lists became Reminders folders; Notes and Docs use the same folder structure, terminology and delete interactions.
+- **Notes tenant** - folders contain notes with attachments, with no dates, scheduling or completion. Notes can be edited and deleted.
+- **Docs tenant** - folders contain Word, PDF, Excel, TXT and Markdown files. Files are added from the + button and use the existing swipe-left delete interaction.
+- **Reminder attachments** - items in Reminders can now carry file attachments alongside their notes.
+- **Storage usage** - Settings shows total storage plus a per-tenant breakdown and the largest files, with manual deletion. Docs also shows its own usage.
+- Service worker cache bumped to `todo-v3.0.0`.
 
 ## What's New in v2.13.35
 

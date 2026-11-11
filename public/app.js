@@ -18,6 +18,12 @@ const state = {
   vapidPublicKey: null,
   lists: [],
   reminders: [],
+  notes: [],
+  docs: [],
+  attachments: [],
+  storage: null,
+  tenant: ['reminders', 'notes', 'docs'].includes(localStorage.getItem('todo.tenant'))
+    ? localStorage.getItem('todo.tenant') : 'reminders',
   settings: {},
   view: 'today',
   search: '',
@@ -33,6 +39,15 @@ const state = {
   showCompleted: false,
   editingId: null,
   editingListId: null,
+  listTenant: 'reminders',
+  noteEditingId: null,
+  noteSnapshot: null,
+  notePendingFiles: [],
+  noteRemovedFiles: [],
+  editorPendingFiles: [],
+  editorRemovedFiles: [],
+  docsUploadFolder: null,
+  storageLoading: false,
   justAddedId: null,
   selectedColor: 'blue',
   csrfToken: null,
@@ -556,14 +571,49 @@ function listById(id) {
   return state.lists.find((list) => list.id === id) || null;
 }
 
+function tenantOf(list) {
+  return list && (list.tenant === 'notes' || list.tenant === 'docs') ? list.tenant : 'reminders';
+}
+
+function foldersFor(tenant) {
+  return state.lists.filter((list) => tenantOf(list) === tenant);
+}
+
+function systemFolder(tenant) {
+  return foldersFor(tenant).find((list) => list.is_system) || null;
+}
+
+function noteById(id) {
+  return state.notes.find((note) => note.id === id) || null;
+}
+
+function docById(id) {
+  return state.docs.find((doc) => doc.id === id) || null;
+}
+
+function attachmentsFor(ownerType, ownerId) {
+  return state.attachments.filter((file) => file.owner_type === ownerType && file.owner_id === ownerId);
+}
+
+function formatBytes(bytes) {
+  const size = Number(bytes) || 0;
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+  if (size < 1024 * 1024 * 1024) return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(size / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
 function defaultListId() {
-  if (state.view !== 'home' && typeof state.view === 'number' && listById(state.view)) {
+  if (state.view !== 'home' && typeof state.view === 'number' && listById(state.view)
+    && tenantOf(listById(state.view)) === 'reminders') {
     return state.view;
   }
-  const unlisted = state.lists.find((list) => list.is_system);
+  const unlisted = foldersFor('reminders').find((list) => list.is_system);
   if (unlisted) return unlisted.id;
-  if (state.lastListId && listById(state.lastListId)) return state.lastListId;
-  return state.lists[0] ? state.lists[0].id : null;
+  if (state.lastListId && listById(state.lastListId)
+    && tenantOf(listById(state.lastListId)) === 'reminders') return state.lastListId;
+  const first = foldersFor('reminders')[0];
+  return first ? first.id : null;
 }
 
 function setLastList(id) {
@@ -783,6 +833,10 @@ async function logout() {
   state.needsUsername = false;
   state.lists = [];
   state.reminders = [];
+  state.notes = [];
+  state.docs = [];
+  state.attachments = [];
+  state.storage = null;
   state.subscription = null;
   showAuth();
 }
@@ -793,6 +847,9 @@ async function loadState() {
   const data = await api('/api/state');
   state.lists = data.lists || [];
   state.reminders = data.reminders || [];
+  state.notes = data.notes || [];
+  state.docs = data.docs || [];
+  state.attachments = data.attachments || [];
   state.settings = data.settings || {};
   await syncListProgressWithServer();
   await syncSortWithServer();
@@ -1060,10 +1117,56 @@ function parseRoute() {
   if (raw === 'home') return 'home';
   if (raw.startsWith('list/')) {
     const id = Number(raw.slice(5));
-    return listById(id) ? id : 'all';
+    const folder = listById(id);
+    return folder && tenantOf(folder) === 'reminders' ? id : 'all';
+  }
+  if (raw === 'notes') return 'notes';
+  if (raw === 'docs') return 'docs';
+  if (raw.startsWith('notes/folder/')) {
+    const id = Number(raw.slice(13));
+    const folder = listById(id);
+    return folder && tenantOf(folder) === 'notes' ? 'notes-folder-' + id : 'notes';
+  }
+  if (raw.startsWith('docs/folder/')) {
+    const id = Number(raw.slice(13));
+    const folder = listById(id);
+    return folder && tenantOf(folder) === 'docs' ? 'docs-folder-' + id : 'docs';
   }
   if (raw === 'today' || raw === 'scheduled' || raw === 'all' || raw === 'flagged' || raw === 'completed') return raw;
   return 'today';
+}
+
+function routeTenant(view) {
+  if (view === 'notes' || String(view).startsWith('notes-folder-')) return 'notes';
+  if (view === 'docs' || String(view).startsWith('docs-folder-')) return 'docs';
+  if (view === 'home') return state.tenant;
+  return 'reminders';
+}
+
+function viewFolderId(view) {
+  const match = String(view).match(/^(?:notes|docs)-folder-(\d+)$/);
+  return match ? Number(match[1]) : null;
+}
+
+function homeViewForTenant(tenant) {
+  if (tenant === 'notes') return 'notes';
+  if (tenant === 'docs') return 'docs';
+  return 'all';
+}
+
+function setTenant(tenant) {
+  const next = ['reminders', 'notes', 'docs'].includes(tenant) ? tenant : 'reminders';
+  state.tenant = next;
+  localStorage.setItem('todo.tenant', next);
+  state.search = '';
+  $('#search').value = '';
+  $('#main-search').value = '';
+  clearSearchResults();
+  if (state.view !== 'home') {
+    go('home');
+    return;
+  }
+  render();
 }
 
 const SHOW_COMPLETED_KEY = 'todo.showCompleted';
@@ -1222,6 +1325,13 @@ function route() {
   const searching = active && (active === $('#search') || active === $('#main-search')) && state.search;
   if (!searching && active && active.matches('input, textarea, select')) active.blur();
   state.view = view;
+  if (view !== 'home') {
+    const tenant = routeTenant(view);
+    if (tenant !== state.tenant) {
+      state.tenant = tenant;
+      localStorage.setItem('todo.tenant', tenant);
+    }
+  }
   document.body.dataset.screen = view === 'home' ? 'home' : 'detail';
   render();
   if (PAGE_SCROLL_MEDIA.matches) {
@@ -1784,8 +1894,9 @@ function cleanupListDrag() {
 }
 
 function startListDrag(event, list, row, grip) {
+  const siblings = foldersFor(state.tenant);
   if (event.button !== undefined && event.button !== 0) return;
-  if (list.is_system || state.lists.length < 2 || listDrag) return;
+  if (list.is_system || siblings.length < 2 || listDrag) return;
   event.preventDefault();
 
   const rect = row.getBoundingClientRect();
@@ -1810,8 +1921,8 @@ function startListDrag(event, list, row, grip) {
     startY: event.clientY,
     startTop: rect.top,
     height: rect.height,
-    targetIndex: state.lists.findIndex((item) => item.id === list.id),
-    minIndex: state.lists[0] && state.lists[0].is_system ? 1 : 0,
+    targetIndex: siblings.findIndex((item) => item.id === list.id),
+    minIndex: siblings[0] && siblings[0].is_system ? 1 : 0,
     onMove: null,
     onUp: null,
     onCancel: null,
@@ -1841,17 +1952,19 @@ function startListDrag(event, list, row, grip) {
 
   drag.onUp = (upEvent) => {
     if (!listDrag || upEvent.pointerId !== drag.pointerId) return;
+    const current = foldersFor(state.tenant);
     const index = drag.targetIndex;
-    const ids = state.lists.map((item) => item.id).filter((id) => id !== list.id);
+    const ids = current.map((item) => item.id).filter((id) => id !== list.id);
     ids.splice(Math.max(drag.minIndex, Math.min(index, ids.length)), 0, list.id);
-    const changed = ids.some((id, i) => id !== state.lists[i].id);
+    const changed = ids.some((id, i) => id !== current[i].id);
     cleanupListDrag();
     if (!changed) return;
 
-    state.lists = ids.map((id) => state.lists.find((item) => item.id === id));
+    const reordered = ids.map((id) => listById(id));
+    state.lists = [...state.lists.filter((item) => tenantOf(item) !== state.tenant), ...reordered];
     requestListAnimation();
     renderSidebar();
-    persistListOrder(ids);
+    persistListOrder(ids, state.tenant);
   };
 
   drag.onCancel = () => cleanupListDrag();
@@ -1869,8 +1982,8 @@ $('#lists').addEventListener('touchmove', (event) => {
   if (dragTouchGuard) event.preventDefault();
 }, { passive: false });
 
-function persistListOrder(ids) {
-  api('/api/lists/order', { method: 'PUT', body: { ids } }).catch(async (err) => {
+function persistListOrder(ids, tenant = state.tenant) {
+  api('/api/lists/order', { method: 'PUT', body: { ids, tenant } }).catch(async (err) => {
     toast(err.message);
     await loadState();
     render();
@@ -1880,20 +1993,22 @@ function persistListOrder(ids) {
 // Keyboard alternative to drag-and-drop (WCAG 2.2 AA): focus a list's grip
 // and use arrow keys to move it. Every move is announced.
 function moveListKeyboard(listId, direction) {
-  const from = state.lists.findIndex((item) => item.id === listId);
-  if (from === -1 || state.lists[from].is_system) return;
-  const minIndex = state.lists[0] && state.lists[0].is_system ? 1 : 0;
-  const to = Math.max(minIndex, Math.min(state.lists.length - 1, from + direction));
+  const siblings = foldersFor(state.tenant);
+  const from = siblings.findIndex((item) => item.id === listId);
+  if (from === -1 || siblings[from].is_system) return;
+  const minIndex = siblings[0] && siblings[0].is_system ? 1 : 0;
+  const to = Math.max(minIndex, Math.min(siblings.length - 1, from + direction));
   if (to === from) return;
-  const ids = state.lists.map((item) => item.id);
+  const ids = siblings.map((item) => item.id);
   const [moved] = ids.splice(from, 1);
   ids.splice(to, 0, moved);
-  state.lists = ids.map((id) => state.lists.find((item) => item.id === id));
+  const reordered = ids.map((id) => listById(id));
+  state.lists = [...state.lists.filter((item) => tenantOf(item) !== state.tenant), ...reordered];
   requestListAnimation();
   renderSidebar();
-  persistListOrder(ids);
+  persistListOrder(ids, state.tenant);
   const list = listById(listId);
-  announce(`${list ? list.name : 'List'} moved to position ${to + 1} of ${ids.length}`);
+  announce(`${list ? list.name : 'Folder'} moved to position ${to + 1} of ${ids.length}`);
   const grip = $(`#lists .list-grip[data-list-id="${listId}"]`);
   if (grip) grip.focus();
 }
@@ -2280,6 +2395,25 @@ function initDayPeek() {
 }
 
 function renderSidebar() {
+  const tenant = state.tenant;
+  const folders = foldersFor(tenant);
+  $$('#tenant-switch .tenant-btn').forEach((btn) => {
+    const active = btn.dataset.tenant === tenant;
+    btn.classList.toggle('active', active);
+    btn.setAttribute('aria-selected', active ? 'true' : 'false');
+  });
+  $$('#smart-nav .nav-row').forEach((row) => {
+    const view = row.dataset.view;
+    const reminderView = ['today', 'scheduled', 'all', 'flagged', 'completed'].includes(view);
+    row.hidden = reminderView ? tenant !== 'reminders'
+      : view === 'notes' ? tenant !== 'notes'
+        : view === 'docs' ? tenant !== 'docs' : false;
+  });
+  $('#day-peek').hidden = tenant !== 'reminders';
+  $('#folders-label').textContent = 'Folders';
+  const newFolder = $('#new-list-2');
+  newFolder.title = 'New Folder';
+  newFolder.setAttribute('aria-label', 'New Folder');
   updateDayStrip();
   const listFlip = animateNextSidebar
     ? captureRects('#lists .list-row[data-list-id]', (node) => node.dataset.listId)
@@ -2324,6 +2458,8 @@ function renderSidebar() {
   setPulseText($('#count-scheduled'), scheduledCount ? String(scheduledCount) : '');
   setPulseText($('#count-all'), allCount ? String(allCount) : '');
   setPulseText($('#count-flagged'), flaggedCount ? String(flaggedCount) : '');
+  setPulseText($('#count-notes'), state.notes.length ? String(state.notes.length) : '');
+  setPulseText($('#count-docs'), state.docs.length ? String(state.docs.length) : '');
 
   $$('#smart-nav .nav-row').forEach((row) => {
     row.classList.toggle('active', row.dataset.view === state.view);
@@ -2331,8 +2467,8 @@ function renderSidebar() {
 
   const wrap = $('#lists');
   wrap.replaceChildren();
-  if (!state.lists.length) {
-    wrap.append(el('p', { class: 'section-empty', text: 'No lists yet' }));
+  if (!folders.length) {
+    wrap.append(el('p', { class: 'section-empty', text: 'No folders yet' }));
     renderDayPeek();
     return;
   }
@@ -2340,7 +2476,7 @@ function renderSidebar() {
   const progressMode = getListProgress();
   const progressRange = getListProgressRange();
 
-  for (const list of state.lists) {
+  for (const list of folders) {
     const open = list.count || 0;
     const done = (progressRange === '30d' ? list.done_count_30d : list.done_count) || 0;
     const total = open + done;
@@ -2356,7 +2492,8 @@ function renderSidebar() {
       'data-list-id': list.id,
       onclick: () => {
         clearSearch();
-        go('list/' + list.id);
+        go(list.tenant === 'notes' ? 'notes/folder/' + list.id
+          : list.tenant === 'docs' ? 'docs/folder/' + list.id : 'list/' + list.id);
       },
     }, [
       dot,
@@ -2366,7 +2503,7 @@ function renderSidebar() {
     if (list.is_system) {
       row.append(el('span', {
         class: 'list-lock',
-        title: 'Unlisted is always first',
+        title: 'Unfiled is always first',
         'aria-hidden': 'true',
         html: ICON('lock', 'ic'),
       }));
@@ -2390,13 +2527,14 @@ function renderSidebar() {
         } else if (event.key === 'Home' || event.key === 'End') {
           event.preventDefault();
           event.stopPropagation();
-          const from = state.lists.findIndex((item) => item.id === list.id);
-          moveListKeyboard(list.id, (event.key === 'Home' ? 0 : state.lists.length - 1) - from);
+          const siblings = foldersFor(tenant);
+          const from = siblings.findIndex((item) => item.id === list.id);
+          moveListKeyboard(list.id, (event.key === 'Home' ? 0 : siblings.length - 1) - from);
         }
       });
       row.append(grip);
     }
-    if (progressMode === 'bar' && total > 0) {
+    if (progressMode === 'bar' && total > 0 && tenant === 'reminders') {
       row.append(
         el('span', { class: 'list-progress', title: doneTitle, 'aria-hidden': 'true' }, [
           el('span', { class: 'list-progress-fill', style: { width: pct + '%' } }),
@@ -2415,10 +2553,24 @@ function renderSidebar() {
 function renderSearchResults(content) {
   document.title = 'ToDo — Search';
   $('#view-title').textContent = 'Search';
+  $('#view-menu').hidden = true;
+  if (state.tenant === 'notes' || state.tenant === 'docs') {
+    const results = state.searchOpen || [];
+    setPulseText($('#view-count'), results.length ? String(results.length) : '');
+    if (!results.length) {
+      content.append(emptySearchState());
+      return;
+    }
+    const group = el('div', { class: 'reminder-group' });
+    for (const item of results) {
+      group.append(state.tenant === 'notes' ? noteRow(item, { showFolder: true }) : docRow(item, { showFolder: true }));
+    }
+    content.append(el('h3', { class: 'group-title', text: `Results (${results.length})` }), group);
+    return;
+  }
   const totals = state.searchTotals || { open: 0, completed: 0 };
   const total = totals.open + totals.completed;
   setPulseText($('#view-count'), total ? String(total) : '');
-  $('#view-menu').hidden = true;
 
   // /api/search returns both groups in relevance order; offline results are
   // ranked the same way locally, so never re-sort them here.
@@ -2457,7 +2609,7 @@ function emptySearchState() {
   return el('div', { class: 'empty' }, [
     el('span', { html: ICON('search') }),
     el('h3', { class: 'empty-heading', text: 'No matches' }),
-    el('p', { text: `No items match “${state.search}” in any list.` }),
+    el('p', { text: `Nothing matches “${state.search}” here.` }),
     el('button', {
       type: 'button',
       class: 'primary-btn',
@@ -2492,9 +2644,11 @@ function renderMain() {
   const content = $('#content');
   content.replaceChildren();
   $('#view-menu').hidden = true;
+  const tenantView = view === 'notes' || view === 'docs'
+    || String(view).startsWith('notes-folder-') || String(view).startsWith('docs-folder-');
   const sortBar = $('#sort-bar');
   // Relevance-ranked search owns the order, so the Sort/Order bar steps aside.
-  sortBar.hidden = view === 'home' || Boolean(state.search);
+  sortBar.hidden = view === 'home' || Boolean(state.search) || tenantView;
   syncSortFieldOptions(view);
   if (!sortBar.hidden) {
     const sort = effectiveSort(view);
@@ -2519,6 +2673,15 @@ function renderMain() {
   if (view === 'home') {
     document.title = 'ToDo';
     syncNoteExpanders();
+    return;
+  }
+
+  if (view === 'notes' || String(view).startsWith('notes-folder-')) {
+    renderNotesView(content, view);
+    return;
+  }
+  if (view === 'docs' || String(view).startsWith('docs-folder-')) {
+    renderDocsView(content, view);
     return;
   }
 
@@ -2558,7 +2721,7 @@ function renderMain() {
     if (view === 'completed') {
       content.append(el('p', {
         class: 'completed-retention generic',
-        text: 'Completed retention is set per list. Open a list to change it.',
+        text: 'Completed retention is set per folder. Open a folder to change it.',
       }));
     }
     const group = el('div', { class: 'reminder-group' });
@@ -2583,7 +2746,7 @@ function renderMain() {
         el('button', {
           type: 'button',
           class: 'text-btn completed-retention-edit',
-          text: 'Edit list',
+          text: 'Edit folder',
           onclick: () => openListSheet(list),
         }),
       ]),
@@ -2594,11 +2757,368 @@ function renderMain() {
   if (!state.lists.length) {
     content.append(el('button', {
       class: 'toggle-completed',
-      text: 'Create a list to start adding items',
+      text: 'Create a folder to start adding items',
       onclick: () => openListSheet(null),
     }));
   }
   syncNoteExpanders();
+}
+
+function notesForView(view) {
+  const folderId = viewFolderId(view);
+  return folderId ? state.notes.filter((note) => note.folder_id === folderId) : state.notes;
+}
+
+function docsForView(view) {
+  const folderId = viewFolderId(view);
+  return folderId ? state.docs.filter((doc) => doc.folder_id === folderId) : state.docs;
+}
+
+function renderNotesView(content, view) {
+  const folderId = viewFolderId(view);
+  const folder = folderId ? listById(folderId) : null;
+  const title = folder ? folder.name : 'All Notes';
+  $('#view-title').textContent = title;
+  document.title = `ToDo — ${title}`;
+  const notes = notesForView(view);
+  setPulseText($('#view-count'), notes.length ? String(notes.length) : '');
+  if (folder) {
+    $('#view-menu').hidden = false;
+    $('#view-menu').onclick = () => openListSheet(folder);
+  }
+  if (!notes.length) {
+    content.append(el('div', { class: 'empty' }, [
+      el('span', { html: ICON('note') }),
+      el('h3', { class: 'empty-heading', text: 'No notes yet' }),
+      el('p', { text: 'Notes live in folders and can carry file attachments.' }),
+      el('button', {
+        type: 'button',
+        class: 'primary-btn',
+        text: 'New Note',
+        onclick: () => openNoteEditor(null),
+      }),
+    ]));
+    return;
+  }
+  const group = el('div', { class: 'reminder-group' });
+  for (const note of notes) group.append(noteRow(note, { showFolder: !folder }));
+  content.append(group);
+}
+
+function renderDocsView(content, view) {
+  const folderId = viewFolderId(view);
+  const folder = folderId ? listById(folderId) : null;
+  const title = folder ? folder.name : 'All Files';
+  $('#view-title').textContent = title;
+  document.title = `ToDo — ${title}`;
+  const docs = docsForView(view);
+  setPulseText($('#view-count'), docs.length ? String(docs.length) : '');
+  if (folder) {
+    $('#view-menu').hidden = false;
+    $('#view-menu').onclick = () => openListSheet(folder);
+  }
+  ensureStorage();
+  content.append(docsStoragePanel(docs));
+  if (!docs.length) {
+    content.append(el('div', { class: 'empty' }, [
+      el('span', { html: ICON('files') }),
+      el('h3', { class: 'empty-heading', text: 'No files yet' }),
+      el('p', { text: 'Add Word, PDF, Excel, TXT or Markdown files to this folder.' }),
+      el('button', {
+        type: 'button',
+        class: 'primary-btn',
+        text: 'Add files',
+        onclick: chooseDocsFiles,
+      }),
+    ]));
+    return;
+  }
+  const group = el('div', { class: 'reminder-group' });
+  for (const doc of docs) group.append(docRow(doc, { showFolder: !folder }));
+  content.append(group);
+}
+
+function docsStoragePanel(docs) {
+  const storage = state.storage;
+  const count = docs.length;
+  const bytes = docs.reduce((sum, doc) => sum + (doc.size || 0), 0);
+  return el('div', { class: 'docs-storage' }, [
+    el('span', { html: `${ICON('files')} <strong>${escapeHtml(formatBytes(bytes))}</strong> in ${count} file${count === 1 ? '' : 's'}` }),
+    storage
+      ? el('span', { text: `Docs total ${formatBytes(storage.tenants.docs.total)} · app total ${formatBytes(storage.total)}` })
+      : el('span', { text: 'Loading app storage…' }),
+  ]);
+}
+
+function noteRow(note, options = {}) {
+  const folder = listById(note.folder_id);
+  const attachments = attachmentsFor('note', note.id);
+  const body = el('div', { class: 'reminder-body' }, [
+    el('div', { class: 'reminder-title', text: note.title }),
+    note.body ? el('div', { class: 'note-preview', text: note.body }) : null,
+    el('div', { class: 'reminder-meta' }, [
+      options.showFolder && folder
+        ? el('span', { class: 'meta-list', style: { '--c': colorVar(folder.color) } }, [
+          el('span', { class: 'meta-dot' }),
+          el('span', { text: folder.name }),
+        ])
+        : null,
+      attachments.length
+        ? el('span', { class: 'meta-repeat', html: `${ICON('files', 'ic')}<span>${attachments.length} file${attachments.length === 1 ? '' : 's'}</span>` })
+        : null,
+    ]),
+  ]);
+  if (attachments.length) {
+    const chips = el('div', { class: 'reminder-links' });
+    for (const file of attachments) chips.append(fileChip(file));
+    body.append(chips);
+  }
+  const edit = el('button', {
+    type: 'button',
+    class: 'row-edit',
+    title: 'Edit note',
+    'aria-label': `Edit ${note.title}`,
+    html: ICON('pencil', 'ic'),
+    onclick: (event) => { event.stopPropagation(); openNoteEditor(note.id); },
+  });
+  const remove = el('button', {
+    type: 'button',
+    class: 'row-delete',
+    'aria-label': `Delete ${note.title}`,
+    html: ICON('x', 'ic'),
+    onclick: (event) => { event.stopPropagation(); handleNoteDelete(note, event.currentTarget); },
+  });
+  const tools = el('div', { class: 'row-tools' }, [edit, remove]);
+  return swipeRow({
+    class: 'note-row',
+    color: folder ? colorVar(folder.color) : colorVar('gray'),
+    data: { 'data-note-id': note.id },
+    label: note.title,
+    onDelete: (button) => handleNoteDelete(note, button),
+    onClick: (event) => {
+      if (event.target.closest('a, button, input, textarea, select')) return;
+      if (Date.now() - lastSwipeEnd < 400) return;
+      openNoteEditor(note.id);
+    },
+    content: [body, tools],
+  });
+}
+
+function docRow(doc, options = {}) {
+  const folder = listById(doc.folder_id);
+  const body = el('div', { class: 'reminder-body' }, [
+    el('div', { class: 'reminder-title', text: doc.name }),
+    el('div', { class: 'doc-meta' }, [
+      options.showFolder && folder ? el('span', { text: folder.name }) : null,
+      el('span', { text: fileTypeLabel(doc.name) }),
+      el('span', { text: formatBytes(doc.size) }),
+      el('a', {
+        class: 'doc-download',
+        href: '/api/files/' + doc.id,
+        download: doc.name,
+        html: `${ICON('download', 'ic')}<span>Download</span>`,
+      }),
+    ]),
+  ]);
+  const remove = el('button', {
+    type: 'button',
+    class: 'row-delete',
+    'aria-label': `Delete ${doc.name}`,
+    html: ICON('x', 'ic'),
+    onclick: (event) => { event.stopPropagation(); handleDocDelete(doc, event.currentTarget); },
+  });
+  const tools = el('div', { class: 'row-tools' }, [remove]);
+  return swipeRow({
+    class: 'doc-row',
+    color: folder ? colorVar(folder.color) : colorVar('gray'),
+    data: { 'data-doc-id': doc.id },
+    label: doc.name,
+    icon: 'files',
+    onDelete: (button) => handleDocDelete(doc, button),
+    content: [body, tools],
+  });
+}
+
+function swipeRow({ class: extraClass, color, data, label, onDelete, content, icon, onClick }) {
+  const background = el('div', { class: 'swipe-bg', 'aria-hidden': 'true' }, [
+    el('button', {
+      type: 'button',
+      class: 'swipe-act del',
+      tabindex: '-1',
+      'aria-label': `Delete ${label}`,
+      onclick: (event) => { event.stopPropagation(); onDelete(event.currentTarget); },
+    }, [
+      el('span', { class: 'del-label', text: 'Delete' }),
+      el('span', { html: ICON('x', 'ic') }),
+    ]),
+  ]);
+  const leading = icon ? [el('span', { class: 'doc-icon', html: ICON(icon, 'ic') })] : [];
+  return el('div', {
+    class: 'reminder ' + extraClass,
+    style: { '--c': color },
+    ...data,
+    onclick: onClick,
+  }, [background, el('div', { class: 'swipe-content' }, [...leading, ...content])]);
+}
+
+function fileTypeLabel(name) {
+  const ext = String(name || '').split('.').pop().toLowerCase();
+  const labels = { doc: 'Word', docx: 'Word', pdf: 'PDF', xls: 'Excel', xlsx: 'Excel', txt: 'TXT', md: 'Markdown' };
+  return labels[ext] || 'File';
+}
+
+function fileChip(file) {
+  return el('a', {
+    class: 'link-chip',
+    href: '/api/files/' + file.id,
+    download: file.name,
+    title: `Download ${file.name}`,
+    html: `${ICON('files', 'ic')}<span class="link-domain">${escapeHtml(file.name)}</span>`,
+  });
+}
+
+async function handleNoteDelete(note, button) {
+  if (button.dataset.confirm !== '1') {
+    if (!button.dataset.origLabel) button.dataset.origLabel = button.getAttribute('aria-label') || 'Delete note';
+    button.dataset.confirm = '1';
+    button.classList.add('confirming');
+    button.textContent = 'Confirm?';
+    button.setAttribute('aria-label', 'Confirm delete note');
+    clearTimeout(button._confirmTimer);
+    button._confirmTimer = setTimeout(() => resetRowDelete(button), INLINE_CONFIRM_MS);
+    return;
+  }
+  try {
+    await api('/api/notes/' + note.id, { method: 'DELETE' });
+    await loadState();
+    render();
+    toast('Note deleted');
+  } catch (err) {
+    toast(err.message);
+    resetRowDelete(button);
+  }
+}
+
+async function handleDocDelete(doc, button) {
+  if (button.dataset.confirm !== '1') {
+    if (!button.dataset.origLabel) button.dataset.origLabel = button.getAttribute('aria-label') || 'Delete file';
+    button.dataset.confirm = '1';
+    button.classList.add('confirming');
+    button.textContent = 'Confirm?';
+    button.setAttribute('aria-label', 'Confirm delete file');
+    clearTimeout(button._confirmTimer);
+    button._confirmTimer = setTimeout(() => resetRowDelete(button), INLINE_CONFIRM_MS);
+    return;
+  }
+  try {
+    await api('/api/docs/' + doc.id, { method: 'DELETE' });
+    state.storage = null;
+    await loadState();
+    render();
+    toast('File deleted');
+  } catch (err) {
+    toast(err.message);
+    resetRowDelete(button);
+  }
+}
+
+function ensureStorage() {
+  if (state.storage || state.storageLoading) return;
+  state.storageLoading = true;
+  api('/api/storage').then((data) => {
+    state.storage = data;
+    if (state.tenant === 'docs' || state.view === 'docs' || String(state.view).startsWith('docs-folder-')) render();
+    if (!$('#settings-sheet').hidden) renderStorageSettings();
+  }).catch(() => {}).finally(() => { state.storageLoading = false; });
+}
+
+function renderStorageSettings() {
+  const summary = $('#storage-summary');
+  const breakdown = $('#storage-breakdown');
+  const largest = $('#storage-largest');
+  if (!summary || !breakdown || !largest) return;
+  const storage = state.storage;
+  if (!storage) {
+    summary.textContent = 'Loading storage…';
+    breakdown.replaceChildren();
+    largest.replaceChildren();
+    return;
+  }
+  summary.textContent = `${formatBytes(storage.total)} used in total — ${formatBytes(storage.files)} in files and ${formatBytes(storage.database)} in the app database.`;
+  breakdown.replaceChildren();
+  const rows = [
+    ['Reminders', storage.tenants.reminders],
+    ['Notes', storage.tenants.notes],
+    ['Docs', storage.tenants.docs],
+    ['Other app data', { total: storage.other }],
+  ];
+  for (const [label, value] of rows) {
+    const detail = value.files === undefined
+      ? formatBytes(value.total)
+      : `${formatBytes(value.total)} (${formatBytes(value.files)} files + ${formatBytes(value.text)} text)`;
+    breakdown.append(el('div', { class: 'storage-row' }, [
+      el('strong', { text: label }),
+      el('span', { text: detail }),
+    ]));
+  }
+  largest.replaceChildren();
+  if (!storage.largest.length) {
+    largest.append(el('p', { class: 'notify-hint', text: 'No uploaded files yet.' }));
+  }
+  for (const file of storage.largest) {
+    largest.append(el('div', { class: 'storage-file' }, [
+      el('span', { class: 'storage-file-name', text: file.name }),
+      el('span', {
+        class: 'storage-file-meta',
+        text: `${file.folder_name || 'Unfiled'} · ${formatBytes(file.size)}`,
+      }),
+      el('button', {
+        type: 'button',
+        class: 'attach-remove',
+        'aria-label': `Delete ${file.name}`,
+        html: ICON('x', 'ic'),
+        onclick: (event) => deleteStorageFile(file, event.currentTarget),
+      }),
+    ]));
+  }
+}
+
+async function deleteStorageFile(file, button) {
+  if (button.dataset.confirm !== '1') {
+    button.dataset.confirm = '1';
+    button.classList.add('confirming');
+    button.textContent = 'Confirm?';
+    clearTimeout(button._confirmTimer);
+    button._confirmTimer = setTimeout(() => {
+      button.dataset.confirm = '';
+      button.classList.remove('confirming');
+      button.innerHTML = ICON('x', 'ic');
+    }, INLINE_CONFIRM_MS);
+    return;
+  }
+  try {
+    await api('/api/attachments/' + file.id, { method: 'DELETE' });
+    state.storage = null;
+    await loadState();
+    render();
+    await new Promise((resolve) => {
+      api('/api/storage').then((data) => {
+        state.storage = data;
+        renderStorageSettings();
+      }).finally(resolve);
+    });
+    toast('File deleted');
+  } catch (err) {
+    toast(err.message);
+  }
+}
+
+function chooseDocsFiles() {
+  const input = $('#docs-file-input');
+  state.docsUploadFolder = viewFolderId(state.view)
+    || (systemFolder('docs') ? systemFolder('docs').id : null);
+  input.value = '';
+  input.click();
 }
 
 function emptyState(view) {
@@ -2611,9 +3131,9 @@ function emptyState(view) {
     completed: {
       icon: 'done',
       heading: 'No history yet',
-      message: 'Finished items follow each list’s completed retention.',
+      message: 'Finished items follow each folder’s completed retention.',
     },
-  }[view] || { icon: 'all', heading: 'Nothing here', message: 'No items in this list yet.' };
+  }[view] || { icon: 'all', heading: 'Nothing here', message: 'No items in this folder yet.' };
   const children = [
     el('span', { html: ICON(copy.icon) }),
     el('h3', { class: 'empty-heading', text: copy.heading }),
@@ -3044,6 +3564,12 @@ function reminderRow(reminder, options = {}) {
       body.append(links);
     }
   }
+  const files = attachmentsFor('reminder', reminder.id);
+  if (files.length) {
+    const links = el('div', { class: 'reminder-links' });
+    for (const file of files) links.append(fileChip(file));
+    body.append(links);
+  }
 
   if (!options.dayPeek) {
     // Contextual actions live on the row so due items never require opening
@@ -3417,6 +3943,7 @@ function deleteReminderInline(reminder, row) {
   setTimeout(async () => {
     try {
       await api('/api/reminders/' + reminder.id, { method: 'DELETE' });
+      state.storage = null;
       if (canUpdateLocally()) {
         removeReminderLocally(reminder, row);
         toast('Item deleted');
@@ -3948,6 +4475,7 @@ function editorValues() {
 
 function editorIsDirty() {
   if (pendingOccurrenceOps.length || pendingSnooze) return true;
+  if (state.editorPendingFiles.length || state.editorRemovedFiles.length) return true;
   if (!editorSnapshot) return false;
   const current = editorValues();
   return Object.keys(current).some((key) => current[key] !== editorSnapshot[key]);
@@ -4033,10 +4561,54 @@ function toggleEditorMore() {
   }
 }
 
+function renderEditorAttachments() {
+  const wrap = $('#e-attachments');
+  wrap.replaceChildren();
+  const existing = state.editingId
+    ? attachmentsFor('reminder', state.editingId).filter((file) => !state.editorRemovedFiles.includes(file.id))
+    : [];
+  for (const file of existing) {
+    wrap.append(el('div', { class: 'attach-item' }, [
+      el('span', { html: ICON('files', 'ic') }),
+      el('span', { class: 'attach-name', text: file.name }),
+      el('span', { class: 'attach-size', text: formatBytes(file.size) }),
+      el('button', {
+        type: 'button',
+        class: 'attach-remove',
+        'aria-label': `Remove ${file.name}`,
+        html: ICON('x', 'ic'),
+        onclick: () => {
+          state.editorRemovedFiles.push(file.id);
+          renderEditorAttachments();
+        },
+      }),
+    ]));
+  }
+  for (const file of state.editorPendingFiles) {
+    wrap.append(el('div', { class: 'attach-item' }, [
+      el('span', { html: ICON('files', 'ic') }),
+      el('span', { class: 'attach-name', text: file.name }),
+      el('span', { class: 'attach-size', text: formatBytes(file.size) }),
+      el('button', {
+        type: 'button',
+        class: 'attach-remove',
+        'aria-label': `Remove ${file.name}`,
+        html: ICON('x', 'ic'),
+        onclick: () => {
+          state.editorPendingFiles = state.editorPendingFiles.filter((item) => item !== file);
+          renderEditorAttachments();
+        },
+      }),
+    ]));
+  }
+  if (!wrap.childElementCount) wrap.append(el('p', { class: 'notify-hint', text: 'No attachments.' }));
+  syncEditorSubmit();
+}
+
 function openEditor(id) {
   const reminder = id ? findReminder(id) : null;
-  if (!state.lists.length) {
-    toast('Create a list first');
+  if (!foldersFor('reminders').length) {
+    toast('Create a folder first');
     openListSheet(null);
     return;
   }
@@ -4048,6 +4620,8 @@ function openEditor(id) {
   hideParseChip();
 
   state.editingId = reminder ? reminder.id : null;
+  state.editorPendingFiles = [];
+  state.editorRemovedFiles = [];
   pendingOccurrenceOps = [];
   pendingSnooze = null;
   resetEditorDelete();
@@ -4058,11 +4632,12 @@ function openEditor(id) {
 
   const select = $('#e-list');
   select.replaceChildren();
-  for (const list of state.lists) {
+  for (const list of foldersFor('reminders')) {
     select.append(el('option', { value: String(list.id), text: list.name }));
   }
   select.value = String(reminder ? reminder.list_id : defaultListId());
   updateEditorListVisual();
+  renderEditorAttachments();
 
   const due = reminder && reminder.due_at ? new Date(reminder.due_at) : null;
   $('#e-date-on').checked = Boolean(due);
@@ -4199,6 +4774,7 @@ async function saveEditor(event) {
 
   const startedAt = Date.now();
   setEditorSubmitting(true);
+  let savedId = state.editingId;
   try {
     if (state.editingId) {
       // Staged occurrence undos (and the snooze toggle) apply first, newest
@@ -4212,8 +4788,20 @@ async function saveEditor(event) {
       }
     } else {
       const created = await api('/api/reminders', { method: 'POST', body });
-      state.justAddedId = created && created.id ? created.id : null;
+      savedId = created && created.id ? created.id : null;
+      state.justAddedId = savedId;
     }
+    if (savedId) {
+      for (const fileId of state.editorRemovedFiles) {
+        await api('/api/attachments/' + fileId, { method: 'DELETE' });
+      }
+      if (state.editorPendingFiles.length) {
+        await uploadFiles('/api/reminders/' + savedId + '/attachments', state.editorPendingFiles);
+      }
+    }
+    state.editorPendingFiles = [];
+    state.editorRemovedFiles = [];
+    state.storage = null;
     setLastList(listId);
     await settleSubmit(startedAt);
     closeSheet('#editor');
@@ -4423,6 +5011,7 @@ async function deleteReminder() {
   resetEditorDelete();
   try {
     await api('/api/reminders/' + id, { method: 'DELETE' });
+    state.storage = null;
     closeSheet('#editor');
     await loadState();
     requestRowAnimation();
@@ -4454,7 +5043,8 @@ function listCanSubmit() {
   if (!listSnapshot) return true;
   return name !== listSnapshot.name
     || state.selectedColor !== listSnapshot.color
-    || ($('#l-retention').value || 'forever') !== listSnapshot.completed_retention;
+    || (state.listTenant === 'reminders'
+      && ($('#l-retention').value || 'forever') !== listSnapshot.completed_retention);
 }
 
 function syncListSubmit() {
@@ -4493,7 +5083,7 @@ function showListRetentionWarning(retention, count) {
   const noun = count === 1 ? 'item' : 'items';
   listRetentionWarningOpen = true;
   warn.querySelector('.list-retention-warn-text').textContent =
-    `Changing completed retention to ${retentionLabel(retention)} will permanently delete ${count} completed ${noun} older than ${retentionLabel(retention)} in this list. This cannot be undone.`;
+    `Changing completed retention to ${retentionLabel(retention)} will permanently delete ${count} completed ${noun} older than ${retentionLabel(retention)} in this folder. This cannot be undone.`;
   warn.hidden = false;
   syncListSubmit();
   warn.scrollIntoView({
@@ -4503,14 +5093,193 @@ function showListRetentionWarning(retention, count) {
   $('#l-retention-cancel').focus({ preventScroll: true });
 }
 
+async function uploadFiles(path, files, fields = {}) {
+  const form = new FormData();
+  for (const [key, value] of Object.entries(fields)) form.append(key, String(value));
+  for (const file of files) form.append('files', file);
+  const res = await fetch(path, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: state.csrfToken ? { 'X-CSRF-Token': state.csrfToken } : {},
+    body: form,
+  });
+  let data = {};
+  try { data = await res.json(); } catch { /* empty */ }
+  if (!res.ok) throw new Error(data.error || 'Upload failed');
+  return data;
+}
+
+function noteEditorFolderId() {
+  return Number($('#n-folder').value) || (systemFolder('notes') ? systemFolder('notes').id : null);
+}
+
+function openNoteEditor(id) {
+  const note = id ? noteById(id) : null;
+  state.noteEditingId = note ? note.id : null;
+  state.notePendingFiles = [];
+  state.noteRemovedFiles = [];
+  $('#note-heading').textContent = note ? 'Edit Note' : 'New Note';
+  $('#n-title').value = note ? note.title : '';
+  $('#n-body').value = note ? note.body : '';
+  $('#n-delete').hidden = !note;
+  $('#n-delete').textContent = 'Delete Note';
+  const folderSelect = $('#n-folder');
+  folderSelect.replaceChildren();
+  for (const folder of foldersFor('notes')) {
+    folderSelect.append(el('option', { value: folder.id, text: folder.name }));
+  }
+  const preferred = note ? note.folder_id
+    : (viewFolderId(state.view) || (systemFolder('notes') ? systemFolder('notes').id : null));
+  if (preferred) folderSelect.value = String(preferred);
+  syncNoteFolderVisual();
+  state.noteSnapshot = note ? { title: note.title, body: note.body, folder_id: note.folder_id } : null;
+  renderNoteAttachments();
+  openSheet('#note-editor');
+  if (!note) setTimeout(() => $('#n-title').focus(), 80);
+}
+
+function syncNoteFolderVisual() {
+  const folder = listById(Number($('#n-folder').value));
+  $('#n-folder-value').textContent = folder ? folder.name : '';
+}
+
+function renderNoteAttachments() {
+  const wrap = $('#n-attachments');
+  wrap.replaceChildren();
+  const existing = state.noteEditingId
+    ? attachmentsFor('note', state.noteEditingId).filter((file) => !state.noteRemovedFiles.includes(file.id))
+    : [];
+  for (const file of existing) {
+    wrap.append(el('div', { class: 'attach-item' }, [
+      el('span', { html: ICON('files', 'ic') }),
+      el('span', { class: 'attach-name', text: file.name }),
+      el('span', { class: 'attach-size', text: formatBytes(file.size) }),
+      el('button', {
+        type: 'button',
+        class: 'attach-remove',
+        'aria-label': `Remove ${file.name}`,
+        html: ICON('x', 'ic'),
+        onclick: () => {
+          state.noteRemovedFiles.push(file.id);
+          renderNoteAttachments();
+        },
+      }),
+    ]));
+  }
+  for (const file of state.notePendingFiles) {
+    wrap.append(el('div', { class: 'attach-item' }, [
+      el('span', { html: ICON('files', 'ic') }),
+      el('span', { class: 'attach-name', text: file.name }),
+      el('span', { class: 'attach-size', text: formatBytes(file.size) }),
+      el('button', {
+        type: 'button',
+        class: 'attach-remove',
+        'aria-label': `Remove ${file.name}`,
+        html: ICON('x', 'ic'),
+        onclick: () => {
+          state.notePendingFiles = state.notePendingFiles.filter((item) => item !== file);
+          renderNoteAttachments();
+        },
+      }),
+    ]));
+  }
+  if (!wrap.childElementCount) wrap.append(el('p', { class: 'notify-hint', text: 'No attachments.' }));
+}
+
+async function saveNote(event) {
+  event.preventDefault();
+  const title = $('#n-title').value.trim();
+  if (!title) {
+    toast('Add a note title');
+    return;
+  }
+  const folderId = noteEditorFolderId();
+  if (!folderId) {
+    toast('Choose a Notes folder');
+    return;
+  }
+  const body = $('#n-body').value;
+  const submit = $('#note-submit');
+  submit.disabled = true;
+  submit.textContent = 'Saving…';
+  try {
+    let id = state.noteEditingId;
+    if (id) {
+      await api('/api/notes/' + id, { method: 'PATCH', body: { title, body, folder_id: folderId } });
+    } else {
+      const created = await api('/api/notes', { method: 'POST', body: { title, body, folder_id: folderId } });
+      id = created.id;
+    }
+    for (const fileId of state.noteRemovedFiles) {
+      await api('/api/attachments/' + fileId, { method: 'DELETE' });
+    }
+    if (state.notePendingFiles.length) {
+      await uploadFiles('/api/notes/' + id + '/attachments', state.notePendingFiles);
+    }
+    state.notePendingFiles = [];
+    state.noteRemovedFiles = [];
+    state.storage = null;
+    closeSheet('#note-editor');
+    await loadState();
+    go('notes/folder/' + folderId);
+    toast(state.noteEditingId ? 'Note saved' : 'Note added');
+  } catch (err) {
+    toast(err.message);
+  } finally {
+    submit.disabled = false;
+    submit.textContent = 'Save';
+  }
+}
+
+let noteDeleteArmed = false;
+let noteDeleteTimer = null;
+
+function resetNoteDelete() {
+  noteDeleteArmed = false;
+  clearTimeout(noteDeleteTimer);
+  noteDeleteTimer = null;
+  const button = $('#n-delete');
+  if (button) {
+    button.textContent = 'Delete Note';
+    button.setAttribute('aria-label', 'Delete note');
+  }
+}
+
+async function deleteNoteFromEditor() {
+  if (!state.noteEditingId) return;
+  const button = $('#n-delete');
+  if (!noteDeleteArmed) {
+    noteDeleteArmed = true;
+    button.textContent = 'Confirm?';
+    button.setAttribute('aria-label', 'Confirm delete note');
+    noteDeleteTimer = setTimeout(resetNoteDelete, INLINE_CONFIRM_MS);
+    return;
+  }
+  resetNoteDelete();
+  try {
+    await api('/api/notes/' + state.noteEditingId, { method: 'DELETE' });
+    state.storage = null;
+    closeSheet('#note-editor');
+    state.noteEditingId = null;
+    await loadState();
+    render();
+    toast('Note deleted');
+  } catch (err) {
+    toast(err.message);
+  }
+}
+
 function openListSheet(list) {
   const system = Boolean(list && list.is_system);
+  const tenant = list ? tenantOf(list) : state.tenant;
   const retention = list ? listRetention(list) : 'forever';
   hideListRetentionWarning();
   state.editingListId = list ? list.id : null;
+  state.listTenant = tenant;
   state.selectedColor = list ? list.color : nextListColor();
-  $('#list-heading').textContent = list ? (system ? 'Unlisted' : 'Edit List') : 'New List';
+  $('#list-heading').textContent = list ? (system ? 'Unfiled' : 'Edit Folder') : 'New Folder';
   $('#l-name').value = list ? list.name : '';
+  $('#l-name').placeholder = 'Folder name';
   clearFieldError($('#l-name'), $('#l-name-error'));
   $('#l-name').disabled = system;
   $('#l-delete').hidden = !list || system;
@@ -4518,6 +5287,10 @@ function openListSheet(list) {
   $('#list-save').textContent = 'Save';
   $('#list-sheet').removeAttribute('aria-busy');
   $('#l-retention').value = retention;
+  const retentionRow = $('.list-retention-row', $('#list-sheet'));
+  const retentionHint = $('.list-retention-hint', $('#list-sheet'));
+  if (retentionRow) retentionRow.hidden = tenant !== 'reminders';
+  if (retentionHint) retentionHint.hidden = tenant !== 'reminders';
   renderSwatches();
   listSnapshot = list
     ? { name: $('#l-name').value.trim(), color: state.selectedColor, completed_retention: retention }
@@ -4556,14 +5329,15 @@ async function saveList(event, options = {}) {
   const nameInput = $('#l-name');
   const name = nameInput.value.trim();
   if (!name) {
-    showFieldError(nameInput, $('#l-name-error'), 'List name is required');
+    showFieldError(nameInput, $('#l-name-error'), 'Folder name is required');
     return;
   }
   clearFieldError(nameInput, $('#l-name-error'));
 
   const retention = $('#l-retention').value || 'forever';
   const previousRetention = existing ? listRetention(existing) : 'forever';
-  if (existing && RETENTION_ORDER[retention] < RETENTION_ORDER[previousRetention]
+  if (state.listTenant === 'reminders' && existing
+    && RETENTION_ORDER[retention] < RETENTION_ORDER[previousRetention]
     && !options.retentionConfirmed) {
     const purgeCount = completedOlderThan(existing, retention);
     if (purgeCount > 0) {
@@ -4572,9 +5346,13 @@ async function saveList(event, options = {}) {
     }
   }
   hideListRetentionWarning();
-  const body = system
-    ? { color: state.selectedColor, completed_retention: retention }
-    : { name, color: state.selectedColor, completed_retention: retention };
+  const body = state.listTenant === 'reminders'
+    ? (system
+      ? { color: state.selectedColor, completed_retention: retention }
+      : { name, color: state.selectedColor, completed_retention: retention, tenant: state.listTenant })
+    : (system
+      ? { color: state.selectedColor }
+      : { name, color: state.selectedColor, tenant: state.listTenant });
   const startedAt = Date.now();
   let created = null;
   let result = null;
@@ -4594,8 +5372,10 @@ async function saveList(event, options = {}) {
     await settleSubmit(startedAt);
     closeSheet('#list-sheet');
     await loadState();
-    if (!system && !state.editingListId) go('list/' + created.id);
-    else {
+    if (!system && !state.editingListId) {
+      go(state.listTenant === 'notes' ? 'notes/folder/' + created.id
+        : state.listTenant === 'docs' ? 'docs/folder/' + created.id : 'list/' + created.id);
+    } else {
       requestListAnimation();
       render();
     }
@@ -4621,8 +5401,8 @@ function resetListDelete() {
   clearTimeout(listDeleteTimer);
   listDeleteTimer = null;
   if ($('#l-delete')) {
-    $('#l-delete').textContent = 'Delete List';
-    $('#l-delete').setAttribute('aria-label', 'Delete list');
+    $('#l-delete').textContent = 'Delete Folder';
+    $('#l-delete').setAttribute('aria-label', 'Delete folder');
   }
   if ($('#l-delete-warn')) $('#l-delete-warn').hidden = true;
 }
@@ -4632,9 +5412,9 @@ async function deleteList() {
   if (!listDeleteArmed) {
     listDeleteArmed = true;
     $('#l-delete').textContent = 'Confirm?';
-    $('#l-delete').setAttribute('aria-label', 'Confirm delete list');
+    $('#l-delete').setAttribute('aria-label', 'Confirm delete folder');
     const warn = $('#l-delete-warn');
-    warn.textContent = 'This also deletes every item in this list.';
+    warn.textContent = 'This also deletes every item in this folder.';
     warn.hidden = false;
     warn.scrollIntoView({
       block: 'nearest',
@@ -4648,9 +5428,10 @@ async function deleteList() {
   resetListDelete();
   try {
     await api('/api/lists/' + id, { method: 'DELETE' });
+    state.storage = null;
     closeSheet('#list-sheet');
     await loadState();
-    if (state.view === id) {
+    if (state.view === id || viewFolderId(state.view) === id) {
       requestListAnimation();
       go('home');
     } else {
@@ -5004,7 +5785,8 @@ $('#content').addEventListener('pointerdown', (event) => {
     return;
   }
   swipe = {
-    id: Number(row.dataset.reminderId),
+    kind: row.dataset.noteId ? 'note' : row.dataset.docId ? 'doc' : 'reminder',
+    id: Number(row.dataset.noteId || row.dataset.docId || row.dataset.reminderId),
     row,
     pointerId: event.pointerId,
     startX: event.clientX,
@@ -5060,8 +5842,10 @@ async function endSwipe(commit) {
   if (!current || !current.active) return;
   lastSwipeEnd = Date.now();
   releaseSwipePointer(current);
-  const reminder = findReminder(current.id);
-  if (!reminder || commit === 0) {
+  const exists = current.kind === 'note' ? Boolean(noteById(current.id))
+    : current.kind === 'doc' ? Boolean(docById(current.id))
+      : Boolean(findReminder(current.id));
+  if (!exists || commit === 0) {
     resetSwipe(current.row);
     return;
   }
@@ -5267,6 +6051,9 @@ async function openSettings() {
   $('#set-sort-dir').value = state.sortDefault.dir;
   syncSortDirLabels($('#set-sort-field'), $('#set-sort-dir'));
   renderDeviceZoneRow();
+  renderStorageSettings();
+  try { state.storage = await api('/api/storage'); } catch { /* keep cached usage */ }
+  renderStorageSettings();
   $('#token-once').hidden = true;
   $('#token-name').value = '';
   await renderTokenList();
@@ -5323,7 +6110,7 @@ async function saveAppSettings() {
         } else if (defaultsChanged) {
           message = 'Saved. Applies to new items only — existing items were not changed.';
         } else {
-          message = 'Saved — list progress now follows you on all devices.';
+          message = 'Saved — folder progress now follows you on all devices.';
         }
         $('#settings-msg').hidden = true;
       } catch (err) {
@@ -5343,7 +6130,7 @@ async function saveAppSettings() {
       render();
       message = message
         ? `${message} Sorting applied to all lists.`
-        : 'Saved — sorting applied to all lists.';
+        : 'Saved — sorting applied to all folders.';
     }
     if (appearanceDirty) {
       message = message
@@ -5619,6 +6406,13 @@ $('#smart-nav').addEventListener('click', (event) => {
   closeAccountMenu();
 });
 
+$('#tenant-switch').addEventListener('click', (event) => {
+  const btn = event.target.closest('.tenant-btn');
+  if (!btn) return;
+  setTenant(btn.dataset.tenant);
+  closeAccountMenu();
+});
+
 $('#new-list-2').addEventListener('click', () => openListSheet(null));
 $('#back-btn').addEventListener('click', () => {
   clearSearch();
@@ -5673,7 +6467,11 @@ $('#import-file').addEventListener('change', (event) => {
   event.target.value = '';
 });
 
-$('#fab-add').addEventListener('click', () => openEditor(null));
+$('#fab-add').addEventListener('click', () => {
+  if (state.tenant === 'notes') openNoteEditor(null);
+  else if (state.tenant === 'docs') chooseDocsFiles();
+  else openEditor(null);
+});
 $('#menu-btn').addEventListener('click', handleMenuButton);
 $('#sidebar-menu-btn').addEventListener('click', toggleAccountMenu);
 $('#account-notifications').addEventListener('click', () => { closeAccountMenu(); openNotifySheet(); });
@@ -5707,6 +6505,10 @@ function scheduleSearch() {
     return;
   }
   state.searchLoading = true;
+  if (state.tenant !== 'reminders') {
+    runSearch(state.search).then((ok) => { if (ok) render(); });
+    return;
+  }
   searchTimer = setTimeout(async () => {
     const ok = await runSearch(state.search);
     if (ok) render();
@@ -5717,6 +6519,20 @@ function scheduleSearch() {
 // cutoff), so the server searches the database. On a network failure fall
 // back to the loaded reminders and say the history is incomplete.
 async function runSearch(query) {
+  if (state.tenant !== 'reminders') {
+    const needle = query.toLowerCase();
+    state.searchQuery = query;
+    state.searchOpen = state.tenant === 'notes'
+      ? state.notes.filter((note) => note.title.toLowerCase().includes(needle)
+        || (note.body || '').toLowerCase().includes(needle))
+      : state.docs.filter((doc) => doc.name.toLowerCase().includes(needle));
+    state.searchCompleted = [];
+    state.searchTotals = { open: state.searchOpen.length, completed: 0 };
+    state.searchTruncated = false;
+    state.searchOffline = false;
+    state.searchLoading = false;
+    return true;
+  }
   const seq = ++state.searchSeq;
   try {
     const data = await api(`/api/search?q=${encodeURIComponent(query)}&limit=500`);
@@ -5760,7 +6576,7 @@ function setSearch(value, source) {
   scheduleSearch();
   if (state.search && state.view === 'home') {
     state.searchKeepNavigation = true;
-    go('all');
+    go(homeViewForTenant(state.tenant));
     return;
   }
   render();
@@ -5780,6 +6596,36 @@ $('#search-form').addEventListener('submit', (event) => {
 });
 
 $('#editor-form').addEventListener('submit', saveEditor);
+$('#note-form').addEventListener('submit', saveNote);
+$('#n-delete').addEventListener('click', deleteNoteFromEditor);
+$('#n-folder').addEventListener('change', syncNoteFolderVisual);
+$('#e-files').addEventListener('change', (event) => {
+  state.editorPendingFiles.push(...Array.from(event.target.files || []));
+  event.target.value = '';
+  renderEditorAttachments();
+});
+$('#n-files').addEventListener('change', (event) => {
+  state.notePendingFiles.push(...Array.from(event.target.files || []));
+  event.target.value = '';
+  renderNoteAttachments();
+});
+$('#docs-file-input').addEventListener('change', async (event) => {
+  const files = Array.from(event.target.files || []);
+  event.target.value = '';
+  if (!files.length) return;
+  const folderId = state.docsUploadFolder
+    || (systemFolder('docs') ? systemFolder('docs').id : null);
+  if (!folderId) return toast('Create a Docs folder first');
+  try {
+    await uploadFiles('/api/docs', files, { folder_id: folderId });
+    state.storage = null;
+    await loadState();
+    go('docs/folder/' + folderId);
+    toast(`${files.length} file${files.length === 1 ? '' : 's'} added`);
+  } catch (err) {
+    toast(err.message);
+  }
+});
 $('#e-delete').addEventListener('click', deleteReminder);
 $('#e-completed').addEventListener('change', syncRecordRows);
 $('#e-date-on').addEventListener('change', () => { syncDateTimeRows(); markScheduleManual(); });

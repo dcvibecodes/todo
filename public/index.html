@@ -111,6 +111,17 @@
       <path d="M4 12a8 8 0 0114-5l2 2M20 12a8 8 0 01-14 5l-2-2" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
       <path d="M20 4v5h-5M4 20v-5h5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
     </symbol>
+    <symbol id="i-files" viewBox="0 0 24 24">
+      <path d="M13 3H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h1" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+      <path d="M10 7h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-7a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="i-note" viewBox="0 0 24 24">
+      <path d="M6 3h8l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+      <path d="M14 3v5h5M8 12h8M8 16h6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="i-download" viewBox="0 0 24 24">
+      <path d="M12 3v12m0 0l-4-4m4 4l4-4M4 20h16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
     <symbol id="i-copy" viewBox="0 0 24 24">
       <rect x="9" y="9" width="11" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/>
       <path d="M5 15H4.5A1.5 1.5 0 0 1 3 13.5v-9A1.5 1.5 0 0 1 4.5 3h9A1.5 1.5 0 0 1 15 4.5V5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
@@ -152,6 +163,12 @@
             <svg class="ic"><use href="#i-list"/></svg>
           </button>
         </div>
+      </div>
+
+      <div id="tenant-switch" class="tenant-switch" role="tablist" aria-label="View">
+        <button type="button" class="tenant-btn active" data-tenant="reminders" role="tab" aria-selected="true">Reminders</button>
+        <button type="button" class="tenant-btn" data-tenant="notes" role="tab" aria-selected="false">Notes</button>
+        <button type="button" class="tenant-btn" data-tenant="docs" role="tab" aria-selected="false">Docs</button>
       </div>
 
       <form id="search-form" class="search" role="search">
@@ -196,11 +213,21 @@
           <span class="nav-ic done"><svg class="ic"><use href="#i-done"/></svg></span>
           <span class="nav-label">Completed</span>
         </button>
+        <button class="nav-row" data-view="notes" hidden>
+          <span class="nav-ic all"><svg class="ic"><use href="#i-list"/></svg></span>
+          <span class="nav-label">All Notes</span>
+          <span class="badge" id="count-notes"></span>
+        </button>
+        <button class="nav-row" data-view="docs" hidden>
+          <span class="nav-ic all"><svg class="ic"><use href="#i-files"/></svg></span>
+          <span class="nav-label">All Files</span>
+          <span class="badge" id="count-docs"></span>
+        </button>
       </nav>
 
       <div class="section-head">
-        <span>Lists</span>
-        <button id="new-list-2" class="new-list-btn" type="button" title="New List" aria-label="New List">
+        <span id="folders-label">Folders</span>
+        <button id="new-list-2" class="new-list-btn" type="button" title="New Folder" aria-label="New Folder">
           <svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>
         </button>
       </div>
@@ -225,16 +252,16 @@
     <main class="main">
       <div class="main-top">
       <header class="main-head">
-        <button id="back-btn" class="back-btn" aria-label="Back to lists" aria-keyshortcuts="Escape">
+        <button id="back-btn" class="back-btn" aria-label="Back to folders" aria-keyshortcuts="Escape">
           <svg class="ic"><use href="#i-back"/></svg>
-          <span>Lists</span>
+          <span>Folders</span>
         </button>
         <div class="title-wrap">
           <h2 id="view-title">Today</h2>
           <span id="view-count" class="view-count"></span>
         </div>
         <div class="head-actions">
-          <button id="view-menu" class="icon-btn" aria-label="List options" hidden>&#8943;</button>
+          <button id="view-menu" class="icon-btn" aria-label="Folder options" hidden>&#8943;</button>
           <button id="refresh-btn" class="icon-btn refresh-btn" title="Refresh items" aria-label="Refresh items">
             <svg class="ic"><use href="#i-refresh"/></svg>
           </button>
@@ -313,6 +340,16 @@
         <div class="editor-fields">
           <textarea id="e-notes" class="e-notes" placeholder="Notes &amp; URL" rows="2" maxlength="50000"></textarea>
           <div id="e-notes-links" class="ed-note-links" aria-label="Links in notes" hidden></div>
+        </div>
+
+        <div class="ed-section">
+          <div class="ed-section-label">Attachments</div>
+          <div id="e-attachments" class="attach-list"></div>
+          <label class="attach-add">
+            <input id="e-files" type="file" multiple hidden>
+            <svg class="ic"><use href="#i-files"/></svg>
+            <span>Add files</span>
+          </label>
         </div>
 
         <div class="ed-section">
@@ -395,10 +432,10 @@
           <div class="ed-group">
             <div class="ed-row ed-list-row">
               <span class="ed-list-ic" id="e-list-icon"><svg class="ic"><use href="#i-list"/></svg></span>
-              <span class="ed-label">List</span>
+              <span class="ed-label">Folder</span>
               <span class="ed-value" id="e-list-value"></span>
               <svg class="ic ed-chevron"><use href="#i-chevron"/></svg>
-              <select id="e-list" aria-label="List"></select>
+              <select id="e-list" aria-label="Folder"></select>
             </div>
             <div class="ed-row" id="completed-row" hidden>
               <span class="ed-ic"><svg class="ic"><use href="#i-done"/></svg></span>
@@ -448,11 +485,11 @@
     <form id="list-form" class="sheet-card" novalidate>
       <header class="sheet-head">
         <button type="button" class="text-btn" data-close>Cancel</button>
-        <span id="list-heading">New List</span>
+        <span id="list-heading">New Folder</span>
         <button type="submit" id="list-save" class="text-btn strong">Save</button>
       </header>
       <div class="sheet-body">
-        <input id="l-name" class="e-title" placeholder="List Name" maxlength="120" required autocomplete="off">
+        <input id="l-name" class="e-title" placeholder="Folder name" maxlength="120" required autocomplete="off">
         <p id="l-name-error" class="form-msg field-error" hidden></p>
         <div class="swatches" id="swatches"></div>
         <label class="settings-row list-retention-row" for="l-retention">
@@ -465,7 +502,7 @@
             <option value="12m">1 year</option>
           </select>
         </label>
-        <p class="notify-hint list-retention-hint">Applies to this list's completed items.</p>
+        <p class="notify-hint list-retention-hint">Applies to this folder's completed items.</p>
         <div id="l-retention-warn" class="list-retention-warn" role="alert" hidden>
           <p class="list-retention-warn-text"></p>
           <div class="list-retention-warn-actions">
@@ -473,11 +510,52 @@
             <button type="button" id="l-retention-confirm" class="mini-btn danger-mini">Delete and save</button>
           </div>
         </div>
-        <button type="button" id="l-delete" class="danger-btn" hidden>Delete List</button>
-        <p id="l-delete-warn" class="ed-hint ed-warning" hidden>This also deletes every item in this list.</p>
+        <button type="button" id="l-delete" class="danger-btn" hidden>Delete Folder</button>
+        <p id="l-delete-warn" class="ed-hint ed-warning" hidden>This also deletes every item in this folder.</p>
       </div>
     </form>
   </div>
+
+  <div id="note-editor" class="sheet" hidden>
+    <div class="sheet-backdrop" data-close></div>
+    <form id="note-form" class="sheet-card editor-card" novalidate>
+      <header class="sheet-head editor-head">
+        <button type="button" class="text-btn" data-close aria-keyshortcuts="Escape">Cancel</button>
+        <span id="note-heading">New Note</span>
+        <button type="submit" id="note-submit" class="text-btn strong">Save</button>
+      </header>
+      <div class="sheet-body editor-body">
+        <div class="editor-fields">
+          <input id="n-title" class="e-title" placeholder="Note title" maxlength="500" required autocomplete="off">
+          <textarea id="n-body" class="e-notes note-body" placeholder="Write your note" rows="6" maxlength="200000"></textarea>
+        </div>
+        <div class="ed-section">
+          <div class="ed-section-label">Folder</div>
+          <div class="ed-group">
+            <div class="ed-row ed-list-row">
+              <span class="ed-list-ic"><svg class="ic"><use href="#i-list"/></svg></span>
+              <span class="ed-label">Folder</span>
+              <span class="ed-value" id="n-folder-value"></span>
+              <svg class="ic ed-chevron"><use href="#i-chevron"/></svg>
+              <select id="n-folder" aria-label="Note folder"></select>
+            </div>
+          </div>
+        </div>
+        <div class="ed-section">
+          <div class="ed-section-label">Attachments</div>
+          <div id="n-attachments" class="attach-list"></div>
+          <label class="attach-add">
+            <input id="n-files" type="file" multiple hidden>
+            <svg class="ic"><use href="#i-files"/></svg>
+            <span>Add files</span>
+          </label>
+        </div>
+        <button type="button" id="n-delete" class="danger-btn" hidden>Delete Note</button>
+      </div>
+    </form>
+  </div>
+
+  <input id="docs-file-input" type="file" multiple accept=".doc,.docx,.pdf,.xls,.xlsx,.txt,.md" hidden>
 
   <div id="notify-sheet" class="sheet" hidden>
     <div class="sheet-backdrop" data-close></div>
@@ -538,7 +616,7 @@
           </label>
           <p class="notify-hint">Theme and density preview instantly on this device — Save to keep, Cancel to undo.</p>
           <label class="settings-row" for="set-list-progress">
-            <span>List progress</span>
+            <span>Folder progress</span>
             <select id="set-list-progress">
               <option value="bar">Bar with counts</option>
               <option value="ring">Ring on the dot</option>
@@ -552,7 +630,7 @@
               <option value="30d">Last 30 days</option>
             </select>
           </label>
-          <p class="notify-hint">Bar and ring compare each list's open items with its completed ones — all time, or the last 30 days. Previews instantly — Save to sync these choices to your other devices, Cancel to undo.</p>
+          <p class="notify-hint">Bar and ring compare each Reminders folder's open items with its completed ones — all time, or the last 30 days. Previews instantly — Save to sync these choices to your other devices, Cancel to undo.</p>
         </div>
         <div class="settings-group">
           <h3>New items</h3>
@@ -593,7 +671,7 @@
               <option value="desc" selected>Newest on top</option>
             </select>
           </label>
-          <p class="notify-hint">Saving applies this sorting to every list and smart view except Today and Scheduled (Due date / Soonest on top, because only dated items appear there) and Completed (Date completed / Newest on top). Change those views from their own sort controls. Each list can still choose its own sorting afterwards; sorting syncs across your devices.</p>
+          <p class="notify-hint">Saving applies this sorting to every Reminders folder and smart view except Today and Scheduled (Due date / Soonest on top, because only dated items appear there) and Completed (Date completed / Newest on top). Change those views from their own sort controls. Each folder can still choose its own sorting afterwards; sorting syncs across your devices.</p>
         </div>
         <div class="settings-group">
           <h3>Notifications</h3>
@@ -625,16 +703,26 @@
           <button type="button" id="zone-use-device" class="secondary-btn" hidden>Use this device's time zone</button>
         </div>
         <div class="settings-group">
+          <h3>Storage</h3>
+          <p class="notify-hint" id="storage-summary">Loading storage&hellip;</p>
+          <div id="storage-breakdown" class="storage-breakdown"></div>
+          <details class="token-examples" id="storage-largest-wrap">
+            <summary>Largest files</summary>
+            <div id="storage-largest" class="storage-largest"></div>
+          </details>
+          <p class="notify-hint">Usage counters only — nothing is deleted automatically.</p>
+        </div>
+        <div class="settings-group">
           <h3>Backup</h3>
           <button type="button" id="export-btn" class="secondary-btn">Download backup (JSON)</button>
           <button type="button" id="import-btn" class="secondary-btn">Import backup…</button>
           <input id="import-file" type="file" accept="application/json,.json" hidden>
           <p id="import-msg" class="form-msg" hidden></p>
-          <p class="notify-hint">Import adds missing lists and items; it never overwrites or deletes anything.</p>
+          <p class="notify-hint">Import adds missing folders and items; it never overwrites or deletes anything.</p>
         </div>
         <div class="settings-group">
           <h3>API tokens</h3>
-          <p class="notify-hint">Tokens let your other agents work with items — no browser needed. A token can never delete, manage lists, or change the password.</p>
+          <p class="notify-hint">Tokens let your other agents work with items — no browser needed. A token can never delete, manage folders, or change the password.</p>
           <label class="settings-row" for="token-name">
             <span>Name</span>
             <input id="token-name" type="text" placeholder="e.g. friday-agent" maxlength="80" autocomplete="off">

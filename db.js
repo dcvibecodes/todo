@@ -128,24 +128,42 @@ async function init() {
   if (!listColumns.some((column) => column.name === 'completed_retention')) {
     await run("ALTER TABLE lists ADD COLUMN completed_retention TEXT NOT NULL DEFAULT 'forever'");
   }
-  // Pinned Unlisted list: always first, cannot be renamed/deleted/reordered.
-  let systemList = await get('SELECT id, is_system, sort_order FROM lists WHERE is_system = 1 LIMIT 1');
-  if (!systemList) {
-    const existingUnlisted = await get('SELECT id FROM lists WHERE LOWER(name) = ? LIMIT 1', ['unlisted']);
-    if (existingUnlisted) {
-      await run('UPDATE lists SET is_system = 1, sort_order = 0 WHERE id = ?', [existingUnlisted.id]);
-      systemList = { id: existingUnlisted.id };
-    } else {
-      const created = await run(
-        'INSERT INTO lists (name, color, sort_order, is_system, created_at) VALUES (?, ?, ?, 1, ?)',
-        ['Unlisted', 'gray', 0, new Date().toISOString()]
+  // Folders are shared by all three tenants. Existing lists are the Reminders
+  // tenant's folders; Notes and Docs get their own pinned Unfiled folder.
+  if (!listColumns.some((column) => column.name === 'tenant')) {
+    await run("ALTER TABLE lists ADD COLUMN tenant TEXT NOT NULL DEFAULT 'reminders'");
+  }
+  await run("UPDATE lists SET tenant = 'reminders' WHERE tenant IS NULL OR tenant = ''");
+  await run("UPDATE lists SET name = 'Unfiled' WHERE is_system = 1 AND LOWER(name) = 'unlisted'");
+  // Pinned Unfiled folder: always first in each tenant, cannot be renamed,
+  // deleted or reordered.
+  for (const tenant of ['reminders', 'notes', 'docs']) {
+    let systemList = await get(
+      'SELECT id, sort_order FROM lists WHERE is_system = 1 AND tenant = ? LIMIT 1',
+      [tenant]
+    );
+    let needsPinning = !systemList || systemList.sort_order !== 0;
+    if (!systemList) {
+      const existingUnfiled = await get(
+        'SELECT id FROM lists WHERE tenant = ? AND LOWER(name) = ? LIMIT 1',
+        [tenant, 'unfiled']
       );
-      systemList = { id: created.lastID };
+      if (existingUnfiled) {
+        await run('UPDATE lists SET is_system = 1, sort_order = 0 WHERE id = ?', [existingUnfiled.id]);
+        systemList = { id: existingUnfiled.id };
+      } else {
+        const created = await run(
+          'INSERT INTO lists (name, color, sort_order, is_system, tenant, created_at) VALUES (?, ?, ?, 1, ?, ?)',
+          ['Unfiled', 'gray', 0, tenant, new Date().toISOString()]
+        );
+        systemList = { id: created.lastID };
+      }
+      needsPinning = true;
     }
-    await run('UPDATE lists SET sort_order = sort_order + 1 WHERE id != ?', [systemList.id]);
-  } else if (systemList.sort_order !== 0) {
-    await run('UPDATE lists SET sort_order = sort_order + 1 WHERE id != ?', [systemList.id]);
-    await run('UPDATE lists SET sort_order = 0 WHERE id = ?', [systemList.id]);
+    if (needsPinning) {
+      await run('UPDATE lists SET sort_order = sort_order + 1 WHERE tenant = ? AND id != ?', [tenant, systemList.id]);
+      await run('UPDATE lists SET sort_order = 0 WHERE id = ?', [systemList.id]);
+    }
   }
   await run(`CREATE TABLE IF NOT EXISTS reminders (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -268,6 +286,35 @@ async function init() {
     WHERE color LIKE '#%'`);
   await run('CREATE INDEX IF NOT EXISTS idx_reminders_list ON reminders(list_id)');
   await run('CREATE INDEX IF NOT EXISTS idx_reminders_due ON reminders(completed, due_at)');
+  await run('CREATE INDEX IF NOT EXISTS idx_lists_tenant ON lists(tenant, sort_order)');
+  // Notes tenant: notes live in folders and have no schedule or completion.
+  await run(`CREATE TABLE IF NOT EXISTS notes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    folder_id INTEGER NOT NULL REFERENCES lists(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    body TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  )`);
+  await run('CREATE INDEX IF NOT EXISTS idx_notes_folder ON notes(folder_id, updated_at)');
+  // Every uploaded file: Docs rows themselves (owner_type = 'doc') plus
+  // attachments owned by a reminder or a note. `stored_name` is an opaque
+  // filename under data/uploads; the original name is display metadata.
+  await run(`CREATE TABLE IF NOT EXISTS attachments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant TEXT NOT NULL,
+    owner_type TEXT NOT NULL CHECK (owner_type IN ('reminder', 'note', 'doc')),
+    owner_id INTEGER,
+    folder_id INTEGER REFERENCES lists(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    stored_name TEXT NOT NULL,
+    mime TEXT NOT NULL DEFAULT 'application/octet-stream',
+    size INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL
+  )`);
+  await run('CREATE INDEX IF NOT EXISTS idx_attachments_owner ON attachments(owner_type, owner_id)');
+  await run('CREATE INDEX IF NOT EXISTS idx_attachments_folder ON attachments(folder_id)');
+  await run('CREATE INDEX IF NOT EXISTS idx_attachments_tenant ON attachments(tenant)');
   await run(`CREATE TABLE IF NOT EXISTS push_subscriptions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     endpoint TEXT UNIQUE NOT NULL,
@@ -289,4 +336,4 @@ async function setSetting(key, value) {
   );
 }
 
-module.exports = { db, run, get, all, init, getSetting, setSetting, withWriteLock, transaction };
+module.exports = { db, run, get, all, init, getSetting, setSetting, withWriteLock, transaction, DB_FILE, DATA_DIR };

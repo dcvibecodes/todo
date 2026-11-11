@@ -1,11 +1,13 @@
 'use strict';
 
 const path = require('path');
+const fs = require('fs');
 const crypto = require('crypto');
 const express = require('express');
 const session = require('express-session');
 const compression = require('compression');
 const bcrypt = require('bcryptjs');
+const multer = require('multer');
 const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
 
 const db = require('./db');
@@ -24,6 +26,107 @@ const SESSION_SECRET_KEY = 'session_secret';
 const DEFAULT_LIST_COLOR = 'blue';
 const LIST_COLORS = new Set(['red', 'rose', 'orange', 'yellow', 'lime', 'green', 'teal', 'cyan', 'blue', 'indigo', 'purple', 'pink', 'brown', 'slate', 'gray']);
 const NOTES_MAX = 50000;
+const NOTE_BODY_MAX = 200000;
+const TENANTS = new Set(['reminders', 'notes', 'docs']);
+const DOC_EXTENSIONS = new Set(['.doc', '.docx', '.pdf', '.xls', '.xlsx', '.txt', '.md']);
+const UPLOAD_DIR = path.join(db.DATA_DIR, 'uploads');
+const UPLOAD_MAX_BYTES = 25 * 1024 * 1024;
+fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+
+const uploadStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, UPLOAD_DIR),
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname || '').toLowerCase().replace(/[^.a-z0-9]/g, '').slice(0, 12);
+    cb(null, `${crypto.randomUUID()}${ext}`);
+  },
+});
+const upload = multer({
+  storage: uploadStorage,
+  limits: { fileSize: UPLOAD_MAX_BYTES, files: 10 },
+});
+
+function validTenant(value, fallback = 'reminders') {
+  return TENANTS.has(value) ? value : fallback;
+}
+
+function cleanFileName(value) {
+  const name = path.basename(String(value || 'file')).replace(/[\u0000-\u001f\u007f]/g, '').trim();
+  return (name || 'file').slice(0, 200);
+}
+
+function docExtensionAllowed(name) {
+  return DOC_EXTENSIONS.has(path.extname(String(name || '')).toLowerCase());
+}
+
+async function removeStoredFiles(rows) {
+  await Promise.all((rows || []).map((row) => (
+    row && row.stored_name
+      ? fs.promises.unlink(path.join(UPLOAD_DIR, row.stored_name)).catch(() => {})
+      : Promise.resolve()
+  )));
+}
+
+async function folderRow(id, tenant) {
+  const folder = await db.get('SELECT id, name, tenant FROM lists WHERE id = ?', [id]);
+  if (!folder || folder.tenant !== tenant) return null;
+  return folder;
+}
+
+async function systemFolderId(tenant) {
+  const folder = await db.get('SELECT id FROM lists WHERE tenant = ? AND is_system = 1 LIMIT 1', [tenant]);
+  return folder ? folder.id : null;
+}
+
+async function storageSnapshot() {
+  const [reminderText, noteText, docNames, fileRows, largestRows] = await Promise.all([
+    db.get(`SELECT COALESCE(SUM(LENGTH(title) + LENGTH(notes)), 0) AS bytes FROM reminders`),
+    db.get(`SELECT COALESCE(SUM(LENGTH(title) + LENGTH(body)), 0) AS bytes FROM notes`),
+    db.get(`SELECT COALESCE(SUM(LENGTH(name)), 0) AS bytes FROM attachments WHERE owner_type = 'doc'`),
+    db.all(`SELECT tenant, COALESCE(SUM(size), 0) AS bytes, COUNT(*) AS files FROM attachments GROUP BY tenant`),
+    db.all(`SELECT a.id, a.tenant, a.owner_type, a.owner_id, a.name, a.size, a.mime,
+                   l.name AS folder_name
+            FROM attachments a LEFT JOIN lists l ON l.id = a.folder_id
+            ORDER BY a.size DESC, a.id DESC LIMIT 20`),
+  ]);
+  const files = { reminders: 0, notes: 0, docs: 0 };
+  const counts = { reminders: 0, notes: 0, docs: 0 };
+  for (const row of fileRows) {
+    if (!files[row.tenant]) files[row.tenant] = 0;
+    files[row.tenant] += row.bytes || 0;
+    counts[row.tenant] = row.files || 0;
+  }
+  const text = {
+    reminders: reminderText.bytes || 0,
+    notes: noteText.bytes || 0,
+    docs: docNames.bytes || 0,
+  };
+  const tenants = {};
+  let fileTotal = 0;
+  for (const tenant of ['reminders', 'notes', 'docs']) {
+    fileTotal += files[tenant];
+    tenants[tenant] = {
+      files: files[tenant],
+      fileCount: counts[tenant],
+      text: text[tenant],
+      total: files[tenant] + text[tenant],
+    };
+  }
+  let databaseBytes = 0;
+  for (const suffix of ['', '-wal', '-shm']) {
+    try { databaseBytes += fs.statSync(db.DB_FILE + suffix).size; } catch { /* not present */ }
+  }
+  const total = fileTotal + databaseBytes;
+  return {
+    total,
+    database: databaseBytes,
+    files: fileTotal,
+    text: text.reminders + text.notes + text.docs,
+    other: Math.max(0, databaseBytes - (text.reminders + text.notes + text.docs)),
+    tenants,
+    largest: largestRows,
+  };
+}
+
 
 const app = express();
 app.set('trust proxy', 1);
@@ -840,12 +943,12 @@ async function rescheduleReminder(id, target) {
 async function resolveList(ref) {
   if (ref === undefined || ref === null || ref === '') return null;
   if (typeof ref === 'number' || /^\d+$/.test(String(ref).trim())) {
-    const row = await db.get('SELECT id, name FROM lists WHERE id = ?', [Number(ref)]);
+    const row = await db.get("SELECT id, name FROM lists WHERE id = ? AND tenant = 'reminders'", [Number(ref)]);
     return row || null;
   }
   const name = String(ref).trim();
   if (!name) return null;
-  const rows = await db.all('SELECT id, name FROM lists WHERE LOWER(name) = LOWER(?)', [name]);
+  const rows = await db.all("SELECT id, name FROM lists WHERE LOWER(name) = LOWER(?) AND tenant = 'reminders'", [name]);
   if (rows.length > 1) {
     const err = new Error(`Multiple lists match "${name}" — use the list id instead`);
     err.status = 400;
@@ -1433,7 +1536,7 @@ async function main() {
   app.get('/api/export', async (req, res) => {
     if (req.token) return denyToken(res);
     const settings = await getSettings();
-    const lists = await db.all('SELECT id, name, color, sort_order, completed_retention, created_at FROM lists ORDER BY sort_order, id');
+    const lists = await db.all('SELECT id, name, color, sort_order, completed_retention, tenant, created_at FROM lists ORDER BY tenant, sort_order, id');
     const reminders = await db.all(`SELECT id, list_id, title, notes, due_at, has_time, completed,
       completed_at, urgent, repeat_rule, time_model, time_zone, snoozed_until,
       sort_order, created_at, updated_at, revision FROM reminders ORDER BY id`);
@@ -1441,6 +1544,7 @@ async function main() {
       `SELECT reminder_id, occurrence_at, status, title, notes, list_id, urgent,
          completed_at, created_at FROM reminder_occurrences ORDER BY id`
     );
+    const notes = await db.all('SELECT id, folder_id, title, body, created_at, updated_at FROM notes ORDER BY id');
     res.json({
       app: 'todo',
       format: 1,
@@ -1457,6 +1561,7 @@ async function main() {
       lists,
       reminders,
       occurrences,
+      notes,
     });
   });
 
@@ -1469,7 +1574,7 @@ async function main() {
     if (!data || typeof data !== 'object' || !['todo', 'remember', 'done'].includes(data.app)) {
       return res.status(400).json({ error: 'That is not a ToDo backup file' });
     }
-    const counts = { listsAdded: 0, listsSkipped: 0, remindersAdded: 0, remindersSkipped: 0, occurrencesAdded: 0, occurrencesSkipped: 0 };
+    const counts = { listsAdded: 0, listsSkipped: 0, remindersAdded: 0, remindersSkipped: 0, occurrencesAdded: 0, occurrencesSkipped: 0, notesAdded: 0, notesSkipped: 0 };
     const knownLists = new Set((await db.all('SELECT id FROM lists')).map((r) => r.id));
     for (const list of Array.isArray(data.lists) ? data.lists : []) {
       if (!list || !Number.isInteger(list.id) || !String(list.name || '').trim()) {
@@ -1478,11 +1583,15 @@ async function main() {
       }
       if (knownLists.has(list.id)) { counts.listsSkipped += 1; continue; }
       try {
+        const tenant = validTenant(list.tenant, 'reminders');
         await db.run(
-          'INSERT INTO lists (id, name, color, sort_order, completed_retention, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+          'INSERT INTO lists (id, name, color, sort_order, completed_retention, tenant, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
           [list.id, String(list.name).slice(0, 120), validColor(list.color),
             Number.isInteger(list.sort_order) ? list.sort_order : 0,
-            validCompletedRetention(list.completed_retention) || 'forever',
+            tenant === 'reminders'
+              ? (validCompletedRetention(list.completed_retention) || 'forever')
+              : 'forever',
+            tenant,
             typeof list.created_at === 'string' ? list.created_at : new Date().toISOString()]
         );
         knownLists.add(list.id);
@@ -1497,6 +1606,11 @@ async function main() {
         continue;
       }
       if (knownReminders.has(reminder.id)) { counts.remindersSkipped += 1; continue; }
+      const reminderFolder = await db.get('SELECT tenant FROM lists WHERE id = ?', [reminder.list_id]);
+      if (!reminderFolder || reminderFolder.tenant !== 'reminders') {
+        counts.remindersSkipped += 1;
+        continue;
+      }
       let rule = 'none';
       try { rule = recurrence.encodeRepeatRule(recurrence.parseRepeatRule(reminder.repeat_rule ?? 'none')); }
       catch { counts.remindersSkipped += 1; continue; }
@@ -1560,6 +1674,30 @@ async function main() {
         if (inserted.changes) counts.occurrencesAdded += 1;
         else counts.occurrencesSkipped += 1;
       } catch { counts.occurrencesSkipped += 1; }
+    }
+    const knownNotes = new Set((await db.all('SELECT id FROM notes')).map((r) => r.id));
+    for (const note of Array.isArray(data.notes) ? data.notes : []) {
+      if (!note || !Number.isInteger(note.id) || !String(note.title || '').trim()
+        || !knownLists.has(note.folder_id)) {
+        counts.notesSkipped += 1;
+        continue;
+      }
+      const folder = await db.get('SELECT tenant FROM lists WHERE id = ?', [note.folder_id]);
+      if (!folder || folder.tenant !== 'notes' || knownNotes.has(note.id)) {
+        counts.notesSkipped += 1;
+        continue;
+      }
+      try {
+        await db.run(
+          'INSERT INTO notes (id, folder_id, title, body, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+          [note.id, note.folder_id, String(note.title).slice(0, 500),
+            String(note.body || '').slice(0, NOTE_BODY_MAX),
+            typeof note.created_at === 'string' ? note.created_at : new Date().toISOString(),
+            typeof note.updated_at === 'string' ? note.updated_at : new Date().toISOString()]
+        );
+        knownNotes.add(note.id);
+        counts.notesAdded += 1;
+      } catch { counts.notesSkipped += 1; }
     }
     await db.setSetting('store_epoch', crypto.randomBytes(16).toString('hex'));
     res.json({ ok: true, ...counts });
@@ -1920,15 +2058,37 @@ async function main() {
     const thirtyDayCutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
     const cutoffs = retentionCutoffs();
     const lists = await db.all(`
-      SELECT l.id, l.name, l.color, l.sort_order, l.completed_retention, l.created_at, l.is_system,
-        (SELECT COUNT(*) FROM reminders r WHERE r.list_id = l.id AND r.completed = 0) AS count,
+      SELECT l.id, l.name, l.color, l.sort_order, l.completed_retention, l.created_at, l.is_system, l.tenant,
+        CASE l.tenant
+          WHEN 'notes' THEN (SELECT COUNT(*) FROM notes n WHERE n.folder_id = l.id)
+          WHEN 'docs' THEN (SELECT COUNT(*) FROM attachments a WHERE a.folder_id = l.id AND a.owner_type = 'doc')
+          ELSE (SELECT COUNT(*) FROM reminders r WHERE r.list_id = l.id AND r.completed = 0)
+        END AS count,
         (SELECT COUNT(*) FROM reminders r WHERE r.list_id = l.id AND r.completed = 1)
         AS done_count,
         (SELECT COUNT(*) FROM reminders r WHERE r.list_id = l.id AND r.completed = 1
            AND r.completed_at IS NOT NULL AND r.completed_at >= ?)
         AS done_count_30d
-      FROM lists l ORDER BY l.sort_order, l.id
+      FROM lists l ORDER BY l.tenant, l.sort_order, l.id
     `, [thirtyDayCutoff]);
+    const notes = await db.all(`
+      SELECT n.id, n.folder_id, n.title, n.body, n.created_at, n.updated_at,
+             l.name AS folder_name, l.color AS folder_color
+      FROM notes n JOIN lists l ON l.id = n.folder_id
+      ORDER BY n.updated_at DESC, n.id DESC
+    `);
+    const docs = await db.all(`
+      SELECT a.id, a.folder_id, a.name, a.mime, a.size, a.created_at,
+             l.name AS folder_name, l.color AS folder_color
+      FROM attachments a JOIN lists l ON l.id = a.folder_id
+      WHERE a.owner_type = 'doc'
+      ORDER BY a.created_at DESC, a.id DESC
+    `);
+    const attachments = await db.all(`
+      SELECT id, tenant, owner_type, owner_id, folder_id, name, mime, size, created_at
+      FROM attachments WHERE owner_type IN ('reminder', 'note')
+      ORDER BY id ASC
+    `);
     const reminders = await db.all(`
       SELECT r.* FROM reminders r JOIN lists l ON l.id = r.list_id
       WHERE r.completed = 0 OR r.completed_at IS NULL OR r.completed_at >=
@@ -1939,7 +2099,7 @@ async function main() {
       ORDER BY r.sort_order, r.id
     `, [cutoffs['1m'], cutoffs['3m'], cutoffs['6m'], cutoffs['12m']]);
     await applyOccurrenceOverrides(reminders);
-    res.json({ lists, reminders, settings, now: new Date().toISOString(), store_epoch: await getStoreEpoch() });
+    res.json({ lists, reminders, notes, docs, attachments, settings, now: new Date().toISOString(), store_epoch: await getStoreEpoch() });
   });
 
   // Full-history search for the UI: /api/state only carries each list's
@@ -1997,14 +2157,18 @@ async function main() {
   app.get('/api/lists', async (req, res) => {
     const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
     const lists = await db.all(`
-      SELECT l.id, l.name, l.color, l.sort_order, l.completed_retention, l.created_at, l.is_system,
-        (SELECT COUNT(*) FROM reminders r WHERE r.list_id = l.id AND r.completed = 0) AS count,
+      SELECT l.id, l.name, l.color, l.sort_order, l.completed_retention, l.created_at, l.is_system, l.tenant,
+        CASE l.tenant
+          WHEN 'notes' THEN (SELECT COUNT(*) FROM notes n WHERE n.folder_id = l.id)
+          WHEN 'docs' THEN (SELECT COUNT(*) FROM attachments a WHERE a.folder_id = l.id AND a.owner_type = 'doc')
+          ELSE (SELECT COUNT(*) FROM reminders r WHERE r.list_id = l.id AND r.completed = 0)
+        END AS count,
         (SELECT COUNT(*) FROM reminders r WHERE r.list_id = l.id AND r.completed = 1)
         AS done_count,
         (SELECT COUNT(*) FROM reminders r WHERE r.list_id = l.id AND r.completed = 1
            AND r.completed_at IS NOT NULL AND r.completed_at >= ?)
         AS done_count_30d
-      FROM lists l ORDER BY l.sort_order, l.id
+      FROM lists l ORDER BY l.tenant, l.sort_order, l.id
     `, [cutoff]);
     res.json({ lists });
   });
@@ -2071,58 +2235,60 @@ async function main() {
 
   app.post('/api/lists', async (req, res) => {
     const name = text(req.body.name, 120);
-    if (!name) return res.status(400).json({ error: 'List name is required' });
-    const completedRetention = req.body.completed_retention === undefined
+    if (!name) return res.status(400).json({ error: 'Folder name is required' });
+    const tenant = validTenant(req.body.tenant, 'reminders');
+    const completedRetention = tenant !== 'reminders' || req.body.completed_retention === undefined
       ? 'forever'
       : validCompletedRetention(req.body.completed_retention);
     if (!completedRetention) {
       return res.status(400).json({ error: 'Invalid completed retention' });
     }
-    const max = await db.get('SELECT COALESCE(MAX(sort_order), -1) AS s FROM lists');
+    const max = await db.get('SELECT COALESCE(MAX(sort_order), -1) AS s FROM lists WHERE tenant = ?', [tenant]);
     const result = await db.run(
-      'INSERT INTO lists (name, color, sort_order, completed_retention, created_at) VALUES (?, ?, ?, ?, ?)',
-      [name, validColor(req.body.color), max.s + 1, completedRetention, new Date().toISOString()]
+      'INSERT INTO lists (name, color, sort_order, completed_retention, tenant, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+      [name, validColor(req.body.color), max.s + 1, completedRetention, tenant, new Date().toISOString()]
     );
-    res.status(201).json({ id: result.lastID, completed_retention: completedRetention });
+    res.status(201).json({ id: result.lastID, tenant, completed_retention: completedRetention });
   });
 
   app.put('/api/lists/order', async (req, res) => {
+    const tenant = validTenant(req.body.tenant, 'reminders');
     const ids = Array.isArray(req.body.ids) ? req.body.ids.map((value) => Number(value)) : [];
     if (!ids.length || ids.some((id) => !Number.isInteger(id) || id <= 0) || new Set(ids).size !== ids.length) {
-      return res.status(400).json({ error: 'Invalid list order' });
+      return res.status(400).json({ error: 'Invalid folder order' });
     }
-    const existing = await db.all('SELECT id, is_system FROM lists');
+    const existing = await db.all('SELECT id, is_system FROM lists WHERE tenant = ?', [tenant]);
     const existingIds = new Set(existing.map((row) => row.id));
     if (ids.length !== existingIds.size || ids.some((id) => !existingIds.has(id))) {
-      return res.status(400).json({ error: 'List order is out of date' });
+      return res.status(400).json({ error: 'Folder order is out of date' });
     }
     const systemList = existing.find((row) => row.is_system);
     if (systemList && ids[0] !== systemList.id) {
-      return res.status(400).json({ error: 'Unlisted must stay first' });
+      return res.status(400).json({ error: 'Unfiled must stay first' });
     }
     const cases = ids.map((id, index) => `WHEN ${id} THEN ${index}`).join(' ');
     try {
-      await db.run(`UPDATE lists SET sort_order = CASE id ${cases} END WHERE id IN (${ids.join(', ')})`);
+      await db.run(`UPDATE lists SET sort_order = CASE id ${cases} END WHERE tenant = ? AND id IN (${ids.join(', ')})`, [tenant]);
       res.json({ ok: true });
     } catch (err) {
-      console.error('List reorder failed:', err.message);
-      res.status(500).json({ error: 'Could not save list order' });
+      console.error('Folder reorder failed:', err.message);
+      res.status(500).json({ error: 'Could not save folder order' });
     }
   });
 
   app.patch('/api/lists/:id', async (req, res) => {
     const id = parseId(req.params.id);
-    if (!id) return res.status(400).json({ error: 'Invalid list' });
-    const list = await db.get('SELECT id, name, is_system, completed_retention FROM lists WHERE id = ?', [id]);
-    if (!list) return res.status(404).json({ error: 'List not found' });
+    if (!id) return res.status(400).json({ error: 'Invalid folder' });
+    const list = await db.get('SELECT id, name, is_system, completed_retention, tenant FROM lists WHERE id = ?', [id]);
+    if (!list) return res.status(404).json({ error: 'Folder not found' });
 
     const fields = [];
     const params = [];
     if (req.body.name !== undefined) {
       const name = text(req.body.name, 120);
-      if (!name) return res.status(400).json({ error: 'List name is required' });
+      if (!name) return res.status(400).json({ error: 'Folder name is required' });
       if (list.is_system && name !== list.name) {
-        return res.status(400).json({ error: 'Unlisted cannot be renamed' });
+        return res.status(400).json({ error: 'Unfiled cannot be renamed' });
       }
       fields.push('name = ?');
       params.push(name);
@@ -2133,6 +2299,9 @@ async function main() {
     }
     let retentionChanged = false;
     if (req.body.completed_retention !== undefined) {
+      if (list.tenant !== 'reminders') {
+        return res.status(400).json({ error: 'Completed retention only applies to Reminders folders' });
+      }
       const completedRetention = validCompletedRetention(req.body.completed_retention);
       if (!completedRetention) {
         return res.status(400).json({ error: 'Invalid completed retention' });
@@ -2150,12 +2319,188 @@ async function main() {
 
   app.delete('/api/lists/:id', async (req, res) => {
     const id = parseId(req.params.id);
-    if (!id) return res.status(400).json({ error: 'Invalid list' });
-    const list = await db.get('SELECT id, is_system FROM lists WHERE id = ?', [id]);
-    if (!list) return res.status(404).json({ error: 'List not found' });
-    if (list.is_system) return res.status(400).json({ error: 'Unlisted cannot be deleted' });
+    if (!id) return res.status(400).json({ error: 'Invalid folder' });
+    const list = await db.get('SELECT id, is_system, tenant FROM lists WHERE id = ?', [id]);
+    if (!list) return res.status(404).json({ error: 'Folder not found' });
+    if (list.is_system) return res.status(400).json({ error: 'Unfiled cannot be deleted' });
+    // Remove stored files before the cascade drops their metadata rows.
+    const files = await db.all('SELECT stored_name FROM attachments WHERE folder_id = ?', [id]);
+    await removeStoredFiles(files);
     await db.run('DELETE FROM lists WHERE id = ?', [id]);
     res.json({ ok: true });
+  });
+
+  /* ---------------- Notes tenant ---------------- */
+
+  app.post('/api/notes', async (req, res) => {
+    const title = text(req.body.title, 500);
+    if (!title) return res.status(400).json({ error: 'Note title is required' });
+    const body = typeof req.body.body === 'string' ? req.body.body.slice(0, NOTE_BODY_MAX) : '';
+    const folderId = req.body.folder_id === undefined || req.body.folder_id === null
+      ? await systemFolderId('notes')
+      : parseId(req.body.folder_id);
+    const folder = folderId ? await folderRow(folderId, 'notes') : null;
+    if (!folder) return res.status(400).json({ error: 'Choose a Notes folder' });
+    const now = new Date().toISOString();
+    const result = await db.run(
+      'INSERT INTO notes (folder_id, title, body, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
+      [folder.id, title, body, now, now]
+    );
+    res.status(201).json({ id: result.lastID });
+  });
+
+  app.patch('/api/notes/:id', async (req, res) => {
+    const id = parseId(req.params.id);
+    if (!id) return res.status(400).json({ error: 'Invalid note' });
+    const note = await db.get('SELECT id FROM notes WHERE id = ?', [id]);
+    if (!note) return res.status(404).json({ error: 'Note not found' });
+    const fields = [];
+    const params = [];
+    if (req.body.title !== undefined) {
+      const title = text(req.body.title, 500);
+      if (!title) return res.status(400).json({ error: 'Note title is required' });
+      fields.push('title = ?');
+      params.push(title);
+    }
+    if (req.body.body !== undefined) {
+      fields.push('body = ?');
+      params.push(typeof req.body.body === 'string' ? req.body.body.slice(0, NOTE_BODY_MAX) : '');
+    }
+    if (req.body.folder_id !== undefined) {
+      const folder = await folderRow(parseId(req.body.folder_id), 'notes');
+      if (!folder) return res.status(400).json({ error: 'Choose a Notes folder' });
+      fields.push('folder_id = ?');
+      params.push(folder.id);
+    }
+    if (!fields.length) return res.status(400).json({ error: 'Nothing to update' });
+    fields.push('updated_at = ?');
+    params.push(new Date().toISOString(), id);
+    await db.run(`UPDATE notes SET ${fields.join(', ')} WHERE id = ?`, params);
+    res.json({ ok: true });
+  });
+
+  app.delete('/api/notes/:id', async (req, res) => {
+    const id = parseId(req.params.id);
+    if (!id) return res.status(400).json({ error: 'Invalid note' });
+    const note = await db.get('SELECT id FROM notes WHERE id = ?', [id]);
+    if (!note) return res.status(404).json({ error: 'Note not found' });
+    const files = await db.all(
+      "SELECT stored_name FROM attachments WHERE owner_type = 'note' AND owner_id = ?", [id]
+    );
+    await removeStoredFiles(files);
+    await db.run("DELETE FROM attachments WHERE owner_type = 'note' AND owner_id = ?", [id]);
+    await db.run('DELETE FROM notes WHERE id = ?', [id]);
+    res.json({ ok: true });
+  });
+
+  /* ---------------- Attachments and Docs ---------------- */
+
+  async function saveUploads(req, { tenant, ownerType, ownerId, folderId }) {
+    const rows = [];
+    for (const file of req.files || []) {
+      const name = cleanFileName(file.originalname);
+      const result = await db.run(
+        `INSERT INTO attachments (tenant, owner_type, owner_id, folder_id, name, stored_name, mime, size, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [tenant, ownerType, ownerId, folderId, name, file.filename,
+          file.mimetype || 'application/octet-stream', file.size || 0, new Date().toISOString()]
+      );
+      rows.push({ id: result.lastID, name, mime: file.mimetype, size: file.size });
+    }
+    return rows;
+  }
+
+  app.post('/api/reminders/:id/attachments', upload.array('files', 10), async (req, res) => {
+    const id = parseId(req.params.id);
+    const reminder = id ? await db.get('SELECT id, list_id FROM reminders WHERE id = ?', [id]) : null;
+    if (!reminder) {
+      await removeStoredFiles(req.files);
+      return res.status(404).json({ error: 'Item not found' });
+    }
+    if (!req.files || !req.files.length) return res.status(400).json({ error: 'Choose at least one file' });
+    const rows = await saveUploads(req, {
+      tenant: 'reminders', ownerType: 'reminder', ownerId: reminder.id, folderId: reminder.list_id,
+    });
+    res.status(201).json({ attachments: rows });
+  });
+
+  app.post('/api/notes/:id/attachments', upload.array('files', 10), async (req, res) => {
+    const id = parseId(req.params.id);
+    const note = id ? await db.get('SELECT id, folder_id FROM notes WHERE id = ?', [id]) : null;
+    if (!note) {
+      await removeStoredFiles(req.files);
+      return res.status(404).json({ error: 'Note not found' });
+    }
+    if (!req.files || !req.files.length) return res.status(400).json({ error: 'Choose at least one file' });
+    const rows = await saveUploads(req, {
+      tenant: 'notes', ownerType: 'note', ownerId: note.id, folderId: note.folder_id,
+    });
+    res.status(201).json({ attachments: rows });
+  });
+
+  app.post('/api/docs', upload.array('files', 10), async (req, res) => {
+    const folderId = req.body.folder_id === undefined || req.body.folder_id === null
+      ? await systemFolderId('docs')
+      : parseId(req.body.folder_id);
+    const folder = folderId ? await folderRow(folderId, 'docs') : null;
+    if (!folder || !req.files || !req.files.length) {
+      await removeStoredFiles(req.files);
+      return res.status(400).json({ error: folder ? 'Choose at least one file' : 'Choose a Docs folder' });
+    }
+    const unsupported = req.files.find((file) => !docExtensionAllowed(file.originalname));
+    if (unsupported) {
+      await removeStoredFiles(req.files);
+      return res.status(400).json({
+        error: 'Docs supports Word, PDF, Excel, TXT and Markdown files only',
+      });
+    }
+    const rows = await saveUploads(req, {
+      tenant: 'docs', ownerType: 'doc', ownerId: null, folderId: folder.id,
+    });
+    res.status(201).json({ docs: rows });
+  });
+
+  app.get('/api/files/:id', async (req, res) => {
+    const id = parseId(req.params.id);
+    const file = id ? await db.get('SELECT name, stored_name FROM attachments WHERE id = ?', [id]) : null;
+    if (!file) return res.status(404).json({ error: 'File not found' });
+    const full = path.join(UPLOAD_DIR, file.stored_name);
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.download(full, file.name, (err) => {
+      if (err && !res.headersSent) res.status(404).json({ error: 'File not found' });
+    });
+  });
+
+  async function deleteAttachmentRow(id) {
+    const file = await db.get(
+      'SELECT id, stored_name FROM attachments WHERE id = ?', [id]
+    );
+    if (!file) return null;
+    await removeStoredFiles([file]);
+    await db.run('DELETE FROM attachments WHERE id = ?', [id]);
+    return file;
+  }
+
+  app.delete('/api/attachments/:id', async (req, res) => {
+    const id = parseId(req.params.id);
+    if (!id) return res.status(400).json({ error: 'Invalid file' });
+    if (!(await deleteAttachmentRow(id))) return res.status(404).json({ error: 'File not found' });
+    res.json({ ok: true });
+  });
+
+  app.delete('/api/docs/:id', async (req, res) => {
+    const id = parseId(req.params.id);
+    if (!id) return res.status(400).json({ error: 'Invalid file' });
+    const file = await db.get(
+      "SELECT id FROM attachments WHERE id = ? AND owner_type = 'doc'", [id]
+    );
+    if (!file) return res.status(404).json({ error: 'File not found' });
+    await deleteAttachmentRow(id);
+    res.json({ ok: true });
+  });
+
+  app.get('/api/storage', async (req, res) => {
+    res.json(await storageSnapshot());
   });
 
   // Shared reminder-create preparation. strict=false preserves the exact
@@ -2481,7 +2826,7 @@ async function main() {
           }
           if (body.notes !== undefined) overrides.notes = text(body.notes, NOTES_MAX);
           if (body.list_id !== undefined) {
-            const list = await db.get('SELECT id FROM lists WHERE id = ?', [body.list_id]);
+            const list = await db.get("SELECT id FROM lists WHERE id = ? AND tenant = 'reminders'", [body.list_id]);
             if (!list) return { status: 400, body: { error: 'Choose a valid list' } };
             overrides.list_id = body.list_id;
           }
@@ -2517,7 +2862,7 @@ async function main() {
           params.push(text(body.notes, NOTES_MAX));
         }
         if (body.list_id !== undefined) {
-          const list = await db.get('SELECT id FROM lists WHERE id = ?', [body.list_id]);
+          const list = await db.get("SELECT id FROM lists WHERE id = ? AND tenant = 'reminders'", [body.list_id]);
           if (!list) return { status: 400, body: { error: 'Choose a valid list' } };
           fields.push('list_id = ?');
           params.push(body.list_id);
@@ -2692,7 +3037,7 @@ async function main() {
       if (req.body.notes !== undefined) overrides.notes = text(req.body.notes, NOTES_MAX);
       if (req.body.list_id !== undefined) {
         const listId = parseId(req.body.list_id);
-        const list = listId ? await db.get('SELECT id FROM lists WHERE id = ?', [listId]) : null;
+        const list = listId ? await db.get("SELECT id FROM lists WHERE id = ? AND tenant = 'reminders'", [listId]) : null;
         if (!list) return res.status(400).json({ error: 'Choose a valid list' });
         overrides.list_id = listId;
       }
@@ -2728,7 +3073,7 @@ async function main() {
 
     if (req.body.list_id !== undefined) {
       const listId = parseId(req.body.list_id);
-      const list = listId ? await db.get('SELECT id FROM lists WHERE id = ?', [listId]) : null;
+      const list = listId ? await db.get("SELECT id FROM lists WHERE id = ? AND tenant = 'reminders'", [listId]) : null;
       if (!list) return res.status(400).json({ error: 'Choose a valid list' });
       fields.push('list_id = ?');
       params.push(listId);
@@ -2842,8 +3187,13 @@ async function main() {
   app.delete('/api/reminders/:id', async (req, res) => {
     const id = parseId(req.params.id);
     if (!id) return res.status(400).json({ error: 'Invalid item' });
+    const files = await db.all(
+      "SELECT stored_name FROM attachments WHERE owner_type = 'reminder' AND owner_id = ?", [id]
+    );
     const result = await db.run('DELETE FROM reminders WHERE id = ?', [id]);
     if (!result.changes) return res.status(404).json({ error: 'Item not found' });
+    await removeStoredFiles(files);
+    await db.run("DELETE FROM attachments WHERE owner_type = 'reminder' AND owner_id = ?", [id]);
     res.json({ ok: true });
   });
 
@@ -2897,6 +3247,12 @@ async function main() {
 
   app.use((err, req, res, next) => {
     if (res.headersSent) return next(err);
+    if (err instanceof multer.MulterError) {
+      const message = err.code === 'LIMIT_FILE_SIZE'
+        ? 'Each file must be 25 MB or smaller'
+        : 'Could not upload that file';
+      return res.status(400).json({ error: message });
+    }
     console.error(err);
     res.status(500).json({ error: 'Server error' });
   });
