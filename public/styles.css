@@ -3761,18 +3761,7 @@ body.sheet-open .sidebar {
   }
 }
 
-.docs-format-help {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 4px 10px;
-  margin-bottom: 12px;
-  font-size: 0.75rem;
-  color: var(--text-3);
-}
 
-.docs-format-help details { flex-basis: 100%; }
-.docs-format-help summary { cursor: pointer; color: var(--text-2); }
 .docs-format-list {
   margin: 6px 0 4px;
   font-size: 0.72rem;
@@ -3780,15 +3769,8 @@ body.sheet-open .sidebar {
   overflow-wrap: anywhere;
 }
 
-.empty .docs-format-help {
+.empty .docs-format-list {
   width: 100%;
-  max-width: 320px;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
+  max-width: 420px;
   text-align: center;
 }
-
-.empty .docs-format-help details { width: 100%; }
-.empty .docs-format-help summary,
-.empty .docs-format-list { width: 100%; text-align: center; }

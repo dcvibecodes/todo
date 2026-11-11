@@ -2853,7 +2853,7 @@ function renderDocsView(content, view) {
     content.append(el('div', { class: 'empty' }, [
       el('span', { html: ICON('file') }),
       el('h3', { class: 'empty-heading', text: 'No files yet' }),
-      docsFormatHelp(),
+      el('p', { class: 'docs-format-list', text: docsFormatMessage() }),
       el('button', {
         type: 'button',
         class: 'primary-btn',
@@ -3207,15 +3207,6 @@ function docFormatInfo(name) {
   return (state.docFormats || []).find((format) => format.ext === ext) || null;
 }
 
-function docsFormatSummary() {
-  const categories = [...new Set((state.docFormats || []).map((format) => format.category))];
-  return categories.length ? `Supports ${categories.join(', ')} files.` : 'Supports documents, images and archives.';
-}
-
-function docsFormatExtensions() {
-  return (state.docFormats || []).map((format) => format.ext).join(', ');
-}
-
 function applyDocsFormatUI() {
   const input = $('#docs-file-input');
   if (!input) return;
@@ -3223,14 +3214,10 @@ function applyDocsFormatUI() {
   if (extensions.length) input.setAttribute('accept', extensions.join(','));
 }
 
-function docsFormatHelp() {
-  return el('div', { class: 'docs-format-help' }, [
-    el('span', { text: docsFormatSummary() }),
-    el('details', {}, [
-      el('summary', { text: 'All formats' }),
-      el('p', { class: 'docs-format-list', text: docsFormatExtensions() }),
-    ]),
-  ]);
+function docsFormatMessage() {
+  const extensions = (state.docFormats || []).map((format) => format.ext).join(', ');
+  const categories = [...new Set((state.docFormats || []).map((format) => format.category))];
+  return `Supports ${categories.join(', ')} files (${extensions}).`;
 }
 
 function fileTypeLabel(name) {
