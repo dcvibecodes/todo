@@ -2849,12 +2849,11 @@ function renderDocsView(content, view) {
     $('#view-menu').hidden = false;
     $('#view-menu').onclick = () => openListSheet(folder);
   }
-  content.append(docsFormatHelp());
   if (!docs.length) {
     content.append(el('div', { class: 'empty' }, [
       el('span', { html: ICON('file') }),
       el('h3', { class: 'empty-heading', text: 'No files yet' }),
-      el('p', { text: docsFormatSummary() }),
+      docsFormatHelp(),
       el('button', {
         type: 'button',
         class: 'primary-btn',
