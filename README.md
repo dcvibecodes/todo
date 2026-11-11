@@ -2,6 +2,11 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v4.2.7
+
+- **App-wide mobile focus-zoom guard** - every text input, select, textarea and contenteditable control is at least 16px on mobile, so iOS never auto-zooms when any field or screen gains focus. The Note title stays 20px.
+- Service worker cache bumped to `workspace-v4.2.7`.
+
 ## What's New in v4.2.6
 
 - **No mobile zoom in the Note editor** - the Note body and link field are 16px on phones, so focusing them no longer triggers iOS auto-zoom. The title stays 20px; Save and Cancel remain reachable.

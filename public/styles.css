@@ -3730,3 +3730,17 @@ body.sheet-open .sidebar {
   font-weight: 700;
   display: inline;
 }
+
+/* Mobile focus-zoom guard: every text-entry control is at least 16px so
+   iOS never auto-zooms when a field gains focus. Checkboxes are unaffected. */
+@media (max-width: 899px) {
+  html body input:not([type="checkbox"]):not([type="radio"]),
+  html body select,
+  html body textarea,
+  html body [contenteditable="true"] {
+    font-size: 16px !important;
+  }
+  html body #note-editor .e-title {
+    font-size: 1.25rem !important;
+  }
+}
