@@ -1563,6 +1563,7 @@ html.deleting-row #content { overflow-anchor: none; }
 }
 
 .meta-list { display: inline-flex; align-items: center; gap: 5px; }
+.meta-files { display: inline-flex; align-items: center; }
 
 .meta-dot {
   width: 7px;
@@ -4009,10 +4010,3 @@ button.link-chip { border: 0; font-family: inherit; cursor: pointer; }
 }
 
 .attach-download .ic { width: 13px; height: 13px; }
-
-.attachment-count {
-  display: block;
-  margin-top: 4px;
-  color: var(--text-3);
-  font-size: 0.6875rem;
-}

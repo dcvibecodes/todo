@@ -2,6 +2,11 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v4.8.3
+
+- **Cleaner note attachment summary** - the note card's "N files" count no longer uses a copy-style icon, and the duplicate "N images" line under the thumbnails is gone. Document chips now use their own type icons (table for CSV, braces for JSON, archive for ZIP).
+- Service worker cache bumped to `workspace-v4.8.3`.
+
 ## What's New in v4.8.2
 
 - **Stored size is the visible size** - Docs cards now show the actual `stored_size` (for example 436.7 KB), not the larger pre-optimization upload. The File sheet repeats the stored size and explains the uploaded size when they differ. Storage totals already use stored bytes.

@@ -3025,7 +3025,7 @@ function noteRow(note, options = {}) {
         ])
         : null,
       attachments.length
-        ? el('span', { class: 'meta-repeat', html: `${ICON('files', 'ic')}<span>${attachments.length} file${attachments.length === 1 ? '' : 's'}</span>` })
+        ? el('span', { class: 'meta-files', text: `${attachments.length} file${attachments.length === 1 ? '' : 's'}` })
         : null,
     ]),
     note.body ? el('div', {
@@ -3451,7 +3451,7 @@ function fileChip(file) {
     download: file.name,
     title: `Download ${file.name}`,
     'aria-label': `Download ${file.name}`,
-    html: `${ICON('files', 'ic')}<span class="link-domain">${escapeHtml(file.name)}</span>`,
+    html: `${ICON(docIconForName(file.name), 'ic')}<span class="link-domain">${escapeHtml(file.name)}</span>`,
   });
 }
 
@@ -3486,13 +3486,6 @@ function attachmentExtras(files) {
     const strip = el('div', { class: 'attachment-thumbs', 'aria-label': 'Image attachments' });
     for (const file of images) strip.append(imageThumb(file));
     box.append(strip);
-    if (images.length > 3) {
-      box.append(el('span', {
-        class: 'attachment-count',
-        text: `${images.length} images`,
-        title: `Scroll to see all ${images.length} images`,
-      }));
-    }
   }
   if (others.length) {
     const links = el('div', { class: 'reminder-links' });
