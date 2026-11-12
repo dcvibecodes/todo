@@ -7480,7 +7480,7 @@ async function runSearch(query) {
   const includeNotes = true;
   const includeDocs = true;
   try {
-    const data = await api(`/api/search?q=${encodeURIComponent(query)}&limit=500&scope=all`);
+    const data = await api(`/api/search?q=${encodeURIComponent(query)}&limit=all&scope=all`);
     if (seq !== state.searchSeq || query !== state.search) return false;
     state.searchQuery = query;
     state.searchOpen = data.open || [];

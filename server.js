@@ -2822,10 +2822,12 @@ async function main() {
     const query = text(req.query.q, 200);
     if (!query) return res.status(400).json({ error: 'Search text is required' });
     let limit = 250;
-    if (req.query.limit !== undefined) {
+    if (req.query.limit === 'all') {
+      limit = Infinity;
+    } else if (req.query.limit !== undefined) {
       limit = Number(req.query.limit);
       if (!Number.isInteger(limit) || limit < 1 || limit > 500) {
-        return res.status(400).json({ error: 'limit must be 1 to 500' });
+        return res.status(400).json({ error: 'limit must be 1 to 500, or all' });
       }
     }
     const scope = req.query.scope === undefined ? 'all' : String(req.query.scope);
