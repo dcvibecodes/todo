@@ -2,6 +2,12 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v4.9.6
+
+- **One-row image thumbnails with overflow count** - image cards show one row; when more images do not fit, the last tile shows the hidden count (for example, `7 more`). Tapping it opens the carousel at the first hidden image. No horizontal page or strip scrolling.
+- **Note expansion restored** - long-note expansion is re-synced after each 50-card batch is appended.
+- Service worker cache bumped to `workspace-v4.9.6`.
+
 ## What's New in v4.9.4
 
 - **Fixed image counter position** - the `1 / 5` counter now sits immediately before Done in a fixed header column, regardless of filename length. Long names wrap to two lines without moving the counter.

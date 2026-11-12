@@ -2877,6 +2877,7 @@ function loadCardBatch() {
         fragment.append(batch.renderRow(batch.items[index]));
       }
       batch.group.append(fragment);
+      if (batch.kind === 'notes') syncNoteExpanders();
       batch.shown = end;
       batch.loading = false;
       if (batch.shown >= batch.items.length) {
@@ -3763,7 +3764,43 @@ function attachmentExtras(files) {
   const others = files.filter((file) => !isPreviewableImage(file.name));
   if (images.length) {
     const strip = el('div', { class: 'attachment-thumbs', 'aria-label': 'Image attachments' });
-    for (const file of images) strip.append(imageThumb(file, images));
+    const layout = () => {
+      const width = strip.clientWidth;
+      if (!width) return;
+      let capacity = Math.floor((width + 7) / 65);
+      if (capacity < 1) return;
+      const overflow = images.length > capacity;
+      const visible = Math.max(0, Math.min(images.length, capacity - (overflow ? 1 : 0)));
+      const signature = `${visible}:${overflow}`;
+      if (strip.dataset.layout === signature) return;
+      strip.dataset.layout = signature;
+      strip.replaceChildren();
+      for (let index = 0; index < visible; index += 1) {
+        strip.append(imageThumb(images[index], images));
+      }
+      if (overflow) {
+        const hidden = images.length - visible;
+        const more = el('button', {
+          type: 'button',
+          class: 'attachment-thumb attachment-more',
+          'aria-label': `Show ${hidden} more image${hidden === 1 ? '' : 's'}`,
+          title: `Show ${hidden} more image${hidden === 1 ? '' : 's'}`,
+          onclick: (event) => {
+            event.stopPropagation();
+            openImagePreview(images[visible], images);
+          },
+        }, [
+          el('span', { class: 'attachment-more-count', text: String(hidden) }),
+          el('span', { class: 'attachment-more-label', text: 'more' }),
+        ]);
+        strip.append(more);
+      }
+    };
+    requestAnimationFrame(layout);
+    if ('ResizeObserver' in window) {
+      strip._resizeObserver = new ResizeObserver(layout);
+      strip._resizeObserver.observe(strip);
+    }
     box.append(strip);
   }
   if (others.length) {

@@ -3960,10 +3960,11 @@ button.link-chip { border: 0; font-family: inherit; cursor: pointer; }
 /* Image attachment thumbnails on outer reminder/note cards */
 .attachment-thumbs {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 7px;
   max-width: 100%;
   margin-top: 7px;
+  overflow: hidden;
   padding-bottom: 2px;
 }
 
@@ -4009,6 +4010,28 @@ button.link-chip { border: 0; font-family: inherit; cursor: pointer; }
 .attachment-thumb:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+
+.attachment-more {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  cursor: pointer;
+}
+
+.attachment-more-count {
+  font-size: 1rem;
+  font-weight: 650;
+  line-height: 1;
+  color: var(--text);
+}
+
+.attachment-more-label {
+  font-size: 0.625rem;
+  line-height: 1;
+  color: var(--text-3);
 }
 
 /* Image viewer loading/error state */
