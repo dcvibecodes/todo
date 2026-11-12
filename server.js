@@ -3299,16 +3299,49 @@ async function main() {
     const id = parseId(req.params.id);
     if (!id) return res.status(400).json({ error: 'Invalid file' });
     const file = await db.get(
-      "SELECT id, folder_id, revision FROM attachments WHERE id = ? AND owner_type = 'doc'", [id]
+      "SELECT id, folder_id, name, stored_name, revision FROM attachments WHERE id = ? AND owner_type = 'doc'", [id]
     );
     if (!file) return res.status(404).json({ error: 'File not found' });
-    const folder = await folderRow(parseId(req.body.folder_id), 'docs');
-    if (!folder) return res.status(400).json({ error: 'Choose a Docs folder' });
+
+    const hasName = req.body.name !== undefined;
+    const hasFolder = req.body.folder_id !== undefined;
+    if (!hasName && !hasFolder) return res.status(400).json({ error: 'Nothing to update' });
+
+    let nextName = file.name;
+    let nextMime = null;
+    if (hasName) {
+      const requested = typeof req.body.name === 'string' ? req.body.name.trim() : '';
+      if (!requested) return res.status(400).json({ error: 'File name is required' });
+      nextName = cleanFileName(requested);
+      const originalExt = path.extname(file.name).toLowerCase();
+      if (path.extname(nextName).toLowerCase() !== originalExt) {
+        return res.status(400).json({ error: `Keep the ${originalExt} extension when renaming this file` });
+      }
+      const format = docFormatForName(nextName);
+      if (!format) return res.status(400).json({ error: docsFormatError() });
+      let matches = true;
+      try {
+        matches = await docContentMatches(path.join(UPLOAD_DIR, file.stored_name), format);
+      } catch {
+        matches = false;
+      }
+      if (!matches) {
+        return res.status(400).json({ error: `File content does not match the ${format.label} extension: ${nextName}` });
+      }
+      nextMime = format.mime;
+    }
+
+    let nextFolder = file.folder_id;
+    if (hasFolder) {
+      const folder = await folderRow(parseId(req.body.folder_id), 'docs');
+      if (!folder) return res.status(400).json({ error: 'Choose a Docs folder' });
+      nextFolder = folder.id;
+    }
+
     if (req.token) {
+      const allowed = ['name', 'folder_id', 'base_revision', 'base_epoch', 'idempotency_key'];
       for (const key of Object.keys(req.body || {})) {
-        if (!['folder_id', 'base_revision', 'base_epoch', 'idempotency_key'].includes(key)) {
-          return res.status(400).json({ error: `Unknown field: ${key}` });
-        }
+        if (!allowed.includes(key)) return res.status(400).json({ error: `Unknown field: ${key}` });
       }
       const key = idempotencyKeyFrom(req);
       if (!key) return res.status(400).json({ error: 'Idempotency-Key header is required for API writes' });
@@ -3322,7 +3355,7 @@ async function main() {
         fingerprint: payloadFingerprint(req.body),
         execute: async () => {
           const current = await db.get(
-            "SELECT id, folder_id, revision FROM attachments WHERE id = ? AND owner_type = 'doc'", [id]
+            "SELECT id, folder_id, name, revision FROM attachments WHERE id = ? AND owner_type = 'doc'", [id]
           );
           if (!current) return { status: 404, body: { error: 'File not found' } };
           if ((await getStoreEpoch()) !== req.body.base_epoch) {
@@ -3331,13 +3364,36 @@ async function main() {
           if (current.revision !== req.body.base_revision) {
             return { status: 409, body: { error: 'File changed since your read' } };
           }
-          await db.run('UPDATE attachments SET folder_id = ?, revision = revision + 1 WHERE id = ?', [folder.id, id]);
-          return { status: 200, body: { ok: true, folder_id: folder.id } };
+          const fields = [];
+          const params = [];
+          if (hasFolder) { fields.push('folder_id = ?'); params.push(nextFolder); }
+          if (hasName) {
+            fields.push('name = ?');
+            params.push(nextName);
+            fields.push('mime = ?');
+            params.push(nextMime);
+          }
+          fields.push('revision = revision + 1');
+          params.push(id);
+          await db.run(`UPDATE attachments SET ${fields.join(', ')} WHERE id = ?`, params);
+          return { status: 200, body: { ok: true, name: nextName, folder_id: nextFolder } };
         },
       });
     }
-    await db.run('UPDATE attachments SET folder_id = ?, revision = revision + 1 WHERE id = ?', [folder.id, id]);
-    res.json({ ok: true, folder_id: folder.id });
+
+    const fields = [];
+    const params = [];
+    if (hasFolder) { fields.push('folder_id = ?'); params.push(nextFolder); }
+    if (hasName) {
+      fields.push('name = ?');
+      params.push(nextName);
+      fields.push('mime = ?');
+      params.push(nextMime);
+    }
+    fields.push('revision = revision + 1');
+    params.push(id);
+    await db.run(`UPDATE attachments SET ${fields.join(', ')} WHERE id = ?`, params);
+    res.json({ ok: true, name: nextName, folder_id: nextFolder });
   });
 
   app.delete('/api/docs/:id', async (req, res) => {

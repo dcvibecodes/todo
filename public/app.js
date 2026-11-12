@@ -3130,14 +3130,24 @@ function syncDocSave() {
   const doc = state.docEditingId ? docById(state.docEditingId) : null;
   const button = $('#doc-save');
   if (!doc || !button) return;
-  button.disabled = Number($('#doc-folder').value) === doc.folder_id;
+  const name = $('#doc-name').value.trim();
+  button.disabled = !name || (Number($('#doc-folder').value) === doc.folder_id && name === doc.name);
+}
+
+function syncDocSheetInfo() {
+  const doc = state.docEditingId ? docById(state.docEditingId) : null;
+  if (!doc) return;
+  const name = $('#doc-name').value.trim() || doc.name;
+  $('#doc-meta').textContent = `${fileTypeLabel(name)} · ${formatBytes(doc.size)}`;
+  const docIcon = $('#doc-sheet-icon-use');
+  if (docIcon) docIcon.setAttribute('href', '#i-' + docIconForName(name));
+  syncDocSave();
 }
 
 function openDocSheet(doc) {
   state.docEditingId = doc.id;
-  state.docSnapshot = doc.folder_id;
-  $('#doc-title').textContent = doc.name;
-  $('#doc-meta').textContent = `${fileTypeLabel(doc.name)} · ${formatBytes(doc.size)}`;
+  state.docSnapshot = { name: doc.name, folder_id: doc.folder_id };
+  $('#doc-name').value = doc.name;
   const select = $('#doc-folder');
   select.replaceChildren();
   for (const folder of foldersFor('docs')) {
@@ -3145,6 +3155,7 @@ function openDocSheet(doc) {
   }
   select.value = String(doc.folder_id);
   syncDocFolderVisual();
+  syncDocSheetInfo();
   const download = $('#doc-sheet-download');
   download.href = '/api/files/' + doc.id;
   download.setAttribute('download', doc.name);
@@ -3157,7 +3168,12 @@ async function saveDoc(event) {
   const doc = state.docEditingId ? docById(state.docEditingId) : null;
   if (!doc) return;
   const folderId = Number($('#doc-folder').value);
-  if (!folderId || folderId === doc.folder_id) {
+  const name = $('#doc-name').value.trim();
+  if (!folderId) return toast('Choose a Docs folder');
+  if (!name) return toast('File name is required');
+  const renamed = name !== doc.name;
+  const moved = folderId !== doc.folder_id;
+  if (!renamed && !moved) {
     closeSheet('#doc-sheet');
     return;
   }
@@ -3165,12 +3181,12 @@ async function saveDoc(event) {
   button.disabled = true;
   button.textContent = 'Saving…';
   try {
-    await api('/api/docs/' + doc.id, { method: 'PATCH', body: { folder_id: folderId } });
+    await api('/api/docs/' + doc.id, { method: 'PATCH', body: { folder_id: folderId, name } });
     state.storage = null;
     closeSheet('#doc-sheet');
     await loadState();
     render();
-    toast('File moved');
+    toast(renamed && moved ? 'File updated' : renamed ? 'File renamed' : 'File moved');
   } catch (err) {
     toast(err.message);
   } finally {
@@ -7064,6 +7080,7 @@ $('#note-link-url').addEventListener('keydown', (event) => {
 });
 $('#doc-form').addEventListener('submit', saveDoc);
 $('#doc-folder').addEventListener('change', () => { syncDocFolderVisual(); syncDocSave(); });
+$('#doc-name').addEventListener('input', syncDocSheetInfo);
 $('#n-delete').addEventListener('click', deleteNoteFromEditor);
 $('#n-folder').addEventListener('change', syncNoteFolderVisual);
 $('#e-files').addEventListener('change', (event) => {

@@ -3432,13 +3432,22 @@ body.sheet-open .sidebar {
 .doc-sheet-file .doc-icon { width: 42px; height: 42px; }
 .doc-sheet-file .doc-icon .ic { width: 22px; height: 22px; }
 .doc-sheet-info { min-width: 0; }
-.doc-sheet-info h3 {
+.doc-name-input {
+  width: 100%;
   margin: 0;
+  padding: 3px 0;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
   font-size: 0.9375rem;
   font-weight: 400;
   line-height: 1.35;
-  overflow-wrap: anywhere;
 }
+
+.doc-name-input:hover,
+.doc-name-input:focus { border-bottom-color: var(--line); }
 .doc-sheet-info p {
   margin: 3px 0 0;
   font-size: 0.75rem;
