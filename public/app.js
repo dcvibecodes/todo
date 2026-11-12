@@ -3080,18 +3080,17 @@ function docRow(doc, options = {}) {
         el('span', { text: folder.name }),
       ]) : null,
     ]),
-    el('div', { class: 'doc-meta' }, [
-      el('span', { text: fileTypeLabel(doc.name) }),
-      el('span', { text: formatBytes(doc.size) }),
-      el('a', {
-        class: 'doc-download',
-        href: '/api/files/' + doc.id,
-        download: doc.name,
-        title: 'Download',
-        'aria-label': `Download ${doc.name}`,
-        html: ICON('download', 'ic'),
-      }),
-    ]),
+  ]);
+  const side = el('div', { class: 'doc-side' }, [
+    el('span', { class: 'doc-size', text: formatBytes(doc.size) }),
+    el('a', {
+      class: 'doc-download',
+      href: '/api/files/' + doc.id,
+      download: doc.name,
+      title: 'Download',
+      'aria-label': `Download ${doc.name}`,
+      html: ICON('download', 'ic'),
+    }),
   ]);
   const remove = el('button', {
     type: 'button',
@@ -3117,7 +3116,7 @@ function docRow(doc, options = {}) {
       }
       openDocSheet(doc);
     },
-    content: [body, tools],
+    content: [body, side, tools],
   });
 }
 

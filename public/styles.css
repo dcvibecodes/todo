@@ -520,6 +520,7 @@ body.gate-open {
   .check::after,
   .row-copy::after,
   .row-edit::after,
+  .doc-download::after,
   .row-delete::after,
   .list-grip::after,
   .new-list-btn::after,
@@ -540,6 +541,7 @@ body.gate-open {
   .sort-completed-filter::after { inset: -8px -4px; }
   .row-copy::after { inset: -5px; }
   .row-edit::after { inset: -5px; }
+  .doc-download::after { inset: -5px; }
   .row-delete::after { inset: -5px; }
   .list-grip::after { inset: -11px; }
   .new-list-btn::after { inset: -11px; }
@@ -1394,7 +1396,8 @@ body.flipping .reminder-group { overflow: visible; }
 }
 
 .row-copy,
-.row-edit {
+.row-edit,
+.doc-download {
   position: relative;
   flex: none;
   width: 34px;
@@ -1411,15 +1414,19 @@ body.flipping .reminder-group { overflow: visible; }
 }
 
 .row-copy .ic,
-.row-edit .ic { width: 15px; height: 15px; }
+.row-edit .ic,
+.doc-download .ic { width: 15px; height: 15px; }
 
 .reminder:hover .row-copy,
 .row-copy:focus-visible,
 .reminder:hover .row-edit,
-.row-edit:focus-visible { opacity: 0.9; }
+.row-edit:focus-visible,
+.reminder:hover .doc-download,
+.doc-download:focus-visible { opacity: 0.9; }
 
 .row-copy:hover,
-.row-edit:hover { background: var(--fill); color: var(--text); opacity: 1; }
+.row-edit:hover,
+.doc-download:hover { background: var(--fill); color: var(--text); opacity: 1; }
 
 .row-delete {
   position: relative;
@@ -3378,7 +3385,6 @@ body.sheet-open .sidebar {
   min-width: 0;
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 16px;
 }
 
@@ -3394,29 +3400,21 @@ body.sheet-open .sidebar {
   color: var(--text-3);
 }
 
-.doc-meta {
+.doc-side {
+  flex: none;
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  justify-content: flex-end;
-  gap: 12px;
+  gap: 10px;
+}
+
+.doc-size {
   font-size: 0.75rem;
   color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
-.doc-download {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 999px;
-  color: var(--text-3);
-  text-decoration: none;
-}
-
-.doc-download:hover { background: var(--fill); color: var(--text); }
-.doc-download .ic { width: 15px; height: 15px; }
+.doc-download { text-decoration: none; }
 
 .doc-row .reminder-title {
   font-size: 0.9375rem;
@@ -3586,8 +3584,6 @@ body.sheet-open .sidebar {
   .sheet-body::-webkit-scrollbar, .editor-body::-webkit-scrollbar,
   .day-card-scroll::-webkit-scrollbar { display: none; width: 0; height: 0; }
   .tenant-btn { min-height: 40px; }
-  .doc-body { flex-direction: column; align-items: flex-start; gap: 6px; }
-  .doc-meta { justify-content: flex-start; }
   .swipe-content { padding: 13px 12px; }
 }
 
