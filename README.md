@@ -2,6 +2,11 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v4.8.5
+
+- **Note images visible to API agents** - `GET /api/notes` and `GET /api/notes/:id` now include an `attachments` array with `is_image`, `preview_url` and `download_url`. A token with `notes:read` can discover every note image and fetch it with its bearer header.
+- Service worker cache bumped to `workspace-v4.8.5`.
+
 ## What's New in v4.8.4
 
 - **Portrait images fit the web viewer** - the full-screen image now fits inside its panel at every viewport height instead of showing only the top portion with no scroll.
@@ -1014,7 +1019,7 @@ Personal access tokens (`Authorization: Bearer $TEST_TOKEN`, created in Settings
 
 Additional tenant permissions are opt-in scopes on the same token record. Existing tokens migrate with an empty list and keep exactly their reminder profile; the owner changes them in Settings (`POST /api/tokens/:id/permissions`, session-only). Valid scopes are `notes:read`, `notes:write`, `notes:delete`, `docs:read`, `docs:write`, `docs:delete`, `storage:read`, `search:read`. `write` does **not** imply any new-tenant permission.
 
-- Notes/Docs reads use `GET /api/notes`, `/api/notes/:id`, `/api/docs`, `/api/docs/:id`; Docs search matches filenames only. Omitting `limit` returns the entire authorized collection with `complete: true`. An explicit `limit` (1–500) returns at most that many rows with `complete`/`has_more`, `total`, and a `scope` object (`collection`, `folder_id`, `token_filtered`). The explicit limit is a truncation, not a resumable cursor; sync clients should omit it and never infer deletion from a partial or differently scoped response.
+- Notes/Docs reads use `GET /api/notes`, `/api/notes/:id`, `/api/docs`, `/api/docs/:id`; Notes responses include `attachments` with `is_image`, `preview_url` and `download_url` (token `notes:read` can fetch those with the bearer header). Docs search matches filenames only. Omitting `limit` returns the entire authorized collection with `complete: true`. An explicit `limit` (1–500) returns at most that many rows with `complete`/`has_more`, `total`, and a `scope` object (`collection`, `folder_id`, `token_filtered`). The explicit limit is a truncation, not a resumable cursor; sync clients should omit it and never infer deletion from a partial or differently scoped response.
 - Notes create/edit needs `notes:write`; Notes delete needs `notes:delete`. Docs upload/move/rename needs `docs:write`; Docs delete needs `docs:delete`. Note/reminder attachments follow the parent: read to list/download, write to upload, `notes:delete`/`docs:delete` to delete.
 - `GET /api/files/:id` is authorized by the owning parent, never by file ID alone. Downloads are private/no-store and use attachment disposition. `GET /api/files/:id/preview` uses the same parent authorization, serves only PNG/JPG/JPEG/GIF/WebP/BMP after a signature check, and returns `inline` with `private, no-store` and `nosniff`. Docs extensions are `.doc .docx .pdf .xls .xlsx .txt .md .html .htm .png .jpg .jpeg .gif .webp .bmp .heic .heif .csv .json .zip`; HEIC/HEIF are converted to JPG before storage. Reminder/note attachments remain unrestricted by extension within the upload limits.
 - `/api/state`, `/api/lists`, `/api/search`, `/api/storage` and largest-file results are filtered for token callers; unauthorized arrays are empty, and responses include `filtered: true`. A query parameter only narrows access.

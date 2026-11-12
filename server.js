@@ -3047,6 +3047,35 @@ async function main() {
     return db.get(`SELECT ${NOTE_COLUMNS} FROM notes WHERE id = ?`, [id]);
   }
 
+  function publicAttachment(row) {
+    const previewable = Boolean(previewImageFormatForName(row.name));
+    return {
+      id: row.id,
+      name: row.name,
+      mime: row.mime,
+      size: row.size,
+      is_image: previewable,
+      preview_url: previewable ? `/api/files/${row.id}/preview` : null,
+      download_url: `/api/files/${row.id}`,
+    };
+  }
+
+  async function noteAttachmentsMap(noteIds) {
+    const map = new Map();
+    if (!noteIds.length) return map;
+    const placeholders = noteIds.map(() => '?').join(', ');
+    const rows = await db.all(
+      `SELECT id, owner_id, name, mime, size FROM attachments
+       WHERE owner_type = 'note' AND owner_id IN (${placeholders}) ORDER BY id`,
+      noteIds
+    );
+    for (const row of rows) {
+      if (!map.has(row.owner_id)) map.set(row.owner_id, []);
+      map.get(row.owner_id).push(publicAttachment(row));
+    }
+    return map;
+  }
+
   async function guardNoteEpoch(baseEpoch) {
     if (typeof baseEpoch !== 'string' || !baseEpoch) {
       return { status: 400, body: { error: 'base_epoch is required for API writes' } };
@@ -3110,6 +3139,12 @@ async function main() {
     const total = limit
       ? (await db.get(`SELECT COUNT(*) AS count FROM notes n ${where}`, params)).count
       : notes.length;
+    const attached = await noteAttachmentsMap(notes.map((note) => note.id));
+    for (const note of notes) {
+      note.attachments = attached.get(note.id) || [];
+      note.attachment_count = note.attachments.length;
+      note.has_images = note.attachments.some((file) => file.is_image);
+    }
     res.json({
       notes,
       complete: !hasMore,
@@ -3126,6 +3161,9 @@ async function main() {
     if (!id) return res.status(400).json({ error: 'Invalid note' });
     const note = await loadNoteRow(id);
     if (!note) return res.status(404).json({ error: 'Note not found' });
+    note.attachments = (await noteAttachmentsMap([id])).get(id) || [];
+    note.attachment_count = note.attachments.length;
+    note.has_images = note.attachments.some((file) => file.is_image);
     res.json({ note });
   });
 
