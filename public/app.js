@@ -5431,11 +5431,42 @@ function applyNoteLink() {
   $('#note-link-row').hidden = true;
 }
 
+function resetNoteMore() {
+  const more = $('#n-more');
+  const toggle = $('#n-more-toggle');
+  clearTimeout(more._hideTimer);
+  more.classList.remove('expanded');
+  more.hidden = true;
+  toggle.setAttribute('aria-expanded', 'false');
+  $('#n-more-label').textContent = 'More options';
+}
+
+function toggleNoteMore() {
+  const more = $('#n-more');
+  const toggle = $('#n-more-toggle');
+  const expanded = toggle.getAttribute('aria-expanded') === 'true';
+  clearTimeout(more._hideTimer);
+  if (expanded) {
+    toggle.setAttribute('aria-expanded', 'false');
+    $('#n-more-label').textContent = 'More options';
+    more.classList.remove('expanded');
+    more._hideTimer = setTimeout(() => {
+      if (toggle.getAttribute('aria-expanded') === 'false') more.hidden = true;
+    }, 260);
+  } else {
+    toggle.setAttribute('aria-expanded', 'true');
+    $('#n-more-label').textContent = 'Fewer options';
+    more.hidden = false;
+    requestAnimationFrame(() => requestAnimationFrame(() => more.classList.add('expanded')));
+  }
+}
+
 function openNoteEditor(id) {
   const note = id ? noteById(id) : null;
   noteLinkRange = null;
   noteSavedRange = null;
   $('#note-link-row').hidden = true;
+  resetNoteMore();
   state.noteEditingId = note ? note.id : null;
   state.notePendingFiles = [];
   state.noteRemovedFiles = [];
@@ -7001,6 +7032,7 @@ $('#search-form').addEventListener('submit', (event) => {
 
 $('#editor-form').addEventListener('submit', saveEditor);
 $('#note-form').addEventListener('submit', saveNote);
+$('#n-more-toggle').addEventListener('click', toggleNoteMore);
 $$('.note-format-btn').forEach((button) => {
   button.addEventListener('mousedown', (event) => event.preventDefault());
   button.addEventListener('click', () => applyNoteFormat(button.dataset.noteFormat));

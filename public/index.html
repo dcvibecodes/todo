@@ -558,27 +558,38 @@
         </div>
           <div id="n-body" class="e-notes note-body note-rich" contenteditable="true" role="textbox" aria-multiline="true" data-placeholder="Write your note"></div>
         </div>
-        <div class="ed-section">
-          <div class="ed-section-label">Folder</div>
-          <div class="ed-group">
-            <div class="ed-row ed-list-row">
-              <span class="ed-list-ic" id="n-folder-icon"><svg class="ic"><use href="#i-list"/></svg></span>
-              <span class="ed-label">Folder</span>
-              <span class="ed-value" id="n-folder-value"></span>
-              <svg class="ic ed-chevron"><use href="#i-chevron"/></svg>
-              <select id="n-folder" aria-label="Note folder"></select>
+        <div class="note-more-toggle-wrap">
+          <button type="button" id="n-more-toggle" class="e-more-toggle" aria-expanded="false" aria-controls="n-more">
+            <svg class="ic"><use href="#i-chevron"/></svg>
+            <span id="n-more-label">More options</span>
+          </button>
+        </div>
+
+        <div id="n-more" class="e-more" hidden>
+          <div class="e-more-inner">
+            <div class="ed-section">
+              <div class="ed-section-label">Folder</div>
+              <div class="ed-group">
+                <div class="ed-row ed-list-row">
+                  <span class="ed-list-ic" id="n-folder-icon"><svg class="ic"><use href="#i-list"/></svg></span>
+                  <span class="ed-label">Folder</span>
+                  <span class="ed-value" id="n-folder-value"></span>
+                  <svg class="ic ed-chevron"><use href="#i-chevron"/></svg>
+                  <select id="n-folder" aria-label="Note folder"></select>
+                </div>
+              </div>
+            </div>
+            <div class="ed-section">
+              <div class="ed-section-label">Attachments</div>
+              <div id="n-attachments" class="attach-list"></div>
+              <label class="attach-add">
+                <input id="n-files" type="file" multiple hidden>
+                <svg class="ic"><use href="#i-files"/></svg>
+                <span>Add files</span>
+              </label>
+              <p class="notify-hint">Any file type, up to 25 MB each.</p>
             </div>
           </div>
-        </div>
-        <div class="ed-section">
-          <div class="ed-section-label">Attachments</div>
-          <div id="n-attachments" class="attach-list"></div>
-          <label class="attach-add">
-            <input id="n-files" type="file" multiple hidden>
-            <svg class="ic"><use href="#i-files"/></svg>
-            <span>Add files</span>
-          </label>
-          <p class="notify-hint">Any file type, up to 25 MB each.</p>
         </div>
         <button type="button" id="n-delete" class="danger-btn" hidden>Delete Note</button>
       </div>
