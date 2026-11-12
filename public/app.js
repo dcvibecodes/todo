@@ -3545,9 +3545,93 @@ function isPreviewableImage(name) {
   return PREVIEW_IMAGE_EXTENSIONS.has(ext);
 }
 
+const IMAGE_CACHE_MAX_BYTES = 24 * 1024 * 1024;
+const IMAGE_CACHE_MAX_ITEMS = 12;
+const imageFullCache = new Map();
+const imageFetchControllers = new Map();
+let imageCacheBytes = 0;
 let imageGallery = [];
 let imageIndex = 0;
 let imageSwipeStart = null;
+
+function imageCacheKey(file) {
+  return `${file.id}:${file.revision || 0}:${file.stored_size || file.size || 0}`;
+}
+
+function clearImageCache() {
+  for (const entry of imageFetchControllers.values()) entry.controller.abort();
+  imageFetchControllers.clear();
+  for (const entry of imageFullCache.values()) {
+    if (entry.url) URL.revokeObjectURL(entry.url);
+  }
+  imageFullCache.clear();
+  imageCacheBytes = 0;
+  imageGallery = [];
+  imageIndex = 0;
+}
+
+function storeCachedImage(key, blob) {
+  const url = URL.createObjectURL(blob);
+  const entry = { url, bytes: blob.size };
+  imageFullCache.set(key, entry);
+  imageCacheBytes += blob.size;
+  while (imageFullCache.size > IMAGE_CACHE_MAX_ITEMS || imageCacheBytes > IMAGE_CACHE_MAX_BYTES) {
+    const oldestKey = imageFullCache.keys().next().value;
+    if (!oldestKey || oldestKey === key) break;
+    const oldest = imageFullCache.get(oldestKey);
+    if (oldest && oldest.url) URL.revokeObjectURL(oldest.url);
+    imageFullCache.delete(oldestKey);
+    imageCacheBytes -= oldest ? oldest.bytes : 0;
+  }
+  return entry;
+}
+
+function loadFullImage(file) {
+  const key = imageCacheKey(file);
+  const cached = imageFullCache.get(key);
+  if (cached) return Promise.resolve(cached);
+  const existing = imageFetchControllers.get(key);
+  if (existing) return existing.promise;
+  const controller = new AbortController();
+  const promise = fetch('/api/files/' + file.id + '/preview', {
+    credentials: 'same-origin',
+    signal: controller.signal,
+  }).then(async (res) => {
+    if (!res.ok) throw new Error(`Preview failed (HTTP ${res.status})`);
+    const blob = await res.blob();
+    if (controller.signal.aborted) throw new DOMException('Aborted', 'AbortError');
+    return storeCachedImage(key, blob);
+  }).finally(() => {
+    imageFetchControllers.delete(key);
+  });
+  imageFetchControllers.set(key, { controller, promise });
+  return promise;
+}
+
+function prefetchGallery() {
+  if (imageGallery.length < 2) return;
+  const order = [];
+  for (let offset = 1; offset < imageGallery.length; offset += 1) {
+    order.push(imageGallery[(imageIndex + offset) % imageGallery.length]);
+    order.push(imageGallery[(imageIndex - offset + imageGallery.length) % imageGallery.length]);
+  }
+  let active = 0;
+  let cursor = 0;
+  const pump = () => {
+    while (active < 2 && cursor < order.length) {
+      if (imageCacheBytes >= IMAGE_CACHE_MAX_BYTES || imageFullCache.size >= IMAGE_CACHE_MAX_ITEMS) return;
+      const file = order[cursor++];
+      const key = imageCacheKey(file);
+      if (imageFullCache.has(key) || imageFetchControllers.has(key)) continue;
+      active += 1;
+      loadFullImage(file).catch(() => {}).finally(() => {
+        active -= 1;
+        pump();
+      });
+    }
+  };
+  pump();
+}
 
 function renderImageViewer(direction = 0) {
   const image = $('#image-viewer-img');
@@ -3570,21 +3654,39 @@ function renderImageViewer(direction = 0) {
     prev.setAttribute('aria-label', `Previous image: ${previous.name}`);
     next.setAttribute('aria-label', `Next image: ${following.name}`);
   }
-  status.textContent = 'Loading…';
-  status.hidden = false;
-  image.hidden = true;
-  image.onload = () => {
-    image.hidden = false;
-    status.hidden = true;
-  };
-  image.onerror = () => {
-    image.hidden = true;
-    status.textContent = 'Preview unavailable';
-    status.hidden = false;
-  };
-  image.removeAttribute('src');
-  image.src = '/api/files/' + file.id + '/preview';
+  const cached = imageFullCache.get(imageCacheKey(file));
   image.alt = file.name;
+  image.onerror = () => {
+    if (image.src.startsWith('blob:')) {
+      status.textContent = 'Full image unavailable';
+      status.hidden = false;
+    } else {
+      image.hidden = true;
+      status.textContent = 'Preview unavailable';
+      status.hidden = false;
+    }
+  };
+  if (cached) {
+    image.hidden = false;
+    image.src = cached.url;
+    status.hidden = true;
+  } else {
+    image.hidden = false;
+    image.src = '/api/files/' + file.id + '/thumb?w=320';
+    status.hidden = true;
+    loadFullImage(file).then((entry) => {
+      if (imageGallery[imageIndex] !== file) return;
+      image.src = entry.url;
+      image.hidden = false;
+      status.hidden = true;
+    }).catch((err) => {
+      if (err && err.name === 'AbortError') return;
+      if (imageGallery[imageIndex] === file) {
+        status.textContent = 'Full image unavailable';
+        status.hidden = false;
+      }
+    });
+  }
   if (direction) {
     const body = $('.image-viewer-body');
     if (body) {
@@ -3598,12 +3700,14 @@ function renderImageViewer(direction = 0) {
 function openImagePreview(file, gallery = null) {
   const viewer = $('#image-sheet');
   if (!viewer || !file) return;
+  clearImageCache();
   const files = (Array.isArray(gallery) ? gallery : [file])
     .filter((item) => item && item.id && isPreviewableImage(item.name));
   imageGallery = files.length ? files : [file];
   const found = imageGallery.findIndex((item) => String(item.id) === String(file.id));
   imageIndex = found >= 0 ? found : 0;
   renderImageViewer();
+  prefetchGallery();
   openSheet('#image-sheet');
 }
 
@@ -3612,7 +3716,6 @@ function stepImage(delta) {
   imageIndex = (imageIndex + delta + imageGallery.length) % imageGallery.length;
   renderImageViewer(delta);
 }
-
 
 function fileChip(file) {
   return el('a', {
@@ -6477,6 +6580,7 @@ function finishSheetClose(sheet) {
   if (timer) clearTimeout(timer);
   sheetCloseTimers.delete(sheet);
   closingSheets.delete(sheet);
+  if (sheet.id === 'image-sheet') clearImageCache();
   sheet.hidden = true;
   sheet.classList.remove('is-visible');
   syncSheetState();
@@ -6542,6 +6646,7 @@ function closeTopSheetInPlace() {
   if (open.length) {
     const sheet = open[open.length - 1];
     if (sheet.id === 'settings-sheet') revertSettingsPreview();
+    if (sheet.id === 'image-sheet') clearImageCache();
     const timer = sheetCloseTimers.get(sheet);
     if (timer) clearTimeout(timer);
     sheetCloseTimers.delete(sheet);
