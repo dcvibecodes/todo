@@ -2,6 +2,12 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v4.8.8
+
+- **More aggressive new-upload settings** - images now cap at 2200 px with JPEG/WebP quality 75 (PNG palette quality 80), HEIC/HEIF converts to JPEG at the same target, and PDFs use 130 dpi colour/grey, 260 dpi mono. The existing upload optimizer still keeps the original when the candidate is not smaller.
+- **Existing-file recompression** - added the guarded `scripts/recompress-uploads.js` maintenance tool. It reprocesses existing images/PDFs, uses a compensating quality for already-compressed images, skips disabled files, and is dry-run/confirm gated.
+- Service worker cache bumped to `workspace-v4.8.8`.
+
 ## What's New in v4.8.7
 
 - **Image carousel** - opening a note or reminder image now gives you the whole image set for that item. Swipe left/right on phone, use the left/right arrow buttons on web, or use the keyboard arrows; a `1 / N` counter shows position. Wrapping at either end is supported. Docs images stay single-image.
@@ -958,8 +964,8 @@ Open http://127.0.0.1:3006. The first visit asks you to create a password (minim
 
 ### Upload compression policy
 
-- ImageMagick (`convert`/`IMAGEMAGICK_BIN`) optimizes JPEG, PNG, WebP and GIF: auto-orient, max 2400 px long edge without enlargement, ICC profile kept, EXIF stripped, JPEG quality 82, PNG 256-colour quality 90, WebP quality 82, animated GIF/WebP preserved.
-- Ghostscript (`gs`/`GHOSTSCRIPT_BIN`) rewrites PDFs larger than 50 KiB with `/ebook` settings (150 dpi colour/grey, 300 dpi mono). A PDF is replaced only when at least 3% smaller.
+- ImageMagick (`convert`/`IMAGEMAGICK_BIN`) optimizes JPEG, PNG, WebP and GIF: auto-orient, max 2200 px long edge without enlargement, ICC profile kept, EXIF stripped, JPEG/WebP quality 75, PNG 256-colour quality 80, animated GIF/WebP preserved.
+- Ghostscript (`gs`/`GHOSTSCRIPT_BIN`) rewrites PDFs larger than 50 KiB with `/ebook` settings (130 dpi colour/grey, 260 dpi mono). A PDF is replaced only when at least 3% smaller.
 - Text-like files are gzip-compressed when they save at least 8%; downloads are decompressed to the exact original bytes.
 - HEIC/HEIF uploads are converted to JPG (quality 82 when optimization is on, 90 when off) so browsers can preview them. Images are replaced only when the candidate is at least 8% smaller. If ImageMagick/Ghostscript is missing or processing fails, the original is kept and the outcome is logged. ZIP/Office files and BMP are not reprocessed; existing uploads are never rewritten.
 - Lossy optimization is on by default and can be turned off in Settings → Uploads. When on, only the optimized image/PDF copy is kept; the File sheet states whether Download returns the original or the optimized copy. HEIC/HEIF always becomes JPG because browsers cannot preview HEIC reliably.

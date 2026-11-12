@@ -156,7 +156,12 @@ const COMPRESSIBLE_TEXT_EXTENSIONS = new Set([
 const IMAGE_COMPRESSION_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp']);
 const HEIC_EXTENSIONS = new Set(['.heic', '.heif']);
 const IMAGE_SIGNATURES = { '.png': 'png', '.jpg': 'jpeg', '.jpeg': 'jpeg', '.gif': 'gif', '.webp': 'webp' };
-const IMAGE_MAX_EDGE = 2400;
+const IMAGE_MAX_EDGE = 2200;
+const IMAGE_JPEG_QUALITY = 75;
+const IMAGE_PNG_QUALITY = 80;
+const IMAGE_WEBP_QUALITY = 75;
+const PDF_IMAGE_DPI = 130;
+const PDF_MONO_DPI = 260;
 const MIN_COMPRESSION_SAVINGS = 0.08;
 const MIN_COMPRESSION_BYTES = 1024;
 let imageMagickMissingLogged = false;
@@ -234,11 +239,11 @@ async function optimizeImage(filePath, name) {
   if (ext === '.gif' || ext === '.webp') args.push('-coalesce');
   args.push('-auto-orient', '-resize', `${IMAGE_MAX_EDGE}x${IMAGE_MAX_EDGE}>`, '+profile', '!icc,*');
   if (ext === '.png') {
-    args.push('-colors', '256', '-dither', 'FloydSteinberg', '-quality', '90', '-define', 'png:compression-level=9');
+    args.push('-colors', '256', '-dither', 'FloydSteinberg', '-quality', String(IMAGE_PNG_QUALITY), '-define', 'png:compression-level=9');
   } else if (ext === '.jpg' || ext === '.jpeg') {
-    args.push('-quality', '82', '-sampling-factor', '4:2:0', '-interlace', 'Plane');
+    args.push('-quality', String(IMAGE_JPEG_QUALITY), '-sampling-factor', '4:2:0', '-interlace', 'Plane');
   } else if (ext === '.webp') {
-    args.push('-quality', '82');
+    args.push('-quality', String(IMAGE_WEBP_QUALITY));
   } else if (ext === '.gif') {
     args.push('-layers', 'Optimize');
   }
@@ -280,9 +285,9 @@ async function optimizePdf(filePath, name) {
     '-dDetectDuplicateImages=true',
     '-dCompressFonts=true',
     '-dSubsetFonts=true',
-    '-dColorImageResolution=150',
-    '-dGrayImageResolution=150',
-    '-dMonoImageResolution=300',
+    `-dColorImageResolution=${PDF_IMAGE_DPI}`,
+    `-dGrayImageResolution=${PDF_IMAGE_DPI}`,
+    `-dMonoImageResolution=${PDF_MONO_DPI}`,
     `-sOutputFile=${temp}`,
     filePath,
   ];
@@ -342,7 +347,7 @@ async function convertHeicUpload(file, name, optimizeLossy) {
     '-auto-orient',
     '-resize', `${IMAGE_MAX_EDGE}x${IMAGE_MAX_EDGE}>`,
     '+profile', '!icc,*',
-    '-quality', optimizeLossy ? '82' : '90',
+    '-quality', optimizeLossy ? String(IMAGE_JPEG_QUALITY) : '90',
     '-sampling-factor', '4:2:0',
     '-interlace', 'Plane',
     outPath,
