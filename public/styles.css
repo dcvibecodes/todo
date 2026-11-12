@@ -3888,3 +3888,120 @@ button.link-chip { border: 0; font-family: inherit; cursor: pointer; }
   text-align: left;
   cursor: zoom-in;
 }
+
+/* Docs metadata and file actions */
+.doc-added,
+.doc-storage {
+  margin: 2px 0 0;
+  color: var(--text-3);
+  font-size: 0.75rem;
+  line-height: 1.35;
+}
+
+.doc-storage { margin-bottom: 8px; }
+
+.doc-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.doc-actions .secondary-btn { margin-top: 0; }
+
+#doc-sheet-share[hidden] { display: none; }
+
+/* Image attachment thumbnails on outer reminder/note cards */
+.attachment-thumbs {
+  display: flex;
+  gap: 7px;
+  max-width: 100%;
+  margin-top: 7px;
+  padding-bottom: 2px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  touch-action: pan-x;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+
+.reminder-body > .attachment-extras { grid-column: 1; }
+
+.attachment-extras { margin-top: 6px; }
+.attachment-extras .attachment-thumbs { margin-top: 0; }
+.attachment-extras .reminder-links { margin-top: 7px; }
+
+.attachment-thumb {
+  position: relative;
+  flex: 0 0 auto;
+  width: 58px;
+  height: 58px;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--line-soft);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--text) 6%, var(--surface));
+  color: var(--text-2);
+  cursor: zoom-in;
+}
+
+.attachment-thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.attachment-thumb .thumb-fallback {
+  display: none;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+}
+
+.attachment-thumb .thumb-fallback .ic { width: 20px; height: 20px; }
+
+.attachment-thumb.is-error img { display: none; }
+.attachment-thumb.is-error .thumb-fallback { display: grid; }
+
+.attachment-thumb:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Image viewer loading/error state */
+.image-viewer-status {
+  margin: 0;
+  color: #b9b4ac;
+  font-size: 0.8125rem;
+  text-align: center;
+}
+
+#image-viewer-img[hidden] { display: none; }
+
+/* Explicit per-file download inside reminder/note editors */
+.attach-download {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  color: var(--text-3);
+  text-decoration: none;
+}
+
+.attach-download:hover,
+.attach-download:focus-visible {
+  background: var(--fill);
+  color: var(--text);
+}
+
+.attach-download .ic { width: 13px; height: 13px; }
+
+.attachment-count {
+  display: block;
+  margin-top: 4px;
+  color: var(--text-3);
+  font-size: 0.6875rem;
+}

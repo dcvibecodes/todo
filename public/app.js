@@ -403,6 +403,28 @@ function el(tag, props = {}, children = []) {
   return node;
 }
 
+async function requestJson(res) {
+  const text = await res.text();
+  let data = {};
+  try { data = text ? JSON.parse(text) : {}; } catch { /* non-JSON proxy/error page */ }
+  if (!res.ok) {
+    if (res.status === 401 && state.authenticated) {
+      state.authenticated = false;
+      showAuth();
+    }
+    const requestId = (data && data.request_id) || res.headers.get('x-request-id');
+    let message = data && data.error;
+    if (!message) {
+      if (res.status === 413) message = 'Upload is too large for the server or proxy limit';
+      else if (res.status === 502 || res.status === 504) message = 'The server did not respond in time';
+      else message = `Request failed (HTTP ${res.status})`;
+    }
+    if (requestId && (!data || !data.error || res.status >= 500)) message += ` (request ${requestId})`;
+    throw new Error(message);
+  }
+  return data;
+}
+
 async function api(path, options = {}) {
   const init = {
     method: options.method || 'GET',
@@ -416,17 +438,7 @@ async function api(path, options = {}) {
   if (state.csrfToken && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(init.method.toUpperCase())) {
     init.headers['X-CSRF-Token'] = state.csrfToken;
   }
-  const res = await fetch(path, init);
-  let data = {};
-  try { data = await res.json(); } catch { /* empty body */ }
-  if (!res.ok) {
-    if (res.status === 401 && state.authenticated) {
-      state.authenticated = false;
-      showAuth();
-    }
-    throw new Error(data.error || 'Something went wrong');
-  }
-  return data;
+  return requestJson(await fetch(path, init));
 }
 
 let toastTimer = null;
@@ -549,6 +561,13 @@ function dueCountdown(due, completed) {
   if (completed) return '';
   const late = Math.abs(diff);
   return late === 1 ? '1 day overdue' : `${late} days overdue`;
+}
+
+function formatAddedDate(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
 function formatRecordDate(value) {
@@ -2854,6 +2873,7 @@ function renderDocsView(content, view) {
       el('span', { html: ICON('file') }),
       el('h3', { class: 'empty-heading', text: 'No files yet' }),
       el('p', { class: 'docs-format-list', text: docsFormatMessage() }),
+      el('p', { class: 'notify-hint', text: 'New images and PDFs may be stored as smaller optimized copies; downloads return the optimized bytes. Text files are compressed losslessly. HEIC/HEIF photos are converted to JPG. Change this in Settings → Uploads.' }),
       el('button', {
         type: 'button',
         class: 'primary-btn',
@@ -3013,11 +3033,8 @@ function noteRow(note, options = {}) {
       html: note.body_format === 'html' ? safeNoteHtml(note.body, true) : noteMarkdownHtml(note.body),
     }) : null,
   ]);
-  if (attachments.length) {
-    const chips = el('div', { class: 'reminder-links' });
-    for (const file of attachments) chips.append(fileChip(file));
-    body.append(chips);
-  }
+  const extras = attachmentExtras(attachments);
+  if (extras) body.append(extras);
   const copy = el('button', {
     type: 'button',
     class: 'row-copy',
@@ -3079,6 +3096,9 @@ function docRow(doc, options = {}) {
         el('span', { class: 'meta-dot' }),
         el('span', { text: folder.name }),
       ]) : null,
+      formatAddedDate(doc.created_at)
+        ? el('div', { class: 'doc-added', text: `Added ${formatAddedDate(doc.created_at)}`, title: formatRecordDate(doc.created_at) })
+        : null,
     ]),
   ]);
   const side = el('div', { class: 'doc-side' }, [
@@ -3100,7 +3120,7 @@ function docRow(doc, options = {}) {
     onclick: (event) => { event.stopPropagation(); handleDocDelete(doc, event.currentTarget); },
   });
   const tools = el('div', { class: 'row-tools' }, [remove]);
-  return swipeRow({
+  const row = swipeRow({
     class: 'doc-row',
     color: folder ? colorVar(folder.color) : colorVar('gray'),
     data: { 'data-doc-id': doc.id },
@@ -3109,7 +3129,7 @@ function docRow(doc, options = {}) {
     onDelete: (button) => handleDocDelete(doc, button),
     onClick: (event) => {
       if (event.target.closest('a, button, input, textarea, select')) return;
-      if (Date.now() - lastSwipeEnd < 400) return;
+      if (Date.now() - lastSwipeEnd < 400 || Date.now() - lastDocDragEnd < 400) return;
       if (event.currentTarget.classList.contains('swipe-open')) {
         resetSwipe(event.currentTarget);
         return;
@@ -3118,6 +3138,27 @@ function docRow(doc, options = {}) {
     },
     content: [body, side, tools],
   });
+  makeDocDraggable(row, doc);
+  return row;
+}
+
+function makeDocDraggable(row, doc) {
+  if (!window.matchMedia('(pointer: fine)').matches) return;
+  row.draggable = true;
+  row.addEventListener('dragstart', (event) => {
+    if (event.target.closest('a, button, input, textarea, select')) {
+      event.preventDefault();
+      return;
+    }
+    try {
+      event.dataTransfer.effectAllowed = 'copy';
+      event.dataTransfer.setData(
+        'DownloadURL',
+        `${doc.mime || 'application/octet-stream'}:${doc.name}:${location.origin}/api/files/${doc.id}`,
+      );
+    } catch { /* DownloadURL is a Chromium extension; Share/Download remain */ }
+  });
+  row.addEventListener('dragend', () => { lastDocDragEnd = Date.now(); });
 }
 
 function syncDocFolderVisual() {
@@ -3146,15 +3187,104 @@ function syncDocSheetInfo() {
   if (!doc) return;
   const name = $('#doc-name').value.trim() || doc.name;
   $('#doc-meta').textContent = `${fileTypeLabel(name)} · ${formatBytes(doc.size)}`;
+  const storage = $('#doc-storage');
+  if (storage) {
+    storage.textContent = docStorageSummary(doc);
+    storage.hidden = !storage.textContent;
+  }
   const docIcon = $('#doc-sheet-icon-use');
   if (docIcon) docIcon.setAttribute('href', '#i-' + docIconForName(name));
   autoGrowDocName();
   syncDocSave();
 }
 
+let docShareCache = null;
+
+function optimizeNote(doc) {
+  const original = Number(doc.original_size || 0);
+  const stored = Number(doc.stored_size || doc.size || 0);
+  if (original && stored && stored !== original) return ` (${formatBytes(original)} → ${formatBytes(stored)})`;
+  return ' to JPEG';
+}
+
+function docStorageSummary(doc) {
+  const original = Number(doc.original_size || doc.size || 0);
+  const stored = Number(doc.stored_size || doc.size || 0);
+  const optimization = String(doc.optimization || '');
+  if (optimization.startsWith('heic:')) {
+    const note = optimizeNote(doc);
+    return `Converted from HEIC/HEIF${note}. Download returns the converted JPG.`;
+  }
+  if (doc.compression === 'gzip') {
+    return stored && original && stored < original
+      ? `Stored compressed at ${formatBytes(stored)}. Download returns the original ${formatBytes(original)} file.`
+      : 'Download returns the original file.';
+  }
+  if (stored && original && stored < original * 0.99) {
+    return `Stored at ${formatBytes(stored)} from ${formatBytes(original)}. Download returns the stored optimized copy.`;
+  }
+  if (optimization.endsWith(':disabled')) return 'Download returns the original file — optimization is off.';
+  if (optimization.endsWith(':skipped-small')) return 'Original kept — the file was below the optimization threshold. Download returns the original.';
+  if (optimization.endsWith(':kept')) return 'Original kept — no smaller copy was produced. Download returns the original.';
+  if (optimization.endsWith(':unavailable')) return 'Original kept — the optimizer tool is unavailable. Download returns the original.';
+  if (optimization.endsWith(':error') || optimization.endsWith(':skipped-invalid')) return 'Original kept — optimization could not process it. Download returns the original.';
+  return '';
+}
+
+async function prepareDocShareFile(doc) {
+  if (docShareCache && docShareCache.docId === doc.id && docShareCache.name === doc.name) {
+    return docShareCache.file;
+  }
+  const res = await fetch('/api/files/' + doc.id, { credentials: 'same-origin' });
+  if (!res.ok) {
+    let data = {};
+    try { data = await res.json(); } catch { /* non-JSON proxy error */ }
+    throw new Error(data.error || `Could not prepare this file (HTTP ${res.status})`);
+  }
+  const blob = await res.blob();
+  const file = new File([blob], doc.name, { type: doc.mime || blob.type || 'application/octet-stream' });
+  docShareCache = { docId: doc.id, name: doc.name, file };
+  return file;
+}
+
+async function shareDoc(button) {
+  const doc = state.docEditingId ? docById(state.docEditingId) : null;
+  if (!doc) return;
+  if (typeof navigator.share !== 'function') {
+    toast('Sharing is not available here. Use Download instead.');
+    return;
+  }
+  const label = button.querySelector('span');
+  const namedDoc = { ...doc, name: $('#doc-name').value.trim() || doc.name };
+  const cached = docShareCache && docShareCache.docId === doc.id && docShareCache.name === namedDoc.name;
+  if (!cached) {
+    button.disabled = true;
+    if (label) label.textContent = 'Preparing…';
+  }
+  try {
+    const file = await prepareDocShareFile(namedDoc);
+    if (typeof navigator.canShare === 'function' && !navigator.canShare({ files: [file] })) {
+      toast('This file cannot be shared here. Use Download instead.');
+      return;
+    }
+    await navigator.share({ files: [file], title: namedDoc.name });
+  } catch (err) {
+    if (err && err.name === 'AbortError') return;
+    if (err && err.name === 'NotAllowedError' && docShareCache && docShareCache.docId === doc.id) {
+      toast('Tap Share file again to open the share sheet');
+      return;
+    }
+    toast(err.message || 'Sharing failed. Use Download instead.');
+  } finally {
+    button.disabled = false;
+    if (label) label.textContent = 'Share file';
+  }
+}
+
 function openDocSheet(doc) {
   state.docEditingId = doc.id;
   state.docSnapshot = { name: doc.name, folder_id: doc.folder_id };
+  if (!docShareCache || docShareCache.docId !== doc.id) docShareCache = null;
   $('#doc-name').value = doc.name;
   autoGrowDocName();
   const preview = $('#doc-image-preview');
@@ -3183,6 +3313,15 @@ function openDocSheet(doc) {
   const download = $('#doc-sheet-download');
   download.href = '/api/files/' + doc.id;
   download.setAttribute('download', doc.name);
+  const share = $('#doc-sheet-share');
+  share.hidden = typeof navigator.share !== 'function';
+  share.onclick = () => shareDoc(share);
+  const added = $('#doc-added');
+  added.textContent = doc.created_at ? `Added ${formatRecordDate(doc.created_at)}` : '';
+  added.title = doc.created_at ? formatRecordDate(doc.created_at) : '';
+  const storage = $('#doc-storage');
+  storage.textContent = docStorageSummary(doc);
+  storage.hidden = !storage.textContent;
   syncDocSave();
   openSheet('#doc-sheet');
   requestAnimationFrame(autoGrowDocName);
@@ -3207,6 +3346,7 @@ async function saveDoc(event) {
   button.textContent = 'Saving…';
   try {
     await api('/api/docs/' + doc.id, { method: 'PATCH', body: { folder_id: folderId, name } });
+    docShareCache = null;
     state.storage = null;
     closeSheet('#doc-sheet');
     await loadState();
@@ -3272,6 +3412,8 @@ function docIconForName(name) {
   return format && format.icon ? format.icon : 'file';
 }
 
+// Preview accepts the .jpeg alias for reminder/note attachments. HEIC/HEIF
+// are converted to JPG before storage and therefore preview as JPG.
 const PREVIEW_IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp']);
 
 function isPreviewableImage(name) {
@@ -3282,38 +3424,84 @@ function isPreviewableImage(name) {
 function openImagePreview(file) {
   const viewer = $('#image-sheet');
   const image = $('#image-viewer-img');
-  if (!viewer || !image || !file) return;
+  const status = $('#image-viewer-status');
+  if (!viewer || !image || !status || !file) return;
   $('#image-viewer-title').textContent = file.name;
+  status.textContent = 'Loading…';
+  status.hidden = false;
+  image.hidden = true;
+  image.onload = () => {
+    image.hidden = false;
+    status.hidden = true;
+  };
+  image.onerror = () => {
+    image.hidden = true;
+    status.textContent = 'Preview unavailable';
+    status.hidden = false;
+  };
   image.src = '/api/files/' + file.id + '/preview';
   image.alt = file.name;
   openSheet('#image-sheet');
 }
 
 function fileChip(file) {
-  const download = el('a', {
+  return el('a', {
     class: 'link-chip',
     href: '/api/files/' + file.id,
     download: file.name,
     title: `Download ${file.name}`,
     'aria-label': `Download ${file.name}`,
-    html: isPreviewableImage(file.name)
-      ? ICON('download', 'ic')
-      : `${ICON('files', 'ic')}<span class="link-domain">${escapeHtml(file.name)}</span>`,
+    html: `${ICON('files', 'ic')}<span class="link-domain">${escapeHtml(file.name)}</span>`,
   });
-  if (!isPreviewableImage(file.name)) return download;
-  const preview = el('button', {
+}
+
+function imageThumb(file) {
+  const button = el('button', {
     type: 'button',
-    class: 'link-chip',
+    class: 'attachment-thumb',
     title: `Preview ${file.name}`,
     'aria-label': `Preview ${file.name}`,
-    html: `${ICON('image', 'ic')}<span class="link-domain">${escapeHtml(file.name)}</span>`,
     onclick: (event) => {
       event.stopPropagation();
       openImagePreview(file);
     },
   });
-  return el('span', { class: 'file-chip-group' }, [preview, download]);
+  const image = el('img', {
+    src: '/api/files/' + file.id + '/preview',
+    alt: '',
+    loading: 'lazy',
+    decoding: 'async',
+  });
+  image.addEventListener('error', () => button.classList.add('is-error'));
+  button.append(image, el('span', { class: 'thumb-fallback', html: ICON('image', 'ic') }));
+  return button;
 }
+
+function attachmentExtras(files) {
+  if (!files.length) return null;
+  const box = el('div', { class: 'attachment-extras' });
+  const images = files.filter((file) => isPreviewableImage(file.name));
+  const others = files.filter((file) => !isPreviewableImage(file.name));
+  if (images.length) {
+    const strip = el('div', { class: 'attachment-thumbs', 'aria-label': 'Image attachments' });
+    for (const file of images) strip.append(imageThumb(file));
+    box.append(strip);
+    if (images.length > 3) {
+      box.append(el('span', {
+        class: 'attachment-count',
+        text: `${images.length} images`,
+        title: `Scroll to see all ${images.length} images`,
+      }));
+    }
+  }
+  if (others.length) {
+    const links = el('div', { class: 'reminder-links' });
+    for (const file of others) links.append(fileChip(file));
+    box.append(links);
+  }
+  return box;
+}
+
 
 async function handleNoteDelete(note, button) {
   if (button.dataset.confirm !== '1') {
@@ -3440,6 +3628,23 @@ async function deleteStorageFile(file, button) {
   } catch (err) {
     toast(err.message);
   }
+}
+
+function fileExtensionOf(name) {
+  const parts = String(name || '').split('.');
+  return parts.length > 1 ? '.' + parts.pop().toLowerCase() : '';
+}
+
+function validateDocsFiles(files) {
+  const allowed = new Set((state.docFormats || []).map((format) => format.ext));
+  if (allowed.size) {
+    const unsupported = files.find((file) => !allowed.has(fileExtensionOf(file.name)));
+    if (unsupported) return `Unsupported file: ${unsupported.name}`;
+  }
+  if (files.length > 10) return 'Up to 10 files per upload';
+  const oversized = files.find((file) => file.size > 25 * 1024 * 1024);
+  if (oversized) return `${oversized.name} is larger than 25 MB`;
+  return '';
 }
 
 function chooseDocsFiles() {
@@ -3894,11 +4099,8 @@ function reminderRow(reminder, options = {}) {
     }
   }
   const files = attachmentsFor('reminder', reminder.id);
-  if (files.length) {
-    const links = el('div', { class: 'reminder-links' });
-    for (const file of files) links.append(fileChip(file));
-    body.append(links);
-  }
+  const extras = attachmentExtras(files);
+  if (extras) body.append(extras);
 
   if (!options.dayPeek) {
     // Contextual actions live on the row so due items never require opening
@@ -4911,16 +5113,24 @@ function attachmentRow(file, onRemove) {
       el('span', { class: 'attach-name', text: file.name }),
     );
   }
-  row.append(
-    el('span', { class: 'attach-size', text: formatBytes(file.size) }),
-    el('button', {
-      type: 'button',
-      class: 'attach-remove',
-      'aria-label': `Remove ${file.name}`,
-      html: ICON('x', 'ic'),
-      onclick: onRemove,
-    }),
-  );
+  row.append(el('span', { class: 'attach-size', text: formatBytes(file.size) }));
+  if (file.id) {
+    row.append(el('a', {
+      class: 'attach-download',
+      href: '/api/files/' + file.id,
+      download: file.name,
+      title: `Download ${file.name}`,
+      'aria-label': `Download ${file.name}`,
+      html: ICON('download', 'ic'),
+    }));
+  }
+  row.append(el('button', {
+    type: 'button',
+    class: 'attach-remove',
+    'aria-label': `Remove ${file.name}`,
+    html: ICON('x', 'ic'),
+    onclick: onRemove,
+  }));
   return row;
 }
 
@@ -5444,10 +5654,12 @@ async function uploadFiles(path, files, fields = {}) {
     headers: state.csrfToken ? { 'X-CSRF-Token': state.csrfToken } : {},
     body: form,
   });
-  let data = {};
-  try { data = await res.json(); } catch { /* empty */ }
-  if (!res.ok) throw new Error(data.error || 'Upload failed');
-  return data;
+  try {
+    return await requestJson(res);
+  } catch (err) {
+    if (!err.message || err.message === 'Request failed') throw new Error('Upload failed');
+    throw err;
+  }
 }
 
 function noteEditorFolderId() {
@@ -6145,6 +6357,7 @@ function trapSheetTab(event) {
 // buttons opt out.
 let swipe = null;
 let lastSwipeEnd = 0;
+let lastDocDragEnd = 0;
 let mouseDrag = null;
 
 function swipeContentOf(row) {
@@ -6201,7 +6414,7 @@ $('#content').addEventListener('pointerdown', (event) => {
     if (!node.contains(event.target)) resetSwipe(node);
   });
   const row = event.target.closest('.reminder');
-  if (!row || event.target.closest('a, button, input, textarea, select')) {
+  if (!row || event.target.closest('a, button, input, textarea, select, .attachment-thumbs')) {
     swipe = null;
     return;
   }
@@ -6354,6 +6567,7 @@ function renderDeviceZoneRow() {
 
 const SETTINGS_DEFAULT_KEYS = ['default_time_model', 'default_time_zone', 'default_time'];
 const SETTINGS_NOTIFY_KEYS = ['repush_enabled', 'repush_cadence_min', 'repush_max', 'quiet_start', 'quiet_end'];
+const SETTINGS_UPLOAD_KEYS = ['optimize_uploads'];
 let settingsSnapshot = null;
 let sortSnapshot = null;
 let appearanceSnapshot = null;
@@ -6409,6 +6623,7 @@ function settingsValues() {
     repush_max: $('#set-repush-max').value,
     quiet_start: $('#set-quiet-start').value,
     quiet_end: $('#set-quiet-end').value,
+    optimize_uploads: $('#set-optimize-uploads').checked ? '1' : '0',
     list_progress: $('#set-list-progress').value,
     list_progress_range: $('#set-list-progress-range').value,
   };
@@ -6461,6 +6676,7 @@ async function openSettings() {
   $('#set-repush-max').value = s.repush_max || '3';
   $('#set-quiet-start').value = s.quiet_start || '23:00';
   $('#set-quiet-end').value = s.quiet_end || '07:00';
+  $('#set-optimize-uploads').checked = s.optimize_uploads !== '0';
   $('#set-list-progress').value = getListProgress();
   $('#set-list-progress-range').value = getListProgressRange();
   $('#set-sort-field').value = state.sortDefault.field;
@@ -6497,9 +6713,10 @@ async function saveAppSettings() {
   const defaultsChanged = changed(SETTINGS_DEFAULT_KEYS);
   const notifyChanged = changed(SETTINGS_NOTIFY_KEYS);
   const progressChanged = changed(SETTINGS_PROGRESS_KEYS);
+  const uploadChanged = changed(SETTINGS_UPLOAD_KEYS);
   const appearanceDirty = appearanceIsDirty();
   const sortChanged = sortIsDirty();
-  if (!defaultsChanged && !notifyChanged && !progressChanged && !appearanceDirty && !sortChanged) return;
+  if (!defaultsChanged && !notifyChanged && !progressChanged && !uploadChanged && !appearanceDirty && !sortChanged) return;
 
   const saveBtn = $('#settings-save');
   const startedAt = Date.now();
@@ -6509,7 +6726,7 @@ async function saveAppSettings() {
   $('#settings-sheet').setAttribute('aria-busy', 'true');
   try {
     let message = '';
-    if (defaultsChanged || notifyChanged || progressChanged) {
+    if (defaultsChanged || notifyChanged || progressChanged || uploadChanged) {
       try {
         const result = await api('/api/settings', {
           method: 'POST',
@@ -6525,6 +6742,8 @@ async function saveAppSettings() {
           message = 'Saved — applies to how all items notify from now on.';
         } else if (defaultsChanged) {
           message = 'Saved. Applies to new items only — existing items were not changed.';
+        } else if (uploadChanged) {
+          message = 'Saved. Upload optimization applies to new uploads only.';
         } else {
           message = 'Saved — folder progress now follows you on all devices.';
         }
@@ -7132,10 +7351,6 @@ $('#note-link-url').addEventListener('keydown', (event) => {
 $('#doc-form').addEventListener('submit', saveDoc);
 $('#doc-folder').addEventListener('change', () => { syncDocFolderVisual(); syncDocSave(); });
 $('#doc-name').addEventListener('input', syncDocSheetInfo);
-$('#image-viewer-img').addEventListener('error', () => {
-  toast('Preview not available');
-  closeSheet('#image-sheet');
-});
 $('#doc-image-preview-img').addEventListener('error', () => {
   $('#doc-image-preview').hidden = true;
 });
@@ -7158,15 +7373,18 @@ $('#docs-file-input').addEventListener('change', async (event) => {
   const files = Array.from(event.target.files || []);
   event.target.value = '';
   if (!files.length) return;
+  const invalid = validateDocsFiles(files);
+  if (invalid) return toast(invalid);
   const folderId = state.docsUploadFolder
     || (systemFolder('docs') ? systemFolder('docs').id : null);
   if (!folderId) return toast('Create a Docs folder first');
   try {
-    await uploadFiles('/api/docs', files, { folder_id: folderId });
+    const result = await uploadFiles('/api/docs', files, { folder_id: folderId });
     state.storage = null;
     await loadState();
     goOrRender('docs/folder/' + folderId);
-    toast(`${files.length} file${files.length === 1 ? '' : 's'} added`);
+    const converted = (result.docs || []).filter((doc) => String(doc.optimization || '').startsWith('heic:')).length;
+    toast(`${files.length} file${files.length === 1 ? '' : 's'} added${converted ? ` · ${converted} HEIC converted to JPG` : ''}`);
   } catch (err) {
     toast(err.message);
   }

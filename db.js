@@ -335,7 +335,14 @@ async function init() {
   if (!attachmentColumns.some((column) => column.name === 'compression')) {
     await run("ALTER TABLE attachments ADD COLUMN compression TEXT NOT NULL DEFAULT ''");
   }
+  if (!attachmentColumns.some((column) => column.name === 'original_size')) {
+    await run('ALTER TABLE attachments ADD COLUMN original_size INTEGER');
+  }
+  if (!attachmentColumns.some((column) => column.name === 'optimization')) {
+    await run("ALTER TABLE attachments ADD COLUMN optimization TEXT NOT NULL DEFAULT ''");
+  }
   await run('UPDATE attachments SET stored_size = size WHERE stored_size IS NULL');
+  await run('UPDATE attachments SET original_size = size WHERE original_size IS NULL');
   await run(`CREATE TABLE IF NOT EXISTS push_subscriptions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     endpoint TEXT UNIQUE NOT NULL,

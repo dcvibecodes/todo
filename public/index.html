@@ -135,6 +135,9 @@
       <path d="M6 3h8l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
       <path d="M14 3v5h5M8 12h8M8 16h6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
     </symbol>
+    <symbol id="i-share" viewBox="0 0 24 24">
+      <path d="M12 15V3m0 0L8 7m4-4l4 4M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
     <symbol id="i-download" viewBox="0 0 24 24">
       <path d="M12 3v12m0 0l-4-4m4 4l4-4M4 20h16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
     </symbol>
@@ -364,7 +367,7 @@
             <svg class="ic"><use href="#i-files"/></svg>
             <span>Add files</span>
           </label>
-          <p class="notify-hint">Any file type, up to 25 MB each.</p>
+          <p class="notify-hint">Any file type, up to 25 MB each. Images and PDFs may be stored optimized to save space. HEIC/HEIF photos are converted to JPG.</p>
         </div>
 
         <div class="ed-section">
@@ -587,7 +590,7 @@
                 <svg class="ic"><use href="#i-files"/></svg>
                 <span>Add files</span>
               </label>
-              <p class="notify-hint">Any file type, up to 25 MB each.</p>
+              <p class="notify-hint">Any file type, up to 25 MB each. Images and PDFs may be stored optimized to save space. HEIC/HEIF photos are converted to JPG.</p>
             </div>
           </div>
         </div>
@@ -613,6 +616,7 @@
           <div class="doc-sheet-info">
             <textarea id="doc-name" class="doc-name-input" rows="1" maxlength="200" placeholder="File name" aria-label="File name" autocomplete="off"></textarea>
             <p id="doc-meta"></p>
+            <p id="doc-added" class="doc-added"></p>
           </div>
         </div>
         <div class="ed-section">
@@ -627,7 +631,11 @@
             </div>
           </div>
         </div>
-        <a id="doc-sheet-download" class="secondary-btn" href="#" download><svg class="ic"><use href="#i-download"/></svg><span>Download</span></a>
+        <p id="doc-storage" class="doc-storage"></p>
+        <div class="doc-actions">
+          <button type="button" id="doc-sheet-share" class="secondary-btn" hidden><svg class="ic"><use href="#i-share"/></svg><span>Share file</span></button>
+          <a id="doc-sheet-download" class="secondary-btn" href="#" download><svg class="ic"><use href="#i-download"/></svg><span>Download</span></a>
+        </div>
       </div>
     </form>
   </div>
@@ -641,7 +649,8 @@
         <button type="button" class="text-btn strong" data-close>Done</button>
       </header>
       <div class="image-viewer-body">
-        <img id="image-viewer-img" alt="">
+        <p id="image-viewer-status" class="image-viewer-status" aria-live="polite">Loading&hellip;</p>
+        <img id="image-viewer-img" alt="" hidden>
       </div>
     </div>
   </div>
@@ -792,6 +801,14 @@
           <p class="notify-hint">Saving sets the default sorting for Reminders, Notes and Docs. <strong>Date added</strong> and <strong>Name</strong> apply to all three; <strong>Due date</strong> applies to Reminders only, and Notes/Docs fall back to Date added. Today, Scheduled and Completed keep their fixed defaults. Each folder can still choose its own sorting afterwards; sorting syncs across your devices.</p>
         </div>
         <div class="settings-group">
+          <h3>Uploads</h3>
+          <label class="settings-row" for="set-optimize-uploads">
+            <span>Optimize new images and PDFs</span>
+            <input id="set-optimize-uploads" type="checkbox">
+          </label>
+          <p class="notify-hint"><strong>On by default.</strong> Images and PDFs are stored as smaller optimized copies (only the optimized copy is kept), and downloads return those optimized bytes. HEIC/HEIF photos are converted to JPG for compatibility. Turn this off for signed, medical, archival or metadata-sensitive files. Text files are always compressed losslessly and download as the original bytes.</p>
+        </div>
+        <div class="settings-group">
           <h3>Storage</h3>
         <p class="notify-hint" id="storage-summary">Loading storage&hellip;</p>
         <div id="storage-breakdown" class="storage-breakdown"></div>
@@ -799,7 +816,7 @@
           <summary>Largest files</summary>
           <div id="storage-largest" class="storage-largest"></div>
         </details>
-        <p class="notify-hint">Usage counters only — nothing is deleted automatically.</p>
+        <p class="notify-hint">Usage counters use stored (compressed) file bytes. Nothing is deleted automatically.</p>
         </div>
         <div class="settings-group">
           <h3>Backup</h3>

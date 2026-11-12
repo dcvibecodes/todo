@@ -45,6 +45,8 @@ const DOC_FORMAT_REGISTRY = [
   { ext: '.gif', category: 'Images', label: 'GIF image', mime: 'image/gif', icon: 'image', signature: 'gif' },
   { ext: '.webp', category: 'Images', label: 'WebP image', mime: 'image/webp', icon: 'image', signature: 'webp' },
   { ext: '.bmp', category: 'Images', label: 'BMP image', mime: 'image/bmp', icon: 'image', signature: 'bmp' },
+  { ext: '.heic', category: 'Images', label: 'HEIC image', mime: 'image/heic', icon: 'image', signature: 'heic' },
+  { ext: '.heif', category: 'Images', label: 'HEIF image', mime: 'image/heif', icon: 'image', signature: 'heic' },
   { ext: '.csv', category: 'CSV', label: 'CSV', mime: 'text/csv', icon: 'table', signature: null },
   { ext: '.json', category: 'JSON', label: 'JSON', mime: 'application/json', icon: 'braces', signature: null },
   { ext: '.zip', category: 'ZIP', label: 'ZIP archive', mime: 'application/zip', icon: 'archive', signature: 'zip' },
@@ -57,6 +59,8 @@ const DOC_FORMATS_PUBLIC = DOC_FORMAT_REGISTRY.map(({ ext, category, label, mime
 const DOC_FORMAT_CATEGORIES = [...new Set(DOC_FORMAT_REGISTRY.map((format) => format.category))];
 const DOC_FORMAT_SUMMARY = DOC_FORMAT_CATEGORIES.join(', ');
 const DOC_FORMAT_EXTENSIONS = DOC_FORMAT_REGISTRY.map((format) => format.ext).join(', ');
+// .jpeg is preview-only for reminder/note attachments; Docs keeps its
+// advertised Docs registry (.jpg, not .jpeg; HEIC/HEIF convert to JPG).
 const PREVIEW_IMAGE_FORMATS = new Map([
   ['.png', { mime: 'image/png', signature: 'png' }],
   ['.jpg', { mime: 'image/jpeg', signature: 'jpeg' }],
@@ -127,6 +131,12 @@ function signatureMatches(buffer, kind) {
   if (kind === 'gif') return ascii.startsWith('GIF87a') || ascii.startsWith('GIF89a');
   if (kind === 'webp') return buffer.length >= 12 && ascii.startsWith('RIFF') && ascii.slice(8, 12) === 'WEBP';
   if (kind === 'bmp') return ascii.startsWith('BM');
+  if (kind === 'heic') {
+    if (buffer.length < 16 || ascii.slice(4, 8) !== 'ftyp') return false;
+    const brands = ascii.slice(8, 32);
+    return ['heic', 'heix', 'hevc', 'hevx', 'heim', 'heis', 'hevm', 'hevs', 'mif1', 'msf1']
+      .some((brand) => brands.includes(brand));
+  }
   if (kind === 'zip') return ascii.startsWith('PK\x03\x04') || ascii.startsWith('PK\x05\x06') || ascii.startsWith('PK\x07\x08');
   if (kind === 'ole') return buffer.length >= 8
     && buffer.subarray(0, 8).equals(Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]));
@@ -144,6 +154,7 @@ const COMPRESSIBLE_TEXT_EXTENSIONS = new Set([
   '.js', '.css', '.log', '.rtf', '.yaml', '.yml', '.tsv', '.sql', '.ini', '.conf',
 ]);
 const IMAGE_COMPRESSION_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp']);
+const HEIC_EXTENSIONS = new Set(['.heic', '.heif']);
 const IMAGE_SIGNATURES = { '.png': 'png', '.jpg': 'jpeg', '.jpeg': 'jpeg', '.gif': 'gif', '.webp': 'webp' };
 const IMAGE_MAX_EDGE = 2400;
 const MIN_COMPRESSION_SAVINGS = 0.08;
@@ -154,6 +165,23 @@ function isCompressibleText(name, mime) {
   if (COMPRESSIBLE_TEXT_EXTENSIONS.has(path.extname(String(name || '')).toLowerCase())) return true;
   return /^text\//i.test(String(mime || ''))
     || ['application/json', 'application/xml', 'application/javascript', 'image/svg+xml'].includes(String(mime || '').toLowerCase());
+}
+
+function compressionOutcome(kind, status, originalSize, storedSize = originalSize, extra = {}) {
+  return {
+    size: originalSize,
+    storedSize,
+    originalSize,
+    compression: '',
+    optimization: `${kind}:${status}`,
+    ...extra,
+  };
+}
+
+function logCompression(name, result) {
+  const line = `[compression] ${name} ${result.optimization} ${result.originalSize}->${result.storedSize}`;
+  if (/(?:unavailable|error|skipped-invalid)/.test(result.optimization)) console.warn(line);
+  else console.log(line);
 }
 
 async function replaceIfSmaller(original, temp, minSavings = MIN_COMPRESSION_SAVINGS) {
@@ -171,52 +199,6 @@ async function replaceIfSmaller(original, temp, minSavings = MIN_COMPRESSION_SAV
   return null;
 }
 
-async function optimizeImage(filePath, name) {
-  const ext = path.extname(name).toLowerCase();
-  if (!IMAGE_COMPRESSION_EXTENSIONS.has(ext)) return null;
-  let matches = true;
-  try {
-    matches = await docContentMatches(filePath, { signature: IMAGE_SIGNATURES[ext] });
-  } catch {
-    matches = false;
-  }
-  if (!matches) return null;
-  const temp = `${filePath}.opt-${crypto.randomUUID()}${ext}`;
-  const command = process.env.IMAGEMAGICK_BIN || 'convert';
-  const args = [
-    '-limit', 'memory', '256MiB',
-    '-limit', 'map', '512MiB',
-    filePath,
-  ];
-  if (ext === '.gif' || ext === '.webp') args.push('-coalesce');
-  args.push('-auto-orient', '-resize', `${IMAGE_MAX_EDGE}x${IMAGE_MAX_EDGE}>`, '-strip');
-  if (ext === '.png') {
-    args.push('-colors', '256', '-dither', 'FloydSteinberg', '-quality', '90', '-define', 'png:compression-level=9');
-  } else if (ext === '.jpg' || ext === '.jpeg') {
-    args.push('-quality', '82', '-sampling-factor', '4:2:0', '-interlace', 'Plane');
-  } else if (ext === '.webp') {
-    args.push('-quality', '82');
-  } else if (ext === '.gif') {
-    args.push('-layers', 'Optimize');
-  }
-  args.push(temp);
-  try {
-    await execFileAsync(command, args, { timeout: 120000, maxBuffer: 4 * 1024 * 1024 });
-    return await replaceIfSmaller(filePath, temp);
-  } catch (err) {
-    await fs.promises.unlink(temp).catch(() => {});
-    if (err.code === 'ENOENT') {
-      if (!imageMagickMissingLogged) {
-        imageMagickMissingLogged = true;
-        console.warn('Image compression unavailable: ImageMagick (convert) is not installed');
-      }
-    } else {
-      console.warn(`Image compression skipped for ${name}: ${err.message}`);
-    }
-    return null;
-  }
-}
-
 function execFileAsync(command, args, options) {
   return new Promise((resolve, reject) => {
     execFile(command, args, options, (err, stdout, stderr) => {
@@ -231,9 +213,63 @@ function execFileAsync(command, args, options) {
   });
 }
 
+async function optimizeImage(filePath, name) {
+  const ext = path.extname(name).toLowerCase();
+  if (!IMAGE_COMPRESSION_EXTENSIONS.has(ext)) return { status: 'skipped-type' };
+  let matches = true;
+  try {
+    matches = await docContentMatches(filePath, { signature: IMAGE_SIGNATURES[ext] });
+  } catch {
+    matches = false;
+  }
+  if (!matches) return { status: 'skipped-invalid' };
+  const temp = `${filePath}.opt-${crypto.randomUUID()}${ext}`;
+  const command = process.env.IMAGEMAGICK_BIN || 'convert';
+  const args = [
+    '-limit', 'area', '60000000',
+    '-limit', 'memory', '256MiB',
+    '-limit', 'map', '512MiB',
+    filePath,
+  ];
+  if (ext === '.gif' || ext === '.webp') args.push('-coalesce');
+  args.push('-auto-orient', '-resize', `${IMAGE_MAX_EDGE}x${IMAGE_MAX_EDGE}>`, '+profile', '!icc,*');
+  if (ext === '.png') {
+    args.push('-colors', '256', '-dither', 'FloydSteinberg', '-quality', '90', '-define', 'png:compression-level=9');
+  } else if (ext === '.jpg' || ext === '.jpeg') {
+    args.push('-quality', '82', '-sampling-factor', '4:2:0', '-interlace', 'Plane');
+  } else if (ext === '.webp') {
+    args.push('-quality', '82');
+  } else if (ext === '.gif') {
+    args.push('-layers', 'Optimize');
+  }
+  args.push(temp);
+  try {
+    await execFileAsync(command, args, { timeout: 120000, maxBuffer: 4 * 1024 * 1024 });
+    let valid = true;
+    try {
+      valid = await docContentMatches(temp, { signature: IMAGE_SIGNATURES[ext] });
+    } catch {
+      valid = false;
+    }
+    if (!valid) throw new Error('ImageMagick output did not match the expected image format');
+    const size = await replaceIfSmaller(filePath, temp);
+    return size ? { status: 'optimized', size } : { status: 'kept' };
+  } catch (err) {
+    await fs.promises.unlink(temp).catch(() => {});
+    if (err.code === 'ENOENT') {
+      if (!imageMagickMissingLogged) {
+        imageMagickMissingLogged = true;
+        console.warn('Image compression unavailable: ImageMagick (convert) is not installed');
+      }
+      return { status: 'unavailable' };
+    }
+    return { status: 'error', error: err.message };
+  }
+}
+
 async function optimizePdf(filePath, name) {
   const before = await fs.promises.stat(filePath).catch(() => null);
-  if (!before || before.size < 50 * 1024) return null;
+  if (!before || before.size < 50 * 1024) return { status: 'skipped-small' };
   const temp = `${filePath}.opt-${crypto.randomUUID()}`;
   const gs = process.env.GHOSTSCRIPT_BIN || 'gs';
   const args = [
@@ -254,52 +290,143 @@ async function optimizePdf(filePath, name) {
     await execFileAsync(gs, args, { timeout: 120000, maxBuffer: 4 * 1024 * 1024 });
     const head = await readFileHead(temp, 5);
     if (head.toString() !== '%PDF-') throw new Error('Ghostscript did not produce a PDF');
-    return await replaceIfSmaller(filePath, temp, 0.03);
+    const size = await replaceIfSmaller(filePath, temp, 0.03);
+    return size ? { status: 'optimized', size } : { status: 'kept' };
   } catch (err) {
     await fs.promises.unlink(temp).catch(() => {});
-    if (err.code !== 'ENOENT') console.warn(`PDF compression skipped for ${name}: ${err.message}`);
-    return null;
+    if (err.code === 'ENOENT') return { status: 'unavailable' };
+    return { status: 'error', error: err.message };
   }
 }
 
 async function gzipTextFile(filePath) {
   const before = await fs.promises.stat(filePath).catch(() => null);
-  if (!before || before.size < MIN_COMPRESSION_BYTES) return null;
+  if (!before || before.size < MIN_COMPRESSION_BYTES) return { status: 'skipped-small' };
   const temp = `${filePath}.gz-${crypto.randomUUID()}`;
   try {
     const raw = await fs.promises.readFile(filePath);
     const zipped = await new Promise((resolve, reject) => {
       zlib.gzip(raw, { level: 9 }, (err, buffer) => (err ? reject(err) : resolve(buffer)));
     });
-    if (zipped.length >= before.size * (1 - MIN_COMPRESSION_SAVINGS)) return null;
+    if (zipped.length >= before.size * (1 - MIN_COMPRESSION_SAVINGS)) return { status: 'kept' };
     await fs.promises.writeFile(temp, zipped);
     await fs.promises.rename(temp, filePath);
-    return zipped.length;
+    return { status: 'optimized', size: zipped.length };
   } catch (err) {
     await fs.promises.unlink(temp).catch(() => {});
-    console.warn(`Text compression skipped: ${err.message}`);
-    return null;
+    return { status: 'error', error: err.message };
   }
 }
 
-async function optimizeUploadedFile(file, name) {
+async function convertHeicUpload(file, name, optimizeLossy) {
+  const before = await fs.promises.stat(file.path);
+  let matches = true;
+  try {
+    matches = await docContentMatches(file.path, { signature: 'heic' });
+  } catch {
+    matches = false;
+  }
+  if (!matches) {
+    const err = new Error('That file is not a valid HEIC/HEIF image');
+    err.status = 415;
+    throw err;
+  }
+  const outName = path.parse(file.filename).name + '.jpg';
+  const outPath = path.join(UPLOAD_DIR, outName);
+  const command = process.env.IMAGEMAGICK_BIN || 'convert';
+  const args = [
+    '-limit', 'area', '60000000',
+    '-limit', 'memory', '256MiB',
+    '-limit', 'map', '512MiB',
+    file.path,
+    '-auto-orient',
+    '-resize', `${IMAGE_MAX_EDGE}x${IMAGE_MAX_EDGE}>`,
+    '+profile', '!icc,*',
+    '-quality', optimizeLossy ? '82' : '90',
+    '-sampling-factor', '4:2:0',
+    '-interlace', 'Plane',
+    outPath,
+  ];
+  try {
+    await execFileAsync(command, args, { timeout: 120000, maxBuffer: 4 * 1024 * 1024 });
+    let valid = true;
+    try {
+      valid = await docContentMatches(outPath, { signature: 'jpeg' });
+    } catch {
+      valid = false;
+    }
+    if (!valid) throw new Error('HEIC conversion did not produce a JPEG');
+    const after = await fs.promises.stat(outPath);
+    if (!after.size) throw new Error('HEIC conversion produced an empty file');
+    await fs.promises.unlink(file.path).catch(() => {});
+    file.path = outPath;
+    file.filename = outName;
+    file.mimetype = 'image/jpeg';
+    file.size = after.size;
+    return {
+      name: path.basename(name, path.extname(name)) + '.jpg',
+      mime: 'image/jpeg',
+      size: after.size,
+      storedSize: after.size,
+      originalSize: before.size,
+      compression: '',
+      optimization: 'heic:converted',
+    };
+  } catch (err) {
+    await fs.promises.unlink(outPath).catch(() => {});
+    if (err.code === 'ENOENT') {
+      const missing = new Error('HEIC/HEIF conversion is unavailable on this server');
+      missing.status = 503;
+      throw missing;
+    }
+    if (!err.status) err.status = 415;
+    throw err;
+  }
+}
+
+async function optimizeUploadedFile(file, name, optimizeLossy = true) {
   const stat = await fs.promises.stat(file.path);
   const ext = path.extname(name).toLowerCase();
+  if (HEIC_EXTENSIONS.has(ext)) {
+    const result = await convertHeicUpload(file, name, optimizeLossy);
+    logCompression(result.name, result);
+    return result;
+  }
   if (IMAGE_COMPRESSION_EXTENSIONS.has(ext)) {
-    const next = await optimizeImage(file.path, name);
-    const size = next || stat.size;
-    return { size, storedSize: size, compression: '' };
+    if (!optimizeLossy) {
+      const result = compressionOutcome('image', 'disabled', stat.size);
+      logCompression(name, result);
+      return result;
+    }
+    const outcome = await optimizeImage(file.path, name);
+    if (outcome.error) console.warn(`Image compression error for ${name}: ${outcome.error}`);
+    const result = compressionOutcome('image', outcome.status, stat.size, outcome.size || stat.size);
+    logCompression(name, result);
+    return result;
   }
   if (ext === '.pdf') {
-    const next = await optimizePdf(file.path, name);
-    const size = next || stat.size;
-    return { size, storedSize: size, compression: '' };
+    if (!optimizeLossy) {
+      const result = compressionOutcome('pdf', 'disabled', stat.size);
+      logCompression(name, result);
+      return result;
+    }
+    const outcome = await optimizePdf(file.path, name);
+    if (outcome.error) console.warn(`PDF compression error for ${name}: ${outcome.error}`);
+    const result = compressionOutcome('pdf', outcome.status, stat.size, outcome.size || stat.size);
+    logCompression(name, result);
+    return result;
   }
   if (isCompressibleText(name, file.mimetype)) {
-    const storedSize = await gzipTextFile(file.path);
-    if (storedSize) return { size: stat.size, storedSize, compression: 'gzip' };
+    const outcome = await gzipTextFile(file.path);
+    if (outcome.error) console.warn(`Text compression error for ${name}: ${outcome.error}`);
+    const result = compressionOutcome('text', outcome.status, stat.size, outcome.size || stat.size, {
+      compression: outcome.status === 'optimized' ? 'gzip' : '',
+    });
+    logCompression(name, result);
+    return result;
   }
-  return { size: stat.size, storedSize: stat.size, compression: '' };
+  const result = compressionOutcome('file', 'plain', stat.size);
+  return result;
 }
 
 async function removeStoredFiles(rows) {
@@ -418,6 +545,11 @@ async function storageSnapshot(allowedTenants = null) {
 const app = express();
 app.set('trust proxy', 1);
 app.disable('x-powered-by');
+app.use((req, res, next) => {
+  req.requestId = crypto.randomUUID();
+  res.setHeader('X-Request-Id', req.requestId);
+  next();
+});
 app.use(compression());
 app.use(express.json({ limit: '2mb' }));
 
@@ -519,6 +651,9 @@ const SETTING_DEFAULTS = {
   // 'bar' | 'ring' | 'off', and 'all' | '30d' for what the counts cover.
   list_progress: 'bar',
   list_progress_range: 'all',
+  // Lossy image/PDF optimization for new uploads. Text gzip is lossless and
+  // always applied. The owner can turn this off for signed/archival files.
+  optimize_uploads: '1',
   // Per-view sorting, synced across devices. JSON string:
   // { default: {field, dir} | null, overrides: { "list:5": {field, dir},
   // "today": {...}, ... } }. Empty means no device has seeded it yet; the
@@ -637,6 +772,9 @@ function validateSetting(key, value) {
       return null;
     case 'list_progress_range':
       if (!['all', '30d'].includes(value)) return 'Must be all or 30d';
+      return null;
+    case 'optimize_uploads':
+      if (value !== '0' && value !== '1') return 'Must be 0 or 1';
       return null;
     default:
       return 'Unknown setting';
@@ -1631,6 +1769,7 @@ async function main() {
   app.get('/api/capabilities', async (req, res) => {
     const token = req.token;
     const owner = !token;
+    const settings = await getSettings();
     const caps = owner ? {
       reminders: { read: true, write: true, delete: true },
       notes: { read: true, write: true, delete: true },
@@ -1656,7 +1795,14 @@ async function main() {
       api_version: VERSION,
       authenticated_as: owner ? 'owner-session' : 'bearer-token',
       capabilities: caps,
-      limits: { upload_bytes: UPLOAD_MAX_BYTES, files_per_request: 10 },
+      limits: { upload_bytes: UPLOAD_MAX_BYTES, files_per_request: 10, max_batch_bytes: UPLOAD_MAX_BYTES * 10 },
+      upload_compression: {
+        optimize_images_and_pdfs: settings.optimize_uploads !== '0',
+        text_gzip: true,
+        heic_heif: 'converted to JPG',
+        image_tool: 'ImageMagick',
+        pdf_tool: 'Ghostscript',
+      },
       docs_formats: DOC_FORMATS_PUBLIC.map((format) => format.ext),
       docs_format_details: DOC_FORMATS_PUBLIC,
       search_fields: {
@@ -2570,14 +2716,14 @@ async function main() {
       ORDER BY n.updated_at DESC, n.id DESC
     `);
     const docs = await db.all(`
-      SELECT a.id, a.folder_id, a.name, a.mime, a.size, a.revision, a.created_at,
+      SELECT a.id, a.folder_id, a.name, a.mime, a.size, a.stored_size, a.original_size, a.compression, a.optimization, a.revision, a.created_at,
              l.name AS folder_name, l.color AS folder_color
       FROM attachments a JOIN lists l ON l.id = a.folder_id
       WHERE a.owner_type = 'doc'
       ORDER BY a.created_at DESC, a.id DESC
     `);
     const attachments = await db.all(`
-      SELECT id, tenant, owner_type, owner_id, folder_id, name, mime, size, revision, created_at
+      SELECT id, tenant, owner_type, owner_id, folder_id, name, mime, size, stored_size, original_size, compression, optimization, revision, created_at
       FROM attachments WHERE owner_type IN ('reminder', 'note')
       ORDER BY id ASC
     `);
@@ -2937,15 +3083,16 @@ async function main() {
   app.get('/api/notes', async (req, res) => {
     const conditions = [];
     const params = [];
+    let folderId = null;
     if (req.query.folder_id !== undefined) {
-      const folderId = parseId(req.query.folder_id);
+      folderId = parseId(req.query.folder_id);
       if (!folderId) return res.status(400).json({ error: 'Invalid folder_id' });
       const folder = await folderRow(folderId, 'notes');
       if (!folder) return res.status(404).json({ error: 'Folder not found' });
       conditions.push('n.folder_id = ?');
       params.push(folderId);
     }
-    let limit = 100;
+    let limit = null;
     if (req.query.limit !== undefined) {
       limit = Number(req.query.limit);
       if (!Number.isInteger(limit) || limit < 1 || limit > 500) {
@@ -2953,12 +3100,25 @@ async function main() {
       }
     }
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
-    const notes = await db.all(
+    const rows = await db.all(
       `SELECT ${NOTE_COLUMNS.replace(/(^|, )/g, (m) => m.startsWith(',') ? ', n.' : 'n.')}
-       FROM notes n ${where} ORDER BY n.updated_at DESC, n.id DESC LIMIT ?`,
-      [...params, limit]
+       FROM notes n ${where} ORDER BY n.updated_at DESC, n.id DESC${limit ? ' LIMIT ?' : ''}`,
+      limit ? [...params, limit + 1] : params
     );
-    res.json({ notes, complete: req.query.limit === undefined, filtered: Boolean(req.token) });
+    const hasMore = Boolean(limit && rows.length > limit);
+    const notes = hasMore ? rows.slice(0, limit) : rows;
+    const total = limit
+      ? (await db.get(`SELECT COUNT(*) AS count FROM notes n ${where}`, params)).count
+      : notes.length;
+    res.json({
+      notes,
+      complete: !hasMore,
+      has_more: hasMore,
+      limit,
+      total,
+      filtered: Boolean(req.token),
+      scope: { collection: 'notes', folder_id: folderId, token_filtered: Boolean(req.token) },
+    });
   });
 
   app.get('/api/notes/:id', async (req, res) => {
@@ -3162,18 +3322,31 @@ async function main() {
   async function saveUploads(req, { tenant, ownerType, ownerId, folderId }) {
     const rows = [];
     try {
+      const settings = await getSettings();
+      const optimizeUploads = settings.optimize_uploads !== '0';
       for (const file of req.files || []) {
-        const name = cleanFileName(file.originalname);
+        let name = cleanFileName(file.originalname);
         const format = tenant === 'docs' ? docFormatForName(name) : null;
-        const mime = format ? format.mime : (file.mimetype || 'application/octet-stream');
-        const optimized = await optimizeUploadedFile(file, name);
+        const previewFormat = previewImageFormatForName(name);
+        let mime = format
+          ? format.mime
+          : (previewFormat && (!file.mimetype || file.mimetype === 'application/octet-stream')
+            ? previewFormat.mime
+            : (file.mimetype || 'application/octet-stream'));
+        const optimized = await optimizeUploadedFile(file, name, optimizeUploads);
+        if (optimized.name) name = optimized.name;
+        if (optimized.mime) mime = optimized.mime;
         const result = await db.run(
-          `INSERT INTO attachments (tenant, owner_type, owner_id, folder_id, name, stored_name, mime, size, stored_size, compression, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO attachments (tenant, owner_type, owner_id, folder_id, name, stored_name, mime, size, stored_size, original_size, compression, optimization, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [tenant, ownerType, ownerId, folderId, name, file.filename,
-            mime, optimized.size, optimized.storedSize, optimized.compression, new Date().toISOString()]
+            mime, optimized.size, optimized.storedSize, optimized.originalSize,
+            optimized.compression, optimized.optimization, new Date().toISOString()]
         );
-        rows.push({ id: result.lastID, name, mime, size: optimized.size });
+        rows.push({
+          id: result.lastID, name, mime, size: optimized.size, stored_size: optimized.storedSize,
+          original_size: optimized.originalSize, optimization: optimized.optimization,
+        });
       }
       return rows;
     } catch (err) {
@@ -3190,7 +3363,7 @@ async function main() {
     const reminder = id ? await db.get('SELECT id FROM reminders WHERE id = ?', [id]) : null;
     if (!reminder) return res.status(404).json({ error: 'Item not found' });
     const attachments = await db.all(
-      "SELECT id, name, mime, size, revision, created_at FROM attachments WHERE owner_type = 'reminder' AND owner_id = ? ORDER BY id",
+      "SELECT id, name, mime, size, stored_size, original_size, compression, optimization, revision, created_at FROM attachments WHERE owner_type = 'reminder' AND owner_id = ? ORDER BY id",
       [id]
     );
     res.json({ attachments });
@@ -3201,7 +3374,7 @@ async function main() {
     const note = id ? await db.get('SELECT id FROM notes WHERE id = ?', [id]) : null;
     if (!note) return res.status(404).json({ error: 'Note not found' });
     const attachments = await db.all(
-      "SELECT id, name, mime, size, revision, created_at FROM attachments WHERE owner_type = 'note' AND owner_id = ? ORDER BY id",
+      "SELECT id, name, mime, size, stored_size, original_size, compression, optimization, revision, created_at FROM attachments WHERE owner_type = 'note' AND owner_id = ? ORDER BY id",
       [id]
     );
     res.json({ attachments });
@@ -3249,10 +3422,19 @@ async function main() {
         },
       });
     }
-    const rows = await saveUploads(req, {
-      tenant: 'reminders', ownerType: 'reminder', ownerId: reminder.id, folderId: reminder.list_id,
-    });
-    await db.run('UPDATE reminders SET revision = revision + 1 WHERE id = ?', [reminder.id]);
+    let rows;
+    try {
+      rows = await db.transaction(async () => {
+        const saved = await saveUploads(req, {
+          tenant: 'reminders', ownerType: 'reminder', ownerId: reminder.id, folderId: reminder.list_id,
+        });
+        await db.run('UPDATE reminders SET revision = revision + 1 WHERE id = ?', [reminder.id]);
+        return saved;
+      });
+    } catch (err) {
+      await removeStoredFiles(req.files);
+      throw err;
+    }
     res.status(201).json({ attachments: rows });
   });
 
@@ -3288,10 +3470,19 @@ async function main() {
         },
       });
     }
-    const rows = await saveUploads(req, {
-      tenant: 'notes', ownerType: 'note', ownerId: note.id, folderId: note.folder_id,
-    });
-    await db.run('UPDATE notes SET revision = revision + 1 WHERE id = ?', [note.id]);
+    let rows;
+    try {
+      rows = await db.transaction(async () => {
+        const saved = await saveUploads(req, {
+          tenant: 'notes', ownerType: 'note', ownerId: note.id, folderId: note.folder_id,
+        });
+        await db.run('UPDATE notes SET revision = revision + 1 WHERE id = ?', [note.id]);
+        return saved;
+      });
+    } catch (err) {
+      await removeStoredFiles(req.files);
+      throw err;
+    }
     res.status(201).json({ attachments: rows });
   });
 
@@ -3362,35 +3553,50 @@ async function main() {
   app.get('/api/docs', async (req, res) => {
     const conditions = ["a.owner_type = 'doc'"];
     const params = [];
+    let folderId = null;
     if (req.query.folder_id !== undefined) {
-      const folderId = parseId(req.query.folder_id);
+      folderId = parseId(req.query.folder_id);
       if (!folderId) return res.status(400).json({ error: 'Invalid folder_id' });
       const folder = await folderRow(folderId, 'docs');
       if (!folder) return res.status(404).json({ error: 'Folder not found' });
       conditions.push('a.folder_id = ?');
       params.push(folderId);
     }
-    let limit = 100;
+    let limit = null;
     if (req.query.limit !== undefined) {
       limit = Number(req.query.limit);
       if (!Number.isInteger(limit) || limit < 1 || limit > 500) {
         return res.status(400).json({ error: 'limit must be 1 to 500' });
       }
     }
-    const docs = await db.all(
-      `SELECT a.id, a.folder_id, a.name, a.mime, a.size, a.revision, a.created_at
-       FROM attachments a WHERE ${conditions.join(' AND ')}
-       ORDER BY a.created_at DESC, a.id DESC LIMIT ?`,
-      [...params, limit]
+    const where = conditions.join(' AND ');
+    const rows = await db.all(
+      `SELECT a.id, a.folder_id, a.name, a.mime, a.size, a.stored_size, a.original_size, a.compression, a.optimization, a.revision, a.created_at
+       FROM attachments a WHERE ${where}
+       ORDER BY a.created_at DESC, a.id DESC${limit ? ' LIMIT ?' : ''}`,
+      limit ? [...params, limit + 1] : params
     );
-    res.json({ docs, complete: req.query.limit === undefined, filtered: Boolean(req.token) });
+    const hasMore = Boolean(limit && rows.length > limit);
+    const docs = hasMore ? rows.slice(0, limit) : rows;
+    const total = limit
+      ? (await db.get(`SELECT COUNT(*) AS count FROM attachments a WHERE ${where}`, params)).count
+      : docs.length;
+    res.json({
+      docs,
+      complete: !hasMore,
+      has_more: hasMore,
+      limit,
+      total,
+      filtered: Boolean(req.token),
+      scope: { collection: 'docs', folder_id: folderId, token_filtered: Boolean(req.token) },
+    });
   });
 
   app.get('/api/docs/:id', async (req, res) => {
     const id = parseId(req.params.id);
     if (!id) return res.status(400).json({ error: 'Invalid file' });
     const doc = await db.get(
-      `SELECT id, folder_id, name, mime, size, revision, created_at
+      `SELECT id, folder_id, name, mime, size, stored_size, original_size, compression, optimization, revision, created_at
        FROM attachments WHERE id = ? AND owner_type = 'doc'`, [id]
     );
     if (!doc) return res.status(404).json({ error: 'File not found' });
@@ -4410,7 +4616,7 @@ async function main() {
   });
 
   app.use('/api', (req, res) => {
-    res.status(404).json({ error: 'Not found' });
+    res.status(404).json({ error: 'Not found', request_id: req.requestId });
   });
 
   app.get('*', (req, res) => {
@@ -4420,16 +4626,27 @@ async function main() {
 
   app.use((err, req, res, next) => {
     if (res.headersSent) return next(err);
+    const requestId = req.requestId || crypto.randomUUID();
     if (err instanceof multer.MulterError) {
-      const message = err.code === 'LIMIT_FILE_SIZE'
+      const tooLarge = err.code === 'LIMIT_FILE_SIZE';
+      const message = tooLarge
         ? 'Each file must be 25 MB or smaller'
         : err.code === 'LIMIT_FILE_COUNT'
           ? 'Up to 10 files per upload'
-          : 'Could not upload that file';
-      return res.status(400).json({ error: message });
+          : err.code === 'LIMIT_UNEXPECTED_FILE'
+            ? 'Too many files or an unexpected upload field'
+            : 'Could not upload that file';
+      console.warn(`[${requestId}] upload rejected ${req.method} ${req.originalUrl}: ${err.code}`);
+      return removeStoredFiles(req.files).catch(() => {}).then(() => {
+        res.status(tooLarge ? 413 : 400).json({ error: message, request_id: requestId });
+      });
     }
-    console.error(err);
-    res.status(500).json({ error: 'Server error' });
+    if (err && err.type === 'entity.too.large') {
+      return res.status(413).json({ error: 'Request body is too large', request_id: requestId });
+    }
+    const status = Number.isInteger(err && err.status) ? err.status : 500;
+    console.error(`[${requestId}] ${req.method} ${req.originalUrl}:`, err && err.stack ? err.stack : err);
+    res.status(status).json({ error: status >= 500 ? 'Server error' : (err.message || 'Request failed'), request_id: requestId });
   });
 
   app.listen(PORT, HOST, () => {
