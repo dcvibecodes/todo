@@ -3649,6 +3649,7 @@ function renderImageViewer(direction = 0) {
   next.hidden = !multiple;
   if (multiple) {
     count.textContent = `${imageIndex + 1} / ${imageGallery.length}`;
+    count.setAttribute('aria-label', `Image ${imageIndex + 1} of ${imageGallery.length}`);
     const previous = imageGallery[(imageIndex - 1 + imageGallery.length) % imageGallery.length];
     const following = imageGallery[(imageIndex + 1) % imageGallery.length];
     prev.setAttribute('aria-label', `Previous image: ${previous.name}`);
