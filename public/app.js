@@ -3101,8 +3101,14 @@ function docRow(doc, options = {}) {
         : null,
     ]),
   ]);
+  const storedSize = Number(doc.stored_size || doc.size || 0);
+  const uploadSize = Number(doc.original_size || doc.size || 0);
   const side = el('div', { class: 'doc-side' }, [
-    el('span', { class: 'doc-size', text: formatBytes(doc.size) }),
+    el('span', {
+      class: 'doc-size',
+      text: formatBytes(storedSize),
+      title: storedSize !== uploadSize ? `Stored size · upload size ${formatBytes(uploadSize)}` : '',
+    }),
     el('a', {
       class: 'doc-download',
       href: '/api/files/' + doc.id,
@@ -3186,7 +3192,9 @@ function syncDocSheetInfo() {
   const doc = state.docEditingId ? docById(state.docEditingId) : null;
   if (!doc) return;
   const name = $('#doc-name').value.trim() || doc.name;
-  $('#doc-meta').textContent = `${fileTypeLabel(name)} · ${formatBytes(doc.size)}`;
+  const storedSize = Number(doc.stored_size || doc.size || 0);
+  const uploadSize = Number(doc.original_size || doc.size || 0);
+  $('#doc-meta').textContent = `${fileTypeLabel(name)} · ${formatBytes(storedSize)}${storedSize !== uploadSize ? ' stored' : ''}`;
   const storage = $('#doc-storage');
   if (storage) {
     storage.textContent = docStorageSummary(doc);
@@ -3200,20 +3208,12 @@ function syncDocSheetInfo() {
 
 let docShareCache = null;
 
-function optimizeNote(doc) {
-  const original = Number(doc.original_size || 0);
-  const stored = Number(doc.stored_size || doc.size || 0);
-  if (original && stored && stored !== original) return ` (${formatBytes(original)} → ${formatBytes(stored)})`;
-  return ' to JPEG';
-}
-
 function docStorageSummary(doc) {
   const original = Number(doc.original_size || doc.size || 0);
   const stored = Number(doc.stored_size || doc.size || 0);
   const optimization = String(doc.optimization || '');
   if (optimization.startsWith('heic:')) {
-    const note = optimizeNote(doc);
-    return `Converted from HEIC/HEIF${note}. Download returns the converted JPG.`;
+    return `Converted from HEIC/HEIF: ${formatBytes(original)} → ${formatBytes(stored)}. Download returns the converted JPG.`;
   }
   if (doc.compression === 'gzip') {
     return stored && original && stored < original
@@ -3221,7 +3221,7 @@ function docStorageSummary(doc) {
       : 'Download returns the original file.';
   }
   if (stored && original && stored < original * 0.99) {
-    return `Stored at ${formatBytes(stored)} from ${formatBytes(original)}. Download returns the stored optimized copy.`;
+    return `Stored at ${formatBytes(stored)} from the uploaded ${formatBytes(original)} file. Download returns the stored optimized copy.`;
   }
   if (optimization.endsWith(':disabled')) return 'Download returns the original file — optimization is off.';
   if (optimization.endsWith(':skipped-small')) return 'Original kept — the file was below the optimization threshold. Download returns the original.';
