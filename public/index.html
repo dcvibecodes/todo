@@ -934,6 +934,16 @@ curl -X PATCH -H "Authorization: Bearer $TOKEN" \
     <span id="pull-refresh-label">Pull to refresh</span>
   </div>
 
+  <div id="upload-progress" class="upload-progress" hidden role="status" aria-live="polite">
+    <div class="upload-progress-head">
+      <span id="upload-progress-label"></span>
+      <span id="upload-progress-pct"></span>
+    </div>
+    <div id="upload-progress-track" class="upload-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+      <span id="upload-progress-bar" class="upload-progress-bar"></span>
+    </div>
+  </div>
+
   <div id="toast" class="toast" hidden></div>
   <div id="live" class="visually-hidden" role="status" aria-live="polite"></div>
 

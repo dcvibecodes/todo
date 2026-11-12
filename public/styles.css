@@ -2672,8 +2672,9 @@ body.sheet-open .sidebar {
   background: color-mix(in srgb, var(--text) 6%, transparent);
   font-size: 0.7rem;
   line-height: 1.5;
-  overflow-x: auto;
-  white-space: pre;
+  overflow-x: visible;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .visually-hidden {
@@ -3572,13 +3573,15 @@ body.sheet-open .sidebar {
 
 .storage-row strong { color: var(--text); font-weight: 600; }
 
-.storage-largest { display: grid; gap: 4px; margin-top: 6px; }
+.storage-largest { display: grid; min-width: 0; gap: 4px; margin-top: 6px; }
 
 .storage-file {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  flex-wrap: wrap;
+  min-width: 0;
+  gap: 4px 10px;
   padding: 6px 0;
   border-bottom: 1px solid var(--line-soft);
   font-size: 0.75rem;
@@ -3586,8 +3589,21 @@ body.sheet-open .sidebar {
 }
 
 .storage-file:last-child { border-bottom: 0; }
-.storage-file .storage-file-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.storage-file .storage-file-meta { flex: none; color: var(--text-3); }
+.storage-file .storage-file-name { flex: 1 1 160px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.storage-file .storage-file-meta { flex: 0 1 auto; max-width: 100%; color: var(--text-3); text-align: right; overflow-wrap: anywhere; }
+
+@media (max-width: 899px) {
+  .storage-file {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: "name remove" "meta remove";
+    align-items: center;
+  }
+  .storage-file .storage-file-name { grid-area: name; }
+  .storage-file .storage-file-meta { grid-area: meta; text-align: left; }
+  .storage-file .attach-remove { grid-area: remove; align-self: center; justify-self: end; }
+}
+
 
 @media (max-width: 899px) {
   html, body, .sidebar, .content, .sheet-body, .editor-body, .day-card-scroll {
@@ -3930,15 +3946,11 @@ button.link-chip { border: 0; font-family: inherit; cursor: pointer; }
 /* Image attachment thumbnails on outer reminder/note cards */
 .attachment-thumbs {
   display: flex;
+  flex-wrap: wrap;
   gap: 7px;
   max-width: 100%;
   margin-top: 7px;
   padding-bottom: 2px;
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
-  touch-action: pan-x;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: thin;
 }
 
 .reminder-body > .attachment-extras { grid-column: 1; }
@@ -4112,12 +4124,13 @@ button.link-chip { border: 0; font-family: inherit; cursor: pointer; }
   accent-color: var(--accent);
 }
 
-.token-access-other { align-items: flex-start; }
+.token-access-other { align-items: center; }
 .token-access-options {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 7px 14px;
-  padding-top: 3px;
+  padding-top: 0;
 }
 
 @media (max-width: 480px) {
@@ -4129,4 +4142,60 @@ button.link-chip { border: 0; font-family: inherit; cursor: pointer; }
 
 @media (max-width: 899px) {
   .token-access-row select { height: var(--control-height-touch); }
+}
+
+/* Upload progress */
+.upload-progress {
+  position: fixed;
+  left: 50%;
+  bottom: calc(84px + env(safe-area-inset-bottom));
+  z-index: 85;
+  width: min(360px, calc(100vw - 32px));
+  padding: 10px 12px;
+  transform: translateX(-50%);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--elev);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.16);
+}
+
+.upload-progress-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 0.75rem;
+  color: var(--text-2);
+}
+
+#upload-progress-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#upload-progress-pct {
+  flex: none;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.upload-progress-track {
+  height: 4px;
+  margin-top: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text) 12%, transparent);
+}
+
+.upload-progress-bar {
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform: scaleX(0);
+  transform-origin: left center;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: transform 0.15s ease-out;
 }

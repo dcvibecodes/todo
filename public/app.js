@@ -5654,22 +5654,90 @@ function showListRetentionWarning(retention, count) {
   $('#l-retention-cancel').focus({ preventScroll: true });
 }
 
-async function uploadFiles(path, files, fields = {}) {
+let uploadProgressSeq = 0;
+
+function beginUploadProgress(files) {
+  const panel = $('#upload-progress');
+  const label = $('#upload-progress-label');
+  const pct = $('#upload-progress-pct');
+  const track = $('#upload-progress-track');
+  const bar = $('#upload-progress-bar');
+  const seq = ++uploadProgressSeq;
+  if (!panel || !label || !pct || !track || !bar) return { set() {}, processing() {}, end() {} };
+  const name = files.length === 1 ? files[0].name : `${files.length} files`;
+  label.textContent = `Uploading ${name}…`;
+  pct.textContent = '0%';
+  track.setAttribute('aria-valuenow', '0');
+  bar.style.transform = 'scaleX(0)';
+  panel.hidden = false;
+  return {
+    set(value) {
+      if (seq !== uploadProgressSeq) return;
+      const percent = Math.max(0, Math.min(100, Math.round(value)));
+      pct.textContent = `${percent}%`;
+      track.setAttribute('aria-valuenow', String(percent));
+      bar.style.transform = `scaleX(${percent / 100})`;
+    },
+    processing() {
+      if (seq !== uploadProgressSeq) return;
+      label.textContent = `Processing ${name}…`;
+      pct.textContent = '100%';
+      track.setAttribute('aria-valuenow', '100');
+      bar.style.transform = 'scaleX(1)';
+    },
+    end() {
+      if (seq !== uploadProgressSeq) return;
+      panel.hidden = true;
+    },
+  };
+}
+
+function uploadFiles(path, files, fields = {}) {
   const form = new FormData();
   for (const [key, value] of Object.entries(fields)) form.append(key, String(value));
   for (const file of files) form.append('files', file);
-  const res = await fetch(path, {
-    method: 'POST',
-    credentials: 'same-origin',
-    headers: state.csrfToken ? { 'X-CSRF-Token': state.csrfToken } : {},
-    body: form,
+  const progress = beginUploadProgress(files);
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', path);
+    xhr.withCredentials = true;
+    if (state.csrfToken) xhr.setRequestHeader('X-CSRF-Token', state.csrfToken);
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable && event.total) progress.set((event.loaded / event.total) * 100);
+    };
+    xhr.upload.onload = () => progress.processing();
+    xhr.onload = async () => {
+      try {
+        const headers = new Headers();
+        const requestId = xhr.getResponseHeader('X-Request-Id');
+        if (requestId) headers.set('X-Request-Id', requestId);
+        const res = new Response(xhr.responseText, {
+          status: xhr.status,
+          statusText: xhr.statusText,
+          headers,
+        });
+        resolve(await requestJson(res));
+      } catch (err) {
+        reject(err);
+      } finally {
+        progress.end();
+      }
+    };
+    xhr.onerror = () => {
+      progress.end();
+      reject(new Error('Upload failed — check your connection'));
+    };
+    xhr.onabort = () => {
+      progress.end();
+      reject(new Error('Upload cancelled'));
+    };
+    try {
+      xhr.send(form);
+    } catch (err) {
+      progress.end();
+      reject(err);
+    }
   });
-  try {
-    return await requestJson(res);
-  } catch (err) {
-    if (!err.message || err.message === 'Request failed') throw new Error('Upload failed');
-    throw err;
-  }
 }
 
 function noteEditorFolderId() {

@@ -2,6 +2,12 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v4.8.6
+
+- **Upload progress feedback** - every Docs, reminder and note upload now shows a fixed progress panel with filename/count, percentage and bar, then changes to `Processing…` while the server compresses and stores it.
+- **No horizontal scrolling** - token access rows align the `Other` label with its checkboxes, attachment thumbnails wrap instead of scrolling sideways, Storage largest-file rows stack cleanly on mobile, and code examples wrap. Page width stays viewport-width at 390px.
+- Service worker cache bumped to `workspace-v4.8.6`.
+
 ## What's New in v4.8.5
 
 - **Note images visible to API agents** - `GET /api/notes` and `GET /api/notes/:id` now include an `attachments` array with `is_image`, `preview_url` and `download_url`. A token with `notes:read` can discover every note image and fetch it with its bearer header.
