@@ -2,6 +2,11 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v4.6.1
+
+- **Full file name in the File sheet** - the rename field is now an auto-growing, wrapping textarea, so long document names are fully visible instead of silently clipped. Enter is suppressed so names stay single-field values.
+- Service worker cache bumped to `workspace-v4.6.1`.
+
 ## What's New in v4.6.0
 
 - **Rename Docs files** - the File sheet name is now editable. Save is enabled only when the name or folder changes, and the new name is used by the list, file sheet and download response. The original extension must be kept; changing to another extension is rejected.

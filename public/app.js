@@ -3134,6 +3134,13 @@ function syncDocSave() {
   button.disabled = !name || (Number($('#doc-folder').value) === doc.folder_id && name === doc.name);
 }
 
+function autoGrowDocName() {
+  const name = $('#doc-name');
+  if (!name) return;
+  name.style.height = 'auto';
+  name.style.height = `${name.scrollHeight}px`;
+}
+
 function syncDocSheetInfo() {
   const doc = state.docEditingId ? docById(state.docEditingId) : null;
   if (!doc) return;
@@ -3141,6 +3148,7 @@ function syncDocSheetInfo() {
   $('#doc-meta').textContent = `${fileTypeLabel(name)} · ${formatBytes(doc.size)}`;
   const docIcon = $('#doc-sheet-icon-use');
   if (docIcon) docIcon.setAttribute('href', '#i-' + docIconForName(name));
+  autoGrowDocName();
   syncDocSave();
 }
 
@@ -3148,6 +3156,7 @@ function openDocSheet(doc) {
   state.docEditingId = doc.id;
   state.docSnapshot = { name: doc.name, folder_id: doc.folder_id };
   $('#doc-name').value = doc.name;
+  autoGrowDocName();
   const select = $('#doc-folder');
   select.replaceChildren();
   for (const folder of foldersFor('docs')) {
@@ -3161,6 +3170,7 @@ function openDocSheet(doc) {
   download.setAttribute('download', doc.name);
   syncDocSave();
   openSheet('#doc-sheet');
+  requestAnimationFrame(autoGrowDocName);
 }
 
 async function saveDoc(event) {
@@ -7081,6 +7091,9 @@ $('#note-link-url').addEventListener('keydown', (event) => {
 $('#doc-form').addEventListener('submit', saveDoc);
 $('#doc-folder').addEventListener('change', () => { syncDocFolderVisual(); syncDocSave(); });
 $('#doc-name').addEventListener('input', syncDocSheetInfo);
+$('#doc-name').addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') event.preventDefault();
+});
 $('#n-delete').addEventListener('click', deleteNoteFromEditor);
 $('#n-folder').addEventListener('change', syncNoteFolderVisual);
 $('#e-files').addEventListener('change', (event) => {
