@@ -2,6 +2,12 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v4.9.3
+
+- **Aspect-correct viewer placeholders** - thumbnails now preserve the source aspect ratio instead of being square-cropped. Cards still render them in uniform square boxes via CSS, while the viewer placeholder has the correct portrait/landscape shape before the full image arrives.
+- Existing square thumbnail cache is cleared and regenerated on demand; originals and full images are untouched.
+- Service worker cache bumped to `workspace-v4.9.3`.
+
 ## What's New in v4.9.2
 
 - **Instant carousel revisits** - the viewer keeps a bounded in-memory blob cache for the open gallery. Each full image is fetched once, revisited images reuse their object URL, and thumbnails display immediately while the full image loads. Closing the viewer aborts pending fetches, revokes object URLs and clears the cache. Full HTTP responses remain `private, no-store`.
