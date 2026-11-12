@@ -2,6 +2,11 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v4.8.1
+
+- **Fix iPhone `.jpeg` uploads** - iOS Photos often returns an iPhone image as `IMG_xxxx.jpeg` even when the source is HEIC. The Docs picker was rejecting that extension before upload. Docs now accepts `.jpeg` as a normal JPEG alias (20 formats); HEIC/HEIF still convert to JPG.
+- Service worker cache bumped to `workspace-v4.8.1`.
+
 ## What's New in v4.8.0
 
 - **Docs added dates** - every Docs card now shows an `Added` date from the stored upload time, and the File sheet shows the exact local date/time. Renaming or moving a file does not change it.
@@ -10,7 +15,7 @@ A self-hosted, single-user app with three tenants — Reminders, Notes and Docs 
 - **Honest collection snapshots** - `GET /api/notes` and `GET /api/docs` now return the whole authorized collection when `limit` is omitted. An explicit `limit` returns `complete: false`/`has_more: true` when truncated, plus `total` and a `scope` object; the old silent 100-row cap is gone.
 - **Upload diagnostics and proxy errors** - compression logs distinguish optimized, kept, skipped, unavailable, error and disabled outcomes. Every response carries an `X-Request-Id` header; upload/server errors also include it in the JSON body, and the client turns proxy HTML pages into a clear size/timeout message.
 - **File export** - Docs cards are draggable on fine-pointer desktops using Chromium's `DownloadURL` (best effort), and the File sheet has a Share file action that packages the authenticated bytes into a `File` for the Web Share API where supported. Download remains the fallback; no private link or token is exposed.
-- **HEIC/HEIF support** - iPhone HEIC/HEIF images are accepted in Docs, reminders and notes, converted to JPG with ImageMagick, and then preview/download as normal JPG. Unsupported Docs file types now fail immediately in the picker before any upload starts. Docs advertises 19 formats.
+- **HEIC/HEIF support** - iPhone HEIC/HEIF images are accepted in Docs, reminders and notes, converted to JPG with ImageMagick, and then preview/download as normal JPG. Unsupported Docs file types now fail immediately in the picker before any upload starts. Docs accepts `.jpg`, `.jpeg`, `.heic` and `.heif` for iPhone uploads (Docs advertises 20 formats).
 - **Preview polish** - the image viewer has a loading/error state and no longer closes itself on a failed preview. Image thumbnails fall back to an icon on errors.
 - Service worker cache bumped to `workspace-v4.8.0`.
 
@@ -924,7 +929,7 @@ Open http://127.0.0.1:3006. The first visit asks you to create a password (minim
 - Text-like files are gzip-compressed when they save at least 8%; downloads are decompressed to the exact original bytes.
 - HEIC/HEIF uploads are converted to JPG (quality 82 when optimization is on, 90 when off) so browsers can preview them. Images are replaced only when the candidate is at least 8% smaller. If ImageMagick/Ghostscript is missing or processing fails, the original is kept and the outcome is logged. ZIP/Office files and BMP are not reprocessed; existing uploads are never rewritten.
 - Lossy optimization is on by default and can be turned off in Settings → Uploads. When on, only the optimized image/PDF copy is kept; the File sheet states whether Download returns the original or the optimized copy. HEIC/HEIF always becomes JPG because browsers cannot preview HEIC reliably.
-- Standalone Docs advertises 19 formats, including `.heic`/`.heif` (converted to JPG) and `.jpg`; it intentionally does not accept `.jpeg`. `.jpeg` is accepted for reminder/note attachments and preview.
+- Standalone Docs advertises 20 formats, including `.jpg`, `.jpeg`, `.heic` and `.heif`. iOS Photos commonly returns `.jpeg`; HEIC/HEIF are converted to JPG.
 - Production nginx needs `client_max_body_size 260m`, `client_body_timeout 300s`, `proxy_read_timeout 600s`, `proxy_send_timeout 600s`, and `proxy_request_buffering off` for a 10 × 25 MB batch.
 
 Optional environment variables:
@@ -993,7 +998,7 @@ Additional tenant permissions are opt-in scopes on the same token record. Existi
 
 - Notes/Docs reads use `GET /api/notes`, `/api/notes/:id`, `/api/docs`, `/api/docs/:id`; Docs search matches filenames only. Omitting `limit` returns the entire authorized collection with `complete: true`. An explicit `limit` (1–500) returns at most that many rows with `complete`/`has_more`, `total`, and a `scope` object (`collection`, `folder_id`, `token_filtered`). The explicit limit is a truncation, not a resumable cursor; sync clients should omit it and never infer deletion from a partial or differently scoped response.
 - Notes create/edit needs `notes:write`; Notes delete needs `notes:delete`. Docs upload/move/rename needs `docs:write`; Docs delete needs `docs:delete`. Note/reminder attachments follow the parent: read to list/download, write to upload, `notes:delete`/`docs:delete` to delete.
-- `GET /api/files/:id` is authorized by the owning parent, never by file ID alone. Downloads are private/no-store and use attachment disposition. `GET /api/files/:id/preview` uses the same parent authorization, serves only PNG/JPG/JPEG/GIF/WebP/BMP after a signature check, and returns `inline` with `private, no-store` and `nosniff`. Docs extensions are `.doc .docx .pdf .xls .xlsx .txt .md .html .htm .png .jpg .gif .webp .bmp .heic .heif .csv .json .zip`; HEIC/HEIF are converted to JPG before storage. Reminder/note attachments remain unrestricted by extension within the upload limits.
+- `GET /api/files/:id` is authorized by the owning parent, never by file ID alone. Downloads are private/no-store and use attachment disposition. `GET /api/files/:id/preview` uses the same parent authorization, serves only PNG/JPG/JPEG/GIF/WebP/BMP after a signature check, and returns `inline` with `private, no-store` and `nosniff`. Docs extensions are `.doc .docx .pdf .xls .xlsx .txt .md .html .htm .png .jpg .jpeg .gif .webp .bmp .heic .heif .csv .json .zip`; HEIC/HEIF are converted to JPG before storage. Reminder/note attachments remain unrestricted by extension within the upload limits.
 - `/api/state`, `/api/lists`, `/api/search`, `/api/storage` and largest-file results are filtered for token callers; unauthorized arrays are empty, and responses include `filtered: true`. A query parameter only narrows access.
 - `/api/capabilities` reports effective capabilities, the exact Docs format list plus category/label/MIME details, upload limits (25 MiB per file, 10 files per request), search fields, JSON-backup scope, and the current upload-compression policy. Docs and attachment rows expose logical `size`, `original_size`, `stored_size`, `compression` and `optimization` where applicable.
 

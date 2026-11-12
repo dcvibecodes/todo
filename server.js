@@ -42,6 +42,7 @@ const DOC_FORMAT_REGISTRY = [
   { ext: '.htm', category: 'HTML', label: 'HTML', mime: 'text/html', icon: 'file', signature: null },
   { ext: '.png', category: 'Images', label: 'PNG image', mime: 'image/png', icon: 'image', signature: 'png' },
   { ext: '.jpg', category: 'Images', label: 'JPEG image', mime: 'image/jpeg', icon: 'image', signature: 'jpeg' },
+  { ext: '.jpeg', category: 'Images', label: 'JPEG image', mime: 'image/jpeg', icon: 'image', signature: 'jpeg' },
   { ext: '.gif', category: 'Images', label: 'GIF image', mime: 'image/gif', icon: 'image', signature: 'gif' },
   { ext: '.webp', category: 'Images', label: 'WebP image', mime: 'image/webp', icon: 'image', signature: 'webp' },
   { ext: '.bmp', category: 'Images', label: 'BMP image', mime: 'image/bmp', icon: 'image', signature: 'bmp' },
@@ -59,8 +60,7 @@ const DOC_FORMATS_PUBLIC = DOC_FORMAT_REGISTRY.map(({ ext, category, label, mime
 const DOC_FORMAT_CATEGORIES = [...new Set(DOC_FORMAT_REGISTRY.map((format) => format.category))];
 const DOC_FORMAT_SUMMARY = DOC_FORMAT_CATEGORIES.join(', ');
 const DOC_FORMAT_EXTENSIONS = DOC_FORMAT_REGISTRY.map((format) => format.ext).join(', ');
-// .jpeg is preview-only for reminder/note attachments; Docs keeps its
-// advertised Docs registry (.jpg, not .jpeg; HEIC/HEIF convert to JPG).
+// .jpeg is accepted because iOS Photos commonly returns that extension. HEIC/HEIF convert to JPG.
 const PREVIEW_IMAGE_FORMATS = new Map([
   ['.png', { mime: 'image/png', signature: 'png' }],
   ['.jpg', { mime: 'image/jpeg', signature: 'jpeg' }],

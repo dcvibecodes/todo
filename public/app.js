@@ -3412,8 +3412,8 @@ function docIconForName(name) {
   return format && format.icon ? format.icon : 'file';
 }
 
-// Preview accepts the .jpeg alias for reminder/note attachments. HEIC/HEIF
-// are converted to JPG before storage and therefore preview as JPG.
+// iOS Photos commonly returns .jpeg; Docs accepts it as an alias of .jpg.
+// HEIC/HEIF are converted to JPG before storage and therefore preview as JPG.
 const PREVIEW_IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp']);
 
 function isPreviewableImage(name) {
