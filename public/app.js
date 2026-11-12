@@ -3762,53 +3762,9 @@ function attachmentExtras(files) {
   const images = files.filter((file) => isPreviewableImage(file.name));
   const others = files.filter((file) => !isPreviewableImage(file.name));
   if (images.length) {
-    const wrap = el('div', { class: 'attachment-thumbs-wrap' });
-    const strip = el('div', {
-      class: 'attachment-thumbs',
-      tabindex: '0',
-      role: 'group',
-      'aria-label': `${images.length} image attachments; scroll horizontally for more`,
-    });
+    const strip = el('div', { class: 'attachment-thumbs', 'aria-label': 'Image attachments' });
     for (const file of images) strip.append(imageThumb(file, images));
-    const previous = el('button', {
-      type: 'button',
-      class: 'thumb-scroll thumb-scroll-prev',
-      'aria-label': 'Scroll images left',
-      hidden: true,
-      html: ICON('back', 'ic'),
-    });
-    const next = el('button', {
-      type: 'button',
-      class: 'thumb-scroll thumb-scroll-next',
-      'aria-label': 'Scroll images right',
-      hidden: true,
-      html: ICON('chevron', 'ic'),
-    });
-    const update = () => {
-      const max = strip.scrollWidth - strip.clientWidth;
-      previous.hidden = strip.scrollLeft <= 2;
-      next.hidden = max <= 2 || strip.scrollLeft >= max - 2;
-    };
-    const scrollByPage = (direction) => {
-      strip.scrollBy({
-        left: direction * Math.max(60, strip.clientWidth * 0.82),
-        behavior: MOTION_REDUCED.matches ? 'auto' : 'smooth',
-      });
-    };
-    strip.addEventListener('scroll', update, { passive: true });
-    strip.addEventListener('keydown', (event) => {
-      if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
-      event.preventDefault();
-      scrollByPage(event.key === 'ArrowLeft' ? -1 : 1);
-    });
-    previous.addEventListener('click', () => scrollByPage(-1));
-    next.addEventListener('click', () => scrollByPage(1));
-    if ('ResizeObserver' in window) {
-      new ResizeObserver(update).observe(strip);
-    }
-    requestAnimationFrame(update);
-    wrap.append(previous, strip, next);
-    box.append(wrap);
+    box.append(strip);
   }
   if (others.length) {
     const links = el('div', { class: 'reminder-links' });
