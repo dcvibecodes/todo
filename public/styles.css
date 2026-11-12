@@ -3958,22 +3958,37 @@ button.link-chip { border: 0; font-family: inherit; cursor: pointer; }
 #doc-sheet-share[hidden] { display: none; }
 
 /* Image attachment thumbnails on outer reminder/note cards */
-.attachment-thumbs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 7px;
+.attachment-thumbs-wrap {
+  position: relative;
+  min-width: 0;
   max-width: 100%;
   margin-top: 7px;
+}
+
+.attachment-thumbs {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 7px;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  touch-action: pan-x;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
   padding-bottom: 2px;
 }
+
+.attachment-thumbs::-webkit-scrollbar { display: none; width: 0; height: 0; }
 
 .reminder-body > .attachment-extras { grid-column: 1; }
 
 .attachment-extras { margin-top: 6px; }
-.attachment-extras .attachment-thumbs { margin-top: 0; }
+.attachment-extras .attachment-thumbs-wrap { margin-top: 0; }
 .attachment-extras .reminder-links { margin-top: 7px; }
 
 .attachment-thumb {
+  scroll-snap-align: start;
   position: relative;
   flex: 0 0 auto;
   width: 58px;
@@ -4286,4 +4301,32 @@ button.link-chip { border: 0; font-family: inherit; cursor: pointer; }
 
 @media (prefers-reduced-motion: reduce) {
   .card-batch-spinner { animation: none; }
+}
+
+.thumb-scroll {
+  position: absolute;
+  top: 50%;
+  z-index: 2;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  transform: translateY(-50%);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 92%, var(--text));
+  color: var(--text-2);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  cursor: pointer;
+}
+
+.thumb-scroll:hover { color: var(--text); background: var(--surface); }
+.thumb-scroll .ic { width: 16px; height: 16px; }
+.thumb-scroll-prev { left: 2px; }
+.thumb-scroll-next { right: 2px; }
+.thumb-scroll[hidden] { display: none; }
+
+@media (pointer: coarse) {
+  .thumb-scroll { width: 42px; height: 42px; }
 }
