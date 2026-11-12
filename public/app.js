@@ -2606,6 +2606,7 @@ function renderSidebar() {
 }
 
 function renderSearchResults(content) {
+  resetCardBatch();
   document.title = 'Workspace — Search';
   $('#view-title').textContent = 'Search';
   $('#view-menu').hidden = true;
@@ -2692,6 +2693,7 @@ function syncCompletedFilter() {
 }
 
 function renderMain() {
+  resetCardBatch();
   const view = state.view;
   const content = $('#content');
   content.replaceChildren();
@@ -2825,6 +2827,103 @@ function docsForView(view) {
   return folderId ? state.docs.filter((doc) => doc.folder_id === folderId) : state.docs;
 }
 
+const CARD_BATCH_SIZE = 50;
+let cardBatch = null;
+let cardBatchObserver = null;
+
+function resetCardBatch() {
+  if (cardBatchObserver) cardBatchObserver.disconnect();
+  cardBatchObserver = null;
+  cardBatch = null;
+}
+
+function setCardBatchStatus(batch, state) {
+  batch.status.replaceChildren();
+  if (state === 'loading') {
+    batch.status.append(
+      el('span', { class: 'card-batch-spinner', 'aria-hidden': 'true' }),
+      el('span', { text: 'Loading more items…' }),
+    );
+    return;
+  }
+  if (state === 'error') {
+    batch.status.append(
+      el('span', { text: 'Could not load more items.' }),
+      el('button', {
+        type: 'button',
+        class: 'text-btn strong',
+        text: 'Retry',
+        onclick: () => { if (cardBatch) cardBatch.error = false; loadCardBatch(); },
+      }),
+    );
+    return;
+  }
+  if (state === 'end' && batch.items.length > CARD_BATCH_SIZE) {
+    batch.status.append(el('span', { text: `All ${batch.items.length} items shown` }));
+  }
+}
+
+function loadCardBatch() {
+  const batch = cardBatch;
+  if (!batch || batch.loading || batch.error || batch.shown >= batch.items.length) return;
+  batch.loading = true;
+  setCardBatchStatus(batch, 'loading');
+  requestAnimationFrame(() => {
+    if (cardBatch !== batch) return;
+    try {
+      const end = Math.min(batch.shown + CARD_BATCH_SIZE, batch.items.length);
+      const fragment = document.createDocumentFragment();
+      for (let index = batch.shown; index < end; index += 1) {
+        fragment.append(batch.renderRow(batch.items[index]));
+      }
+      batch.group.append(fragment);
+      batch.shown = end;
+      batch.loading = false;
+      if (batch.shown >= batch.items.length) {
+        batch.ended = true;
+        setCardBatchStatus(batch, 'end');
+        if (cardBatchObserver) cardBatchObserver.disconnect();
+        return;
+      }
+      setCardBatchStatus(batch, 'ready');
+      const top = batch.status.getBoundingClientRect().top;
+      if (top <= window.innerHeight + 240) loadCardBatch();
+    } catch (err) {
+      batch.loading = false;
+      batch.error = true;
+      setCardBatchStatus(batch, 'error');
+    }
+  });
+}
+
+function startCardBatch({ kind, key, items, content, renderRow }) {
+  resetCardBatch();
+  const group = el('div', { class: 'reminder-group' });
+  const status = el('div', {
+    class: 'card-batch-status',
+    role: 'status',
+    'aria-live': 'polite',
+  });
+  content.append(group, status);
+  cardBatch = {
+    kind,
+    key,
+    items,
+    group,
+    status,
+    renderRow,
+    shown: 0,
+    loading: false,
+    error: false,
+    ended: false,
+  };
+  cardBatchObserver = new IntersectionObserver((entries) => {
+    if (entries.some((entry) => entry.isIntersecting)) loadCardBatch();
+  }, { rootMargin: '240px 0px' });
+  cardBatchObserver.observe(status);
+  loadCardBatch();
+}
+
 function renderNotesView(content, view) {
   const folderId = viewFolderId(view);
   const folder = folderId ? listById(folderId) : null;
@@ -2851,9 +2950,13 @@ function renderNotesView(content, view) {
     ]));
     return;
   }
-  const group = el('div', { class: 'reminder-group' });
-  for (const note of notes) group.append(noteRow(note, { showFolder: !folder }));
-  content.append(group);
+  startCardBatch({
+    kind: 'notes',
+    key: `${view}|${effectiveSort(view).field}|${effectiveSort(view).dir}`,
+    items: notes,
+    content,
+    renderRow: (note) => noteRow(note, { showFolder: !folder }),
+  });
 }
 
 function renderDocsView(content, view) {
@@ -2883,9 +2986,13 @@ function renderDocsView(content, view) {
     ]));
     return;
   }
-  const group = el('div', { class: 'reminder-group' });
-  for (const doc of docs) group.append(docRow(doc, { showFolder: !folder }));
-  content.append(group);
+  startCardBatch({
+    kind: 'docs',
+    key: `${view}|${effectiveSort(view).field}|${effectiveSort(view).dir}`,
+    items: docs,
+    content,
+    renderRow: (doc) => docRow(doc, { showFolder: !folder }),
+  });
 }
 
 
@@ -3529,8 +3636,13 @@ function imageThumb(file, gallery) {
       openImagePreview(file, gallery);
     },
   });
+  const thumb = '/api/files/' + file.id + '/thumb';
   const image = el('img', {
-    src: '/api/files/' + file.id + '/preview',
+    src: thumb + '?w=160',
+    srcset: `${thumb}?w=160 160w, ${thumb}?w=320 320w`,
+    sizes: '58px',
+    width: '58',
+    height: '58',
     alt: '',
     loading: 'lazy',
     decoding: 'async',

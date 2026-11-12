@@ -74,8 +74,12 @@ function previewImageFormatForName(name) {
   return PREVIEW_IMAGE_FORMATS.get(path.extname(String(name || '')).toLowerCase()) || null;
 }
 const UPLOAD_DIR = path.join(db.DATA_DIR, 'uploads');
+const THUMBNAIL_DIR = path.join(db.DATA_DIR, 'thumbnails');
 const UPLOAD_MAX_BYTES = 25 * 1024 * 1024;
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+fs.mkdirSync(THUMBNAIL_DIR, { recursive: true });
+const THUMBNAIL_WIDTHS = new Set([160, 320]);
+const THUMBNAIL_SIGNATURES = { '.png': 'png', '.jpg': 'jpeg', '.jpeg': 'jpeg', '.gif': 'gif', '.webp': 'webp', '.bmp': 'bmp', '.heic': 'heic', '.heif': 'heic' };
 
 const uploadStorage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, UPLOAD_DIR),
@@ -434,6 +438,38 @@ async function optimizeUploadedFile(file, name, optimizeLossy = true) {
   return result;
 }
 
+async function ensureThumbnail(file, width) {
+  const source = path.join(UPLOAD_DIR, file.stored_name);
+  const stat = await fs.promises.stat(source);
+  const base = path.basename(file.stored_name);
+  const output = path.join(THUMBNAIL_DIR, `${base}.thumb-${width}.webp`);
+  const existing = await fs.promises.stat(output).catch(() => null);
+  if (existing && existing.mtimeMs >= stat.mtimeMs) return output;
+  const temp = `${output}.tmp-${crypto.randomUUID()}.webp`;
+  const command = process.env.IMAGEMAGICK_BIN || 'convert';
+  const args = [
+    '-limit', 'area', '60000000',
+    '-limit', 'memory', '256MiB',
+    '-limit', 'map', '512MiB',
+    `${source}[0]`,
+    '-auto-orient',
+    '-resize', `${width}x${width}^`,
+    '-gravity', 'center',
+    '-extent', `${width}x${width}`,
+    '+profile', '!icc,*',
+    '-quality', '80',
+    temp,
+  ];
+  try {
+    await execFileAsync(command, args, { timeout: 60000, maxBuffer: 4 * 1024 * 1024 });
+    await fs.promises.rename(temp, output);
+    return output;
+  } catch (err) {
+    await fs.promises.unlink(temp).catch(() => {});
+    throw err;
+  }
+}
+
 async function removeStoredFiles(rows) {
   const root = path.resolve(UPLOAD_DIR);
   for (const row of rows || []) {
@@ -445,6 +481,13 @@ async function removeStoredFiles(rows) {
     if (!target) continue;
     if (path.dirname(target) !== root) continue;
     await fs.promises.unlink(target).catch(() => {});
+    const base = path.basename(target);
+    const thumbFiles = await fs.promises.readdir(THUMBNAIL_DIR).catch(() => []);
+    for (const name of thumbFiles) {
+      if (name.startsWith(`${base}.thumb-`)) {
+        await fs.promises.unlink(path.join(THUMBNAIL_DIR, name)).catch(() => {});
+      }
+    }
   }
 }
 
@@ -1733,7 +1776,7 @@ async function main() {
       if (REMINDER_ID.test(route) || OCCURRENCES.test(route) || REMINDER_FILES.test(route)) return true;
       if (route === '/notes' || NOTE_ID.test(route) || NOTE_FILES.test(route)) return tokenHas(token, 'notes:read');
       if (route === '/docs' || DOC_ID.test(route)) return tokenHas(token, 'docs:read');
-      if (/^\/files\/\d+(\/preview)?$/.test(route)) return true;
+      if (/^\/files\/\d+(\/preview|\/thumb)?$/.test(route)) return true;
       if (route === '/storage') return tokenHas(token, 'storage:read');
       if (route === '/search') return tokenHas(token, 'search:read');
       return false;
@@ -3713,6 +3756,59 @@ async function main() {
     res.setHeader('Content-Disposition', 'inline');
     res.type(format.mime);
     res.sendFile(full, (err) => {
+      if (err && !res.headersSent) res.status(404).json({ error: 'File not found' });
+    });
+  });
+
+  app.get('/api/files/:id/thumb', async (req, res) => {
+    const id = parseId(req.params.id);
+    const width = Number(req.query.w);
+    if (!THUMBNAIL_WIDTHS.has(width)) return res.status(400).json({ error: 'Invalid thumbnail width' });
+    const file = id ? await db.get(
+      'SELECT id, name, stored_name, size, stored_size, revision, owner_type, owner_id FROM attachments WHERE id = ?', [id]
+    ) : null;
+    if (!file) return res.status(404).json({ error: 'File not found' });
+    if (req.token) {
+      const allowed = file.owner_type === 'reminder'
+        || (file.owner_type === 'note' && tokenHas(req.token, 'notes:read'))
+        || (file.owner_type === 'doc' && tokenHas(req.token, 'docs:read'));
+      if (!allowed) return denyToken(res);
+    }
+    const ext = path.extname(file.name).toLowerCase();
+    const signature = THUMBNAIL_SIGNATURES[ext];
+    if (!signature) return res.status(415).json({ error: 'Thumbnail is only available for image files' });
+    const source = path.join(UPLOAD_DIR, file.stored_name);
+    let matches = true;
+    try {
+      matches = await docContentMatches(source, { signature });
+    } catch {
+      matches = false;
+    }
+    if (!matches) return res.status(415).json({ error: 'Thumbnail is not available for this file' });
+    let thumb;
+    try {
+      thumb = await ensureThumbnail(file, width);
+    } catch {
+      return res.status(415).json({ error: 'Thumbnail is not available for this file' });
+    }
+    const [sourceStat, thumbStat] = await Promise.all([
+      fs.promises.stat(source).catch(() => null),
+      fs.promises.stat(thumb).catch(() => null),
+    ]);
+    if (!sourceStat || !thumbStat) return res.status(404).json({ error: 'File not found' });
+    const storeEpoch = await getStoreEpoch();
+    const thumbVersion = crypto.createHash('sha256').update(`${file.stored_name}|${storeEpoch}`).digest('hex').slice(0, 24);
+    const etag = `W/"thumb-${file.id}-${width}-${file.revision || 0}-${file.stored_size || file.size || 0}-${Math.floor(sourceStat.mtimeMs)}-${thumbStat.size}-${thumbVersion}"`;
+    res.setHeader('Cache-Control', 'private, no-cache');
+    res.setHeader('Vary', 'Cookie, Authorization');
+    res.setHeader('ETag', etag);
+    res.setHeader('Last-Modified', sourceStat.mtime.toUTCString());
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
+    const ifNoneMatch = req.get('If-None-Match');
+    if (ifNoneMatch === etag || ifNoneMatch === '*') return res.status(304).end();
+    res.type('image/webp');
+    res.sendFile(thumb, (err) => {
       if (err && !res.headersSent) res.status(404).json({ error: 'File not found' });
     });
   });

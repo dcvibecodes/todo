@@ -2,6 +2,14 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v4.9.0
+
+- **Real card thumbnails** - Notes/reminder cards now request small 160/320 px WebP derivatives with `srcset` instead of downloading the full stored image. Originals and full-resolution viewing remain untouched.
+- **Private thumbnail caching** - thumbnails use `Cache-Control: private, no-cache`, ETag revalidation, authenticated checks before 304 responses, and `Vary: Cookie, Authorization`. Full images and documents remain `private, no-store`.
+- **Incremental 50-card rendering** - Notes and Docs render 50 cards initially and automatically append the next 50 at the bottom, with a spinner/status, end state and retry path. This is client-side DOM batching; `/api/state` still loads the full metadata snapshot.
+- **Global search remains independent** - online search continues to query the server across Reminders, Notes and Docs, not just rendered cards, and keeps its truncated-result state visible.
+- Service worker cache bumped to `workspace-v4.9.0`.
+
 ## What's New in v4.8.8
 
 - **More aggressive new-upload settings** - images now cap at 2200 px with JPEG/WebP quality 75 (PNG palette quality 80), HEIC/HEIF converts to JPEG at the same target, and PDFs use 130 dpi colour/grey, 260 dpi mono. The existing upload optimizer still keeps the original when the candidate is not smaller.
@@ -1038,7 +1046,7 @@ Additional tenant permissions are opt-in scopes on the same token record. Existi
 
 - Notes/Docs reads use `GET /api/notes`, `/api/notes/:id`, `/api/docs`, `/api/docs/:id`; Notes responses include `attachments` with `is_image`, `preview_url` and `download_url` (token `notes:read` can fetch those with the bearer header). Docs search matches filenames only. Omitting `limit` returns the entire authorized collection with `complete: true`. An explicit `limit` (1–500) returns at most that many rows with `complete`/`has_more`, `total`, and a `scope` object (`collection`, `folder_id`, `token_filtered`). The explicit limit is a truncation, not a resumable cursor; sync clients should omit it and never infer deletion from a partial or differently scoped response.
 - Notes create/edit needs `notes:write`; Notes delete needs `notes:delete`. Docs upload/move/rename needs `docs:write`; Docs delete needs `docs:delete`. Note/reminder attachments follow the parent: read to list/download, write to upload, `notes:delete`/`docs:delete` to delete.
-- `GET /api/files/:id` is authorized by the owning parent, never by file ID alone. Downloads are private/no-store and use attachment disposition. `GET /api/files/:id/preview` uses the same parent authorization, serves only PNG/JPG/JPEG/GIF/WebP/BMP after a signature check, and returns `inline` with `private, no-store` and `nosniff`. Docs extensions are `.doc .docx .pdf .xls .xlsx .txt .md .html .htm .png .jpg .jpeg .gif .webp .bmp .heic .heif .csv .json .zip`; HEIC/HEIF are converted to JPG before storage. Reminder/note attachments remain unrestricted by extension within the upload limits.
+- `GET /api/files/:id` is authorized by the owning parent, never by file ID alone. Downloads are private/no-store and use attachment disposition. `GET /api/files/:id/preview` uses the same parent authorization, serves only PNG/JPG/JPEG/GIF/WebP/BMP after a signature check, and returns `inline` with `private, no-store` and `nosniff`. `GET /api/files/:id/thumb?w=160|320` returns a private conditional WebP thumbnail and is authorized the same way. Docs extensions are `.doc .docx .pdf .xls .xlsx .txt .md .html .htm .png .jpg .jpeg .gif .webp .bmp .heic .heif .csv .json .zip`; HEIC/HEIF are converted to JPG before storage. Reminder/note attachments remain unrestricted by extension within the upload limits.
 - `/api/state`, `/api/lists`, `/api/search`, `/api/storage` and largest-file results are filtered for token callers; unauthorized arrays are empty, and responses include `filtered: true`. A query parameter only narrows access.
 - `/api/capabilities` reports effective capabilities, the exact Docs format list plus category/label/MIME details, upload limits (25 MiB per file, 10 files per request), search fields, JSON-backup scope, and the current upload-compression policy. Docs and attachment rows expose logical `size`, `original_size`, `stored_size`, `compression` and `optimization` where applicable.
 

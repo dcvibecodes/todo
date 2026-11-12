@@ -4259,3 +4259,32 @@ button.link-chip { border: 0; font-family: inherit; cursor: pointer; }
   .image-viewer-body.swipe-left,
   .image-viewer-body.swipe-right { animation: none; }
 }
+
+/* Incremental card batches */
+.card-batch-status {
+  min-height: 28px;
+  padding: 10px 0 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--text-3);
+  font-size: 0.75rem;
+  text-align: center;
+}
+
+.card-batch-spinner {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  border: 2px solid color-mix(in srgb, var(--text) 18%, transparent);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: card-batch-spin 0.7s linear infinite;
+}
+
+@keyframes card-batch-spin { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .card-batch-spinner { animation: none; }
+}
