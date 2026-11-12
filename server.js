@@ -3,6 +3,8 @@
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
+const zlib = require('zlib');
+const { execFile } = require('child_process');
 const express = require('express');
 const session = require('express-session');
 const compression = require('compression');
@@ -55,6 +57,18 @@ const DOC_FORMATS_PUBLIC = DOC_FORMAT_REGISTRY.map(({ ext, category, label, mime
 const DOC_FORMAT_CATEGORIES = [...new Set(DOC_FORMAT_REGISTRY.map((format) => format.category))];
 const DOC_FORMAT_SUMMARY = DOC_FORMAT_CATEGORIES.join(', ');
 const DOC_FORMAT_EXTENSIONS = DOC_FORMAT_REGISTRY.map((format) => format.ext).join(', ');
+const PREVIEW_IMAGE_FORMATS = new Map([
+  ['.png', { mime: 'image/png', signature: 'png' }],
+  ['.jpg', { mime: 'image/jpeg', signature: 'jpeg' }],
+  ['.jpeg', { mime: 'image/jpeg', signature: 'jpeg' }],
+  ['.gif', { mime: 'image/gif', signature: 'gif' }],
+  ['.webp', { mime: 'image/webp', signature: 'webp' }],
+  ['.bmp', { mime: 'image/bmp', signature: 'bmp' }],
+]);
+
+function previewImageFormatForName(name) {
+  return PREVIEW_IMAGE_FORMATS.get(path.extname(String(name || '')).toLowerCase()) || null;
+}
 const UPLOAD_DIR = path.join(db.DATA_DIR, 'uploads');
 const UPLOAD_MAX_BYTES = 25 * 1024 * 1024;
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -125,6 +139,170 @@ async function docContentMatches(filePath, format) {
   return signatureMatches(head, format.signature);
 }
 
+const COMPRESSIBLE_TEXT_EXTENSIONS = new Set([
+  '.txt', '.md', '.markdown', '.csv', '.json', '.html', '.htm', '.xml', '.svg',
+  '.js', '.css', '.log', '.rtf', '.yaml', '.yml', '.tsv', '.sql', '.ini', '.conf',
+]);
+const IMAGE_COMPRESSION_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp']);
+const IMAGE_MAX_EDGE = 2400;
+const MIN_COMPRESSION_SAVINGS = 0.08;
+const MIN_COMPRESSION_BYTES = 1024;
+let sharpLib = null;
+let sharpChecked = false;
+
+function getSharp() {
+  if (!sharpChecked) {
+    sharpChecked = true;
+    try {
+      sharpLib = require('sharp');
+    } catch (err) {
+      console.warn('Image compression unavailable: sharp is not installed');
+    }
+  }
+  return sharpLib;
+}
+
+function isCompressibleText(name, mime) {
+  if (COMPRESSIBLE_TEXT_EXTENSIONS.has(path.extname(String(name || '')).toLowerCase())) return true;
+  return /^text\//i.test(String(mime || ''))
+    || ['application/json', 'application/xml', 'application/javascript', 'image/svg+xml'].includes(String(mime || '').toLowerCase());
+}
+
+async function replaceIfSmaller(original, temp, minSavings = MIN_COMPRESSION_SAVINGS) {
+  try {
+    const [before, after] = await Promise.all([
+      fs.promises.stat(original),
+      fs.promises.stat(temp),
+    ]);
+    if (after.size > 0 && after.size < before.size * (1 - minSavings)) {
+      await fs.promises.rename(temp, original);
+      return after.size;
+    }
+  } catch { /* fall through to cleanup */ }
+  await fs.promises.unlink(temp).catch(() => {});
+  return null;
+}
+
+async function optimizeImage(filePath, name) {
+  const ext = path.extname(name).toLowerCase();
+  if (!IMAGE_COMPRESSION_EXTENSIONS.has(ext)) return null;
+  const sharp = getSharp();
+  if (!sharp) return null;
+  const temp = `${filePath}.opt-${crypto.randomUUID()}`;
+  try {
+    let pipeline = sharp(filePath, {
+      animated: ext === '.gif' || ext === '.webp',
+      limitInputPixels: 60000000,
+      sequentialRead: true,
+    }).rotate().resize({
+      width: IMAGE_MAX_EDGE,
+      height: IMAGE_MAX_EDGE,
+      fit: 'inside',
+      withoutEnlargement: true,
+    });
+    if (ext === '.png') {
+      pipeline = pipeline.png({ compressionLevel: 9, palette: true, quality: 90, effort: 7, dither: 0.9 });
+    } else if (ext === '.jpg' || ext === '.jpeg') {
+      pipeline = pipeline.jpeg({ quality: 82, mozjpeg: true, progressive: true, chromaSubsampling: '4:2:0' });
+    } else if (ext === '.webp') {
+      pipeline = pipeline.webp({ quality: 82, effort: 5 });
+    } else {
+      pipeline = pipeline.gif({ compressionLevel: 9, effort: 7 });
+    }
+    await pipeline.toFile(temp);
+    return await replaceIfSmaller(filePath, temp);
+  } catch (err) {
+    await fs.promises.unlink(temp).catch(() => {});
+    console.warn(`Image compression skipped for ${name}: ${err.message}`);
+    return null;
+  }
+}
+
+function execFileAsync(command, args, options) {
+  return new Promise((resolve, reject) => {
+    execFile(command, args, options, (err, stdout, stderr) => {
+      if (err) {
+        err.stdout = stdout;
+        err.stderr = stderr;
+        reject(err);
+      } else {
+        resolve({ stdout, stderr });
+      }
+    });
+  });
+}
+
+async function optimizePdf(filePath, name) {
+  const before = await fs.promises.stat(filePath).catch(() => null);
+  if (!before || before.size < 50 * 1024) return null;
+  const temp = `${filePath}.opt-${crypto.randomUUID()}`;
+  const gs = process.env.GHOSTSCRIPT_BIN || 'gs';
+  const args = [
+    '-q', '-dNOPAUSE', '-dBATCH', '-dSAFER',
+    '-sDEVICE=pdfwrite',
+    '-dCompatibilityLevel=1.5',
+    '-dPDFSETTINGS=/ebook',
+    '-dDetectDuplicateImages=true',
+    '-dCompressFonts=true',
+    '-dSubsetFonts=true',
+    '-dColorImageResolution=150',
+    '-dGrayImageResolution=150',
+    '-dMonoImageResolution=300',
+    `-sOutputFile=${temp}`,
+    filePath,
+  ];
+  try {
+    await execFileAsync(gs, args, { timeout: 120000, maxBuffer: 4 * 1024 * 1024 });
+    const head = await readFileHead(temp, 5);
+    if (head.toString() !== '%PDF-') throw new Error('Ghostscript did not produce a PDF');
+    return await replaceIfSmaller(filePath, temp, 0.03);
+  } catch (err) {
+    await fs.promises.unlink(temp).catch(() => {});
+    if (err.code !== 'ENOENT') console.warn(`PDF compression skipped for ${name}: ${err.message}`);
+    return null;
+  }
+}
+
+async function gzipTextFile(filePath) {
+  const before = await fs.promises.stat(filePath).catch(() => null);
+  if (!before || before.size < MIN_COMPRESSION_BYTES) return null;
+  const temp = `${filePath}.gz-${crypto.randomUUID()}`;
+  try {
+    const raw = await fs.promises.readFile(filePath);
+    const zipped = await new Promise((resolve, reject) => {
+      zlib.gzip(raw, { level: 9 }, (err, buffer) => (err ? reject(err) : resolve(buffer)));
+    });
+    if (zipped.length >= before.size * (1 - MIN_COMPRESSION_SAVINGS)) return null;
+    await fs.promises.writeFile(temp, zipped);
+    await fs.promises.rename(temp, filePath);
+    return zipped.length;
+  } catch (err) {
+    await fs.promises.unlink(temp).catch(() => {});
+    console.warn(`Text compression skipped: ${err.message}`);
+    return null;
+  }
+}
+
+async function optimizeUploadedFile(file, name) {
+  const stat = await fs.promises.stat(file.path);
+  const ext = path.extname(name).toLowerCase();
+  if (IMAGE_COMPRESSION_EXTENSIONS.has(ext)) {
+    const next = await optimizeImage(file.path, name);
+    const size = next || stat.size;
+    return { size, storedSize: size, compression: '' };
+  }
+  if (ext === '.pdf') {
+    const next = await optimizePdf(file.path, name);
+    const size = next || stat.size;
+    return { size, storedSize: size, compression: '' };
+  }
+  if (isCompressibleText(name, file.mimetype)) {
+    const storedSize = await gzipTextFile(file.path);
+    if (storedSize) return { size: stat.size, storedSize, compression: 'gzip' };
+  }
+  return { size: stat.size, storedSize: stat.size, compression: '' };
+}
+
 async function removeStoredFiles(rows) {
   const root = path.resolve(UPLOAD_DIR);
   for (const row of rows || []) {
@@ -165,11 +343,11 @@ async function storageSnapshot(allowedTenants = null) {
     db.get(`SELECT COALESCE(SUM(LENGTH(CAST(title AS BLOB)) + LENGTH(CAST(notes AS BLOB))), 0) AS bytes FROM reminders`),
     db.get(`SELECT COALESCE(SUM(LENGTH(CAST(title AS BLOB)) + LENGTH(CAST(body AS BLOB))), 0) AS bytes FROM notes`),
     db.get(`SELECT COALESCE(SUM(LENGTH(CAST(name AS BLOB))), 0) AS bytes FROM attachments WHERE owner_type = 'doc'`),
-    db.all(`SELECT tenant, COALESCE(SUM(size), 0) AS bytes, COUNT(*) AS files FROM attachments GROUP BY tenant`),
-    db.all(`SELECT a.id, a.tenant, a.owner_type, a.owner_id, a.name, a.size, a.mime,
+    db.all(`SELECT tenant, COALESCE(SUM(COALESCE(stored_size, size)), 0) AS bytes, COUNT(*) AS files FROM attachments GROUP BY tenant`),
+    db.all(`SELECT a.id, a.tenant, a.owner_type, a.owner_id, a.name, COALESCE(a.stored_size, a.size) AS size, a.mime,
                    l.name AS folder_name
             FROM attachments a LEFT JOIN lists l ON l.id = a.folder_id
-            ORDER BY a.size DESC, a.id DESC LIMIT 20`),
+            ORDER BY COALESCE(a.stored_size, a.size) DESC, a.id DESC LIMIT 20`),
   ]);
   const files = { reminders: 0, notes: 0, docs: 0 };
   const counts = { reminders: 0, notes: 0, docs: 0 };
@@ -1413,7 +1591,7 @@ async function main() {
       if (REMINDER_ID.test(route) || OCCURRENCES.test(route) || REMINDER_FILES.test(route)) return true;
       if (route === '/notes' || NOTE_ID.test(route) || NOTE_FILES.test(route)) return tokenHas(token, 'notes:read');
       if (route === '/docs' || DOC_ID.test(route)) return tokenHas(token, 'docs:read');
-      if (/^\/files\/\d+$/.test(route)) return true;
+      if (/^\/files\/\d+(\/preview)?$/.test(route)) return true;
       if (route === '/storage') return tokenHas(token, 'storage:read');
       if (route === '/search') return tokenHas(token, 'search:read');
       return false;
@@ -2989,13 +3167,14 @@ async function main() {
         const name = cleanFileName(file.originalname);
         const format = tenant === 'docs' ? docFormatForName(name) : null;
         const mime = format ? format.mime : (file.mimetype || 'application/octet-stream');
+        const optimized = await optimizeUploadedFile(file, name);
         const result = await db.run(
-          `INSERT INTO attachments (tenant, owner_type, owner_id, folder_id, name, stored_name, mime, size, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO attachments (tenant, owner_type, owner_id, folder_id, name, stored_name, mime, size, stored_size, compression, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [tenant, ownerType, ownerId, folderId, name, file.filename,
-            mime, file.size || 0, new Date().toISOString()]
+            mime, optimized.size, optimized.storedSize, optimized.compression, new Date().toISOString()]
         );
-        rows.push({ id: result.lastID, name, mime, size: file.size });
+        rows.push({ id: result.lastID, name, mime, size: optimized.size });
       }
       return rows;
     } catch (err) {
@@ -3222,7 +3401,7 @@ async function main() {
   app.get('/api/files/:id', async (req, res) => {
     const id = parseId(req.params.id);
     const file = id ? await db.get(
-      'SELECT name, stored_name, owner_type, owner_id FROM attachments WHERE id = ?', [id]
+      'SELECT name, stored_name, mime, size, compression, owner_type, owner_id FROM attachments WHERE id = ?', [id]
     ) : null;
     if (!file) return res.status(404).json({ error: 'File not found' });
     if (req.token) {
@@ -3234,7 +3413,58 @@ async function main() {
     const full = path.join(UPLOAD_DIR, file.stored_name);
     res.setHeader('Cache-Control', 'private, no-store');
     res.setHeader('X-Content-Type-Options', 'nosniff');
+    if (file.compression === 'gzip') {
+      res.attachment(file.name);
+      res.type(file.mime || 'application/octet-stream');
+      if (file.size !== null && file.size !== undefined) res.setHeader('Content-Length', String(file.size));
+      const source = fs.createReadStream(full);
+      const gunzip = zlib.createGunzip();
+      const fail = () => {
+        if (!res.headersSent) res.status(404).json({ error: 'File not found' });
+        else res.destroy();
+      };
+      source.on('error', fail);
+      gunzip.on('error', fail);
+      res.on('close', () => {
+        source.destroy();
+        gunzip.destroy();
+      });
+      source.pipe(gunzip).pipe(res);
+      return;
+    }
     res.download(full, file.name, (err) => {
+      if (err && !res.headersSent) res.status(404).json({ error: 'File not found' });
+    });
+  });
+
+  app.get('/api/files/:id/preview', async (req, res) => {
+    const id = parseId(req.params.id);
+    const file = id ? await db.get(
+      'SELECT name, stored_name, owner_type, owner_id FROM attachments WHERE id = ?', [id]
+    ) : null;
+    if (!file) return res.status(404).json({ error: 'File not found' });
+    if (req.token) {
+      const allowed = file.owner_type === 'reminder'
+        || (file.owner_type === 'note' && tokenHas(req.token, 'notes:read'))
+        || (file.owner_type === 'doc' && tokenHas(req.token, 'docs:read'));
+      if (!allowed) return denyToken(res);
+    }
+    const format = previewImageFormatForName(file.name);
+    if (!format) return res.status(415).json({ error: 'Preview is only available for image files' });
+    const full = path.join(UPLOAD_DIR, file.stored_name);
+    let matches = true;
+    try {
+      matches = await docContentMatches(full, format);
+    } catch {
+      matches = false;
+    }
+    if (!matches) return res.status(415).json({ error: 'Preview is not available for this file' });
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
+    res.setHeader('Content-Disposition', 'inline');
+    res.type(format.mime);
+    res.sendFile(full, (err) => {
       if (err && !res.headersSent) res.status(404).json({ error: 'File not found' });
     });
   });

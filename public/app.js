@@ -3157,6 +3157,21 @@ function openDocSheet(doc) {
   state.docSnapshot = { name: doc.name, folder_id: doc.folder_id };
   $('#doc-name').value = doc.name;
   autoGrowDocName();
+  const preview = $('#doc-image-preview');
+  const previewImg = $('#doc-image-preview-img');
+  const previewable = isPreviewableImage(doc.name);
+  preview.hidden = !previewable;
+  if (previewable) {
+    previewImg.src = '/api/files/' + doc.id + '/preview';
+    previewImg.alt = doc.name;
+    preview.onclick = () => openImagePreview({
+      id: doc.id,
+      name: $('#doc-name').value.trim() || doc.name,
+    });
+  } else {
+    previewImg.removeAttribute('src');
+    preview.onclick = null;
+  }
   const select = $('#doc-folder');
   select.replaceChildren();
   for (const folder of foldersFor('docs')) {
@@ -3257,14 +3272,47 @@ function docIconForName(name) {
   return format && format.icon ? format.icon : 'file';
 }
 
+const PREVIEW_IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp']);
+
+function isPreviewableImage(name) {
+  const ext = '.' + String(name || '').split('.').pop().toLowerCase();
+  return PREVIEW_IMAGE_EXTENSIONS.has(ext);
+}
+
+function openImagePreview(file) {
+  const viewer = $('#image-sheet');
+  const image = $('#image-viewer-img');
+  if (!viewer || !image || !file) return;
+  $('#image-viewer-title').textContent = file.name;
+  image.src = '/api/files/' + file.id + '/preview';
+  image.alt = file.name;
+  openSheet('#image-sheet');
+}
+
 function fileChip(file) {
-  return el('a', {
+  const download = el('a', {
     class: 'link-chip',
     href: '/api/files/' + file.id,
     download: file.name,
     title: `Download ${file.name}`,
-    html: `${ICON('files', 'ic')}<span class="link-domain">${escapeHtml(file.name)}</span>`,
+    'aria-label': `Download ${file.name}`,
+    html: isPreviewableImage(file.name)
+      ? ICON('download', 'ic')
+      : `${ICON('files', 'ic')}<span class="link-domain">${escapeHtml(file.name)}</span>`,
   });
+  if (!isPreviewableImage(file.name)) return download;
+  const preview = el('button', {
+    type: 'button',
+    class: 'link-chip',
+    title: `Preview ${file.name}`,
+    'aria-label': `Preview ${file.name}`,
+    html: `${ICON('image', 'ic')}<span class="link-domain">${escapeHtml(file.name)}</span>`,
+    onclick: (event) => {
+      event.stopPropagation();
+      openImagePreview(file);
+    },
+  });
+  return el('span', { class: 'file-chip-group' }, [preview, download]);
 }
 
 async function handleNoteDelete(note, button) {
@@ -4839,6 +4887,43 @@ function toggleEditorMore() {
   }
 }
 
+function attachmentRow(file, onRemove) {
+  const row = el('div', { class: 'attach-item' });
+  const previewable = Boolean(file.id) && isPreviewableImage(file.name);
+  const icon = previewable ? docIconForName(file.name) : 'files';
+  if (previewable) {
+    row.append(el('button', {
+      type: 'button',
+      class: 'attach-preview',
+      title: `Preview ${file.name}`,
+      'aria-label': `Preview ${file.name}`,
+      onclick: (event) => {
+        event.stopPropagation();
+        openImagePreview(file);
+      },
+    }, [
+      el('span', { html: ICON(icon, 'ic') }),
+      el('span', { class: 'attach-name', text: file.name }),
+    ]));
+  } else {
+    row.append(
+      el('span', { html: ICON(icon, 'ic') }),
+      el('span', { class: 'attach-name', text: file.name }),
+    );
+  }
+  row.append(
+    el('span', { class: 'attach-size', text: formatBytes(file.size) }),
+    el('button', {
+      type: 'button',
+      class: 'attach-remove',
+      'aria-label': `Remove ${file.name}`,
+      html: ICON('x', 'ic'),
+      onclick: onRemove,
+    }),
+  );
+  return row;
+}
+
 function renderEditorAttachments() {
   const wrap = $('#e-attachments');
   wrap.replaceChildren();
@@ -4846,38 +4931,16 @@ function renderEditorAttachments() {
     ? attachmentsFor('reminder', state.editingId).filter((file) => !state.editorRemovedFiles.includes(file.id))
     : [];
   for (const file of existing) {
-    wrap.append(el('div', { class: 'attach-item' }, [
-      el('span', { html: ICON('files', 'ic') }),
-      el('span', { class: 'attach-name', text: file.name }),
-      el('span', { class: 'attach-size', text: formatBytes(file.size) }),
-      el('button', {
-        type: 'button',
-        class: 'attach-remove',
-        'aria-label': `Remove ${file.name}`,
-        html: ICON('x', 'ic'),
-        onclick: () => {
-          state.editorRemovedFiles.push(file.id);
-          renderEditorAttachments();
-        },
-      }),
-    ]));
+    wrap.append(attachmentRow(file, () => {
+      state.editorRemovedFiles.push(file.id);
+      renderEditorAttachments();
+    }));
   }
   for (const file of state.editorPendingFiles) {
-    wrap.append(el('div', { class: 'attach-item' }, [
-      el('span', { html: ICON('files', 'ic') }),
-      el('span', { class: 'attach-name', text: file.name }),
-      el('span', { class: 'attach-size', text: formatBytes(file.size) }),
-      el('button', {
-        type: 'button',
-        class: 'attach-remove',
-        'aria-label': `Remove ${file.name}`,
-        html: ICON('x', 'ic'),
-        onclick: () => {
-          state.editorPendingFiles = state.editorPendingFiles.filter((item) => item !== file);
-          renderEditorAttachments();
-        },
-      }),
-    ]));
+    wrap.append(attachmentRow(file, () => {
+      state.editorPendingFiles = state.editorPendingFiles.filter((item) => item !== file);
+      renderEditorAttachments();
+    }));
   }
   if (!wrap.childElementCount) wrap.append(el('p', { class: 'notify-hint', text: 'No attachments.' }));
   syncEditorSubmit();
@@ -5531,38 +5594,16 @@ function renderNoteAttachments() {
     ? attachmentsFor('note', state.noteEditingId).filter((file) => !state.noteRemovedFiles.includes(file.id))
     : [];
   for (const file of existing) {
-    wrap.append(el('div', { class: 'attach-item' }, [
-      el('span', { html: ICON('files', 'ic') }),
-      el('span', { class: 'attach-name', text: file.name }),
-      el('span', { class: 'attach-size', text: formatBytes(file.size) }),
-      el('button', {
-        type: 'button',
-        class: 'attach-remove',
-        'aria-label': `Remove ${file.name}`,
-        html: ICON('x', 'ic'),
-        onclick: () => {
-          state.noteRemovedFiles.push(file.id);
-          renderNoteAttachments();
-        },
-      }),
-    ]));
+    wrap.append(attachmentRow(file, () => {
+      state.noteRemovedFiles.push(file.id);
+      renderNoteAttachments();
+    }));
   }
   for (const file of state.notePendingFiles) {
-    wrap.append(el('div', { class: 'attach-item' }, [
-      el('span', { html: ICON('files', 'ic') }),
-      el('span', { class: 'attach-name', text: file.name }),
-      el('span', { class: 'attach-size', text: formatBytes(file.size) }),
-      el('button', {
-        type: 'button',
-        class: 'attach-remove',
-        'aria-label': `Remove ${file.name}`,
-        html: ICON('x', 'ic'),
-        onclick: () => {
-          state.notePendingFiles = state.notePendingFiles.filter((item) => item !== file);
-          renderNoteAttachments();
-        },
-      }),
-    ]));
+    wrap.append(attachmentRow(file, () => {
+      state.notePendingFiles = state.notePendingFiles.filter((item) => item !== file);
+      renderNoteAttachments();
+    }));
   }
   if (!wrap.childElementCount) wrap.append(el('p', { class: 'notify-hint', text: 'No attachments.' }));
 }
@@ -7091,6 +7132,13 @@ $('#note-link-url').addEventListener('keydown', (event) => {
 $('#doc-form').addEventListener('submit', saveDoc);
 $('#doc-folder').addEventListener('change', () => { syncDocFolderVisual(); syncDocSave(); });
 $('#doc-name').addEventListener('input', syncDocSheetInfo);
+$('#image-viewer-img').addEventListener('error', () => {
+  toast('Preview not available');
+  closeSheet('#image-sheet');
+});
+$('#doc-image-preview-img').addEventListener('error', () => {
+  $('#doc-image-preview').hidden = true;
+});
 $('#doc-name').addEventListener('keydown', (event) => {
   if (event.key === 'Enter') event.preventDefault();
 });

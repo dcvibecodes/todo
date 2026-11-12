@@ -605,6 +605,9 @@
         <button type="submit" id="doc-save" class="text-btn strong" disabled>Save</button>
       </header>
       <div class="sheet-body editor-body">
+        <button type="button" id="doc-image-preview" class="doc-image-preview" hidden aria-label="Preview image">
+          <img id="doc-image-preview-img" alt="">
+        </button>
         <div class="doc-sheet-file">
           <span class="doc-icon"><svg class="ic"><use id="doc-sheet-icon-use" href="#i-file"/></svg></span>
           <div class="doc-sheet-info">
@@ -627,6 +630,20 @@
         <a id="doc-sheet-download" class="secondary-btn" href="#" download><svg class="ic"><use href="#i-download"/></svg><span>Download</span></a>
       </div>
     </form>
+  </div>
+
+
+  <div id="image-sheet" class="sheet" hidden>
+    <div class="sheet-backdrop" data-close></div>
+    <div class="image-viewer">
+      <header class="image-viewer-head">
+        <span id="image-viewer-title"></span>
+        <button type="button" class="text-btn strong" data-close>Done</button>
+      </header>
+      <div class="image-viewer-body">
+        <img id="image-viewer-img" alt="">
+      </div>
+    </div>
   </div>
 
   <input id="docs-file-input" type="file" multiple hidden>

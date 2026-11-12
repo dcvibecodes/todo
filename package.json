@@ -1,6 +1,6 @@
 {
   "name": "todo",
-  "version": "4.6.1",
+  "version": "4.7.0",
   "description": "A self-hosted workspace for reminders, notes and documents",
   "main": "server.js",
   "scripts": {
@@ -17,9 +17,7 @@
     "express-session": "^1.18.1",
     "multer": "^2.5.0",
     "sqlite3": "^6.0.1",
-    "web-push": "^3.6.7"
-  },
-  "devDependencies": {
+    "web-push": "^3.6.7",
     "sharp": "^0.34.5"
   }
 }
