@@ -144,23 +144,11 @@ const COMPRESSIBLE_TEXT_EXTENSIONS = new Set([
   '.js', '.css', '.log', '.rtf', '.yaml', '.yml', '.tsv', '.sql', '.ini', '.conf',
 ]);
 const IMAGE_COMPRESSION_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp']);
+const IMAGE_SIGNATURES = { '.png': 'png', '.jpg': 'jpeg', '.jpeg': 'jpeg', '.gif': 'gif', '.webp': 'webp' };
 const IMAGE_MAX_EDGE = 2400;
 const MIN_COMPRESSION_SAVINGS = 0.08;
 const MIN_COMPRESSION_BYTES = 1024;
-let sharpLib = null;
-let sharpChecked = false;
-
-function getSharp() {
-  if (!sharpChecked) {
-    sharpChecked = true;
-    try {
-      sharpLib = require('sharp');
-    } catch (err) {
-      console.warn('Image compression unavailable: sharp is not installed');
-    }
-  }
-  return sharpLib;
-}
+let imageMagickMissingLogged = false;
 
 function isCompressibleText(name, mime) {
   if (COMPRESSIBLE_TEXT_EXTENSIONS.has(path.extname(String(name || '')).toLowerCase())) return true;
@@ -186,34 +174,45 @@ async function replaceIfSmaller(original, temp, minSavings = MIN_COMPRESSION_SAV
 async function optimizeImage(filePath, name) {
   const ext = path.extname(name).toLowerCase();
   if (!IMAGE_COMPRESSION_EXTENSIONS.has(ext)) return null;
-  const sharp = getSharp();
-  if (!sharp) return null;
-  const temp = `${filePath}.opt-${crypto.randomUUID()}`;
+  let matches = true;
   try {
-    let pipeline = sharp(filePath, {
-      animated: ext === '.gif' || ext === '.webp',
-      limitInputPixels: 60000000,
-      sequentialRead: true,
-    }).rotate().resize({
-      width: IMAGE_MAX_EDGE,
-      height: IMAGE_MAX_EDGE,
-      fit: 'inside',
-      withoutEnlargement: true,
-    });
-    if (ext === '.png') {
-      pipeline = pipeline.png({ compressionLevel: 9, palette: true, quality: 90, effort: 7, dither: 0.9 });
-    } else if (ext === '.jpg' || ext === '.jpeg') {
-      pipeline = pipeline.jpeg({ quality: 82, mozjpeg: true, progressive: true, chromaSubsampling: '4:2:0' });
-    } else if (ext === '.webp') {
-      pipeline = pipeline.webp({ quality: 82, effort: 5 });
-    } else {
-      pipeline = pipeline.gif({ compressionLevel: 9, effort: 7 });
-    }
-    await pipeline.toFile(temp);
+    matches = await docContentMatches(filePath, { signature: IMAGE_SIGNATURES[ext] });
+  } catch {
+    matches = false;
+  }
+  if (!matches) return null;
+  const temp = `${filePath}.opt-${crypto.randomUUID()}${ext}`;
+  const command = process.env.IMAGEMAGICK_BIN || 'convert';
+  const args = [
+    '-limit', 'memory', '256MiB',
+    '-limit', 'map', '512MiB',
+    filePath,
+  ];
+  if (ext === '.gif' || ext === '.webp') args.push('-coalesce');
+  args.push('-auto-orient', '-resize', `${IMAGE_MAX_EDGE}x${IMAGE_MAX_EDGE}>`, '-strip');
+  if (ext === '.png') {
+    args.push('-colors', '256', '-dither', 'FloydSteinberg', '-quality', '90', '-define', 'png:compression-level=9');
+  } else if (ext === '.jpg' || ext === '.jpeg') {
+    args.push('-quality', '82', '-sampling-factor', '4:2:0', '-interlace', 'Plane');
+  } else if (ext === '.webp') {
+    args.push('-quality', '82');
+  } else if (ext === '.gif') {
+    args.push('-layers', 'Optimize');
+  }
+  args.push(temp);
+  try {
+    await execFileAsync(command, args, { timeout: 120000, maxBuffer: 4 * 1024 * 1024 });
     return await replaceIfSmaller(filePath, temp);
   } catch (err) {
     await fs.promises.unlink(temp).catch(() => {});
-    console.warn(`Image compression skipped for ${name}: ${err.message}`);
+    if (err.code === 'ENOENT') {
+      if (!imageMagickMissingLogged) {
+        imageMagickMissingLogged = true;
+        console.warn('Image compression unavailable: ImageMagick (convert) is not installed');
+      }
+    } else {
+      console.warn(`Image compression skipped for ${name}: ${err.message}`);
+    }
     return null;
   }
 }

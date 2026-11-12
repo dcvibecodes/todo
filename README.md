@@ -2,10 +2,15 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v4.7.1
+
+- **Image compression on the VPS** - image optimization now uses ImageMagick instead of the sharp native module, whose prebuilt binary requires an x86-64-v2 CPU and could not load on the VPS. JPEG/PNG/WebP/GIF compression, resizing and animation preservation are unchanged; BMP files stay uncompressed.
+- Service worker cache bumped to `workspace-v4.7.1`.
+
 ## What's New in v4.7.0
 
 - **Image previews everywhere** - Docs images show an inline preview in the File sheet and open a full-screen viewer; reminder and note image attachments get a separate Preview action alongside Download. Supported preview images are PNG, JPG/JPEG, GIF, WebP and BMP. Preview responses are authenticated, parent-authorized, image-only, `inline`, `private, no-store` and `nosniff`; downloads stay separate attachment responses.
-- **Upload compression everywhere** - uploaded images, PDFs and text-like files are optimized before storage in Docs, reminders and notes. Images are auto-oriented, capped at 2400 px on the long edge and re-encoded (JPEG quality 82, PNG palette quality 90, WebP quality 82, animated GIF/WebP preserved). PDFs are rewritten with Ghostscript's `/ebook` profile (150 dpi images). Text-like files are gzip-compressed at rest and decompressed for download. A compressed version is kept only when it is smaller; the original filename, MIME type and download bytes are preserved (gzip text is decompressed into the original download). ZIP/Office containers are already compressed and are left as-is; BMP images and existing uploads are not reprocessed.
+- **Upload compression everywhere** - uploaded images, PDFs and text-like files are optimized before storage in Docs, reminders and notes. Images are auto-oriented, capped at 2400 px on the long edge and re-encoded with ImageMagick (JPEG quality 82, PNG 256-colour quality 90, WebP quality 82, animated GIF/WebP preserved). PDFs are rewritten with Ghostscript's `/ebook` profile (150 dpi images). Text-like files are gzip-compressed at rest and decompressed for download. A compressed version is kept only when it is smaller; the original filename, MIME type and download bytes are preserved (gzip text is decompressed into the original download). ZIP/Office and BMP files are left as-is; existing uploads are not reprocessed.
 - Service worker cache bumped to `workspace-v4.7.0`.
 
 ## What's New in v4.6.1
@@ -880,8 +885,8 @@ The card shows “Floating” without a zone (the editor discloses the last sync
 ## Stack
 
 - Node.js 20+ and Express 4
-- `sharp` for image compression
-- Ghostscript 10+ (`gs`) for PDF compression; PDFs are stored unchanged when it is unavailable
+- ImageMagick (`convert`/`magick`) for image compression
+- Ghostscript 10+ (`gs`) for PDF compression; PDFs are stored unchanged when either tool is unavailable
 - SQLite via `sqlite3` (WAL mode, foreign keys on)
 - Vanilla JavaScript PWA with a small hash router
 - Self-hosted Outfit + Fraunces fonts (no external font CDN)
@@ -907,6 +912,7 @@ Optional environment variables:
 | `DATA_DIR` | `./data` | SQLite directory |
 | `CONTACT_EMAIL` | `your@email.com` | VAPID contact email; set your own |
 | `GHOSTSCRIPT_BIN` | `gs` | Ghostscript executable used for PDF compression |
+| `IMAGEMAGICK_BIN` | `convert` | ImageMagick executable used for image compression |
 
 Your data lives in `data/todo.db`. It is gitignored because it contains the password hash, VAPID private key, and all reminders.
 
