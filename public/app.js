@@ -6495,6 +6495,8 @@ function updateNotifyUI() {
   $('#notify-test').hidden = !enabled;
   $('#notify-disable').hidden = !enabled;
   $('#notifications-label').textContent = enabled ? 'Notifications On' : 'Notifications';
+  const menuStatus = $('#account-notifications-status');
+  if (menuStatus) menuStatus.textContent = enabled ? 'On' : 'Off';
 }
 
 function openNotifySheet() {
