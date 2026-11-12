@@ -650,12 +650,21 @@
     <div class="sheet-backdrop" data-close></div>
     <div class="image-viewer">
       <header class="image-viewer-head">
-        <span id="image-viewer-title"></span>
+        <div class="image-viewer-heading">
+          <span id="image-viewer-title"></span>
+          <span id="image-viewer-count" class="image-viewer-count" hidden></span>
+        </div>
         <button type="button" class="text-btn strong" data-close>Done</button>
       </header>
       <div class="image-viewer-body">
         <p id="image-viewer-status" class="image-viewer-status" aria-live="polite">Loading&hellip;</p>
         <img id="image-viewer-img" alt="" hidden>
+        <button type="button" id="image-prev" class="image-nav image-nav-prev" aria-label="Previous image" hidden>
+          <svg class="ic"><use href="#i-back"/></svg>
+        </button>
+        <button type="button" id="image-next" class="image-nav image-nav-next" aria-label="Next image" hidden>
+          <svg class="ic"><use href="#i-chevron"/></svg>
+        </button>
       </div>
     </div>
   </div>

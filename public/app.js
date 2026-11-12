@@ -3438,12 +3438,31 @@ function isPreviewableImage(name) {
   return PREVIEW_IMAGE_EXTENSIONS.has(ext);
 }
 
-function openImagePreview(file) {
-  const viewer = $('#image-sheet');
+let imageGallery = [];
+let imageIndex = 0;
+let imageSwipeStart = null;
+
+function renderImageViewer(direction = 0) {
   const image = $('#image-viewer-img');
   const status = $('#image-viewer-status');
-  if (!viewer || !image || !status || !file) return;
-  $('#image-viewer-title').textContent = file.name;
+  const title = $('#image-viewer-title');
+  const count = $('#image-viewer-count');
+  const prev = $('#image-prev');
+  const next = $('#image-next');
+  const file = imageGallery[imageIndex];
+  if (!image || !status || !title || !count || !prev || !next || !file) return;
+  title.textContent = file.name;
+  const multiple = imageGallery.length > 1;
+  count.hidden = !multiple;
+  prev.hidden = !multiple;
+  next.hidden = !multiple;
+  if (multiple) {
+    count.textContent = `${imageIndex + 1} / ${imageGallery.length}`;
+    const previous = imageGallery[(imageIndex - 1 + imageGallery.length) % imageGallery.length];
+    const following = imageGallery[(imageIndex + 1) % imageGallery.length];
+    prev.setAttribute('aria-label', `Previous image: ${previous.name}`);
+    next.setAttribute('aria-label', `Next image: ${following.name}`);
+  }
   status.textContent = 'Loading…';
   status.hidden = false;
   image.hidden = true;
@@ -3456,10 +3475,37 @@ function openImagePreview(file) {
     status.textContent = 'Preview unavailable';
     status.hidden = false;
   };
+  image.removeAttribute('src');
   image.src = '/api/files/' + file.id + '/preview';
   image.alt = file.name;
+  if (direction) {
+    const body = $('.image-viewer-body');
+    if (body) {
+      body.classList.remove('swipe-left', 'swipe-right');
+      void body.offsetWidth;
+      body.classList.add(direction > 0 ? 'swipe-left' : 'swipe-right');
+    }
+  }
+}
+
+function openImagePreview(file, gallery = null) {
+  const viewer = $('#image-sheet');
+  if (!viewer || !file) return;
+  const files = (Array.isArray(gallery) ? gallery : [file])
+    .filter((item) => item && item.id && isPreviewableImage(item.name));
+  imageGallery = files.length ? files : [file];
+  const found = imageGallery.findIndex((item) => String(item.id) === String(file.id));
+  imageIndex = found >= 0 ? found : 0;
+  renderImageViewer();
   openSheet('#image-sheet');
 }
+
+function stepImage(delta) {
+  if (imageGallery.length < 2) return;
+  imageIndex = (imageIndex + delta + imageGallery.length) % imageGallery.length;
+  renderImageViewer(delta);
+}
+
 
 function fileChip(file) {
   return el('a', {
@@ -3472,7 +3518,7 @@ function fileChip(file) {
   });
 }
 
-function imageThumb(file) {
+function imageThumb(file, gallery) {
   const button = el('button', {
     type: 'button',
     class: 'attachment-thumb',
@@ -3480,7 +3526,7 @@ function imageThumb(file) {
     'aria-label': `Preview ${file.name}`,
     onclick: (event) => {
       event.stopPropagation();
-      openImagePreview(file);
+      openImagePreview(file, gallery);
     },
   });
   const image = el('img', {
@@ -3501,7 +3547,7 @@ function attachmentExtras(files) {
   const others = files.filter((file) => !isPreviewableImage(file.name));
   if (images.length) {
     const strip = el('div', { class: 'attachment-thumbs', 'aria-label': 'Image attachments' });
-    for (const file of images) strip.append(imageThumb(file));
+    for (const file of images) strip.append(imageThumb(file, images));
     box.append(strip);
   }
   if (others.length) {
@@ -5099,7 +5145,7 @@ function toggleEditorMore() {
   }
 }
 
-function attachmentRow(file, onRemove) {
+function attachmentRow(file, onRemove, gallery = null) {
   const row = el('div', { class: 'attach-item' });
   const previewable = Boolean(file.id) && isPreviewableImage(file.name);
   const icon = previewable ? docIconForName(file.name) : 'files';
@@ -5111,7 +5157,7 @@ function attachmentRow(file, onRemove) {
       'aria-label': `Preview ${file.name}`,
       onclick: (event) => {
         event.stopPropagation();
-        openImagePreview(file);
+        openImagePreview(file, gallery);
       },
     }, [
       el('span', { html: ICON(icon, 'ic') }),
@@ -5150,11 +5196,12 @@ function renderEditorAttachments() {
   const existing = state.editingId
     ? attachmentsFor('reminder', state.editingId).filter((file) => !state.editorRemovedFiles.includes(file.id))
     : [];
+  const imageGallery = existing.filter((file) => isPreviewableImage(file.name));
   for (const file of existing) {
     wrap.append(attachmentRow(file, () => {
       state.editorRemovedFiles.push(file.id);
       renderEditorAttachments();
-    }));
+    }, imageGallery));
   }
   for (const file of state.editorPendingFiles) {
     wrap.append(attachmentRow(file, () => {
@@ -5883,11 +5930,12 @@ function renderNoteAttachments() {
   const existing = state.noteEditingId
     ? attachmentsFor('note', state.noteEditingId).filter((file) => !state.noteRemovedFiles.includes(file.id))
     : [];
+  const imageGallery = existing.filter((file) => isPreviewableImage(file.name));
   for (const file of existing) {
     wrap.append(attachmentRow(file, () => {
       state.noteRemovedFiles.push(file.id);
       renderNoteAttachments();
-    }));
+    }, imageGallery));
   }
   for (const file of state.notePendingFiles) {
     wrap.append(attachmentRow(file, () => {
@@ -7434,6 +7482,27 @@ $('#note-link-url').addEventListener('keydown', (event) => {
 $('#doc-form').addEventListener('submit', saveDoc);
 $('#doc-folder').addEventListener('change', () => { syncDocFolderVisual(); syncDocSave(); });
 $('#doc-name').addEventListener('input', syncDocSheetInfo);
+$('#image-prev').addEventListener('click', () => stepImage(-1));
+$('#image-next').addEventListener('click', () => stepImage(1));
+const imageViewerBody = $('.image-viewer-body');
+imageViewerBody.addEventListener('pointerdown', (event) => {
+  if (event.pointerType !== 'touch' || event.target.closest('button')) return;
+  imageSwipeStart = { x: event.clientX, y: event.clientY };
+});
+imageViewerBody.addEventListener('pointerup', (event) => {
+  if (!imageSwipeStart || event.pointerType !== 'touch') return;
+  const dx = event.clientX - imageSwipeStart.x;
+  const dy = event.clientY - imageSwipeStart.y;
+  imageSwipeStart = null;
+  if (Math.abs(dx) < 40 || Math.abs(dx) <= Math.abs(dy) * 1.2) return;
+  stepImage(dx < 0 ? 1 : -1);
+});
+imageViewerBody.addEventListener('pointercancel', () => { imageSwipeStart = null; });
+document.addEventListener('keydown', (event) => {
+  if ($('#image-sheet').hidden) return;
+  if (event.key === 'ArrowLeft') { event.preventDefault(); stepImage(-1); }
+  if (event.key === 'ArrowRight') { event.preventDefault(); stepImage(1); }
+});
 $('#doc-description').addEventListener('input', () => { syncDocDescriptionCount(); syncDocSave(); });
 $('#doc-image-preview-img').addEventListener('error', () => {
   $('#doc-image-preview').hidden = true;
