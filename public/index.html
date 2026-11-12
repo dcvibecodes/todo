@@ -620,6 +620,11 @@
           </div>
         </div>
         <div class="ed-section">
+          <div class="ed-section-label">Description</div>
+          <textarea id="doc-description" class="doc-description-input" rows="3" maxlength="1000" placeholder="Add a description"></textarea>
+          <p id="doc-description-count" class="doc-description-count">0 / 1000</p>
+        </div>
+        <div class="ed-section">
           <div class="ed-section-label">Folder</div>
           <div class="ed-group">
             <div class="ed-row ed-list-row">
@@ -828,20 +833,13 @@
         </div>
         <div class="settings-group">
           <h3>API tokens</h3>
-          <p class="notify-hint">Tokens let your other agents work with items — no browser needed. Reminder read/write stays as before; Notes, Docs, storage and search access is opt-in below. Tokens still cannot manage folders, settings or the password.</p>
+          <p class="notify-hint">Tokens let your other agents work with items — no browser needed. Access is set per tenant below. Read + write covers adding and editing; delete is a separate destructive permission for Notes and Docs. Reminders tokens cannot delete. Tokens still cannot manage folders, settings or the password.</p>
           <label class="settings-row" for="token-name">
             <span>Name</span>
             <input id="token-name" type="text" placeholder="e.g. friday-agent" maxlength="80" autocomplete="off">
           </label>
-          <label class="settings-row" for="token-profile">
-            <span>Reminders access</span>
-            <select id="token-profile">
-              <option value="read" selected>Read only</option>
-              <option value="write">Read + write</option>
-            </select>
-          </label>
-          <p class="notify-hint">Reminders access keeps the existing read / read+write behaviour. Additional tenant permissions below are opt-in and default to none.</p>
-          <div id="token-scopes-new" class="token-scope-grid"></div>
+          <div id="token-access-new" class="token-access-grid"></div>
+          <p class="notify-hint">Read + write covers adding and editing. Delete is a separate, destructive permission for Notes and Docs; Reminders tokens cannot delete items. Storage and Search are read-only extras.</p>
           <button type="button" id="token-generate" class="primary-btn">Generate token</button>
           <div id="token-once" class="token-once" hidden>
             <p class="notify-hint"><strong>Copy it now — it will never be shown again.</strong></p>

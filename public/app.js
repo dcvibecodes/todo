@@ -3096,6 +3096,9 @@ function docRow(doc, options = {}) {
         el('span', { class: 'meta-dot' }),
         el('span', { text: folder.name }),
       ]) : null,
+      doc.description
+        ? el('div', { class: 'doc-description', text: doc.description, title: doc.description })
+        : null,
       formatAddedDate(doc.created_at)
         ? el('div', { class: 'doc-added', text: `Added ${formatAddedDate(doc.created_at)}`, title: formatRecordDate(doc.created_at) })
         : null,
@@ -3178,7 +3181,10 @@ function syncDocSave() {
   const button = $('#doc-save');
   if (!doc || !button) return;
   const name = $('#doc-name').value.trim();
-  button.disabled = !name || (Number($('#doc-folder').value) === doc.folder_id && name === doc.name);
+  const description = $('#doc-description').value.trim();
+  button.disabled = !name || (Number($('#doc-folder').value) === doc.folder_id
+    && name === doc.name
+    && description === (state.docSnapshot ? state.docSnapshot.description : (doc.description || '')));
 }
 
 function autoGrowDocName() {
@@ -3281,11 +3287,20 @@ async function shareDoc(button) {
   }
 }
 
+function syncDocDescriptionCount() {
+  const field = $('#doc-description');
+  const count = $('#doc-description-count');
+  if (!field || !count) return;
+  count.textContent = `${field.value.length} / 1000`;
+}
+
 function openDocSheet(doc) {
   state.docEditingId = doc.id;
-  state.docSnapshot = { name: doc.name, folder_id: doc.folder_id };
+  state.docSnapshot = { name: doc.name, folder_id: doc.folder_id, description: doc.description || '' };
   if (!docShareCache || docShareCache.docId !== doc.id) docShareCache = null;
   $('#doc-name').value = doc.name;
+  $('#doc-description').value = doc.description || '';
+  syncDocDescriptionCount();
   autoGrowDocName();
   const preview = $('#doc-image-preview');
   const previewImg = $('#doc-image-preview-img');
@@ -3335,9 +3350,11 @@ async function saveDoc(event) {
   const name = $('#doc-name').value.trim();
   if (!folderId) return toast('Choose a Docs folder');
   if (!name) return toast('File name is required');
+  const description = $('#doc-description').value.trim();
   const renamed = name !== doc.name;
   const moved = folderId !== doc.folder_id;
-  if (!renamed && !moved) {
+  const described = description !== (doc.description || '');
+  if (!renamed && !moved && !described) {
     closeSheet('#doc-sheet');
     return;
   }
@@ -3345,13 +3362,13 @@ async function saveDoc(event) {
   button.disabled = true;
   button.textContent = 'Saving…';
   try {
-    await api('/api/docs/' + doc.id, { method: 'PATCH', body: { folder_id: folderId, name } });
+    await api('/api/docs/' + doc.id, { method: 'PATCH', body: { folder_id: folderId, name, description } });
     docShareCache = null;
     state.storage = null;
     closeSheet('#doc-sheet');
     await loadState();
     render();
-    toast(renamed && moved ? 'File updated' : renamed ? 'File renamed' : 'File moved');
+    toast(renamed ? 'File renamed' : moved ? 'File moved' : 'Description saved');
   } catch (err) {
     toast(err.message);
   } finally {
@@ -6779,33 +6796,90 @@ async function saveAppSettings() {
   }
 }
 
-const TOKEN_SCOPE_GROUPS = [
-  { label: 'Notes', scopes: [['notes:read', 'Read'], ['notes:write', 'Add / edit'], ['notes:delete', 'Delete']] },
-  { label: 'Docs', scopes: [['docs:read', 'Read'], ['docs:write', 'Add / edit / move'], ['docs:delete', 'Delete']] },
-  { label: 'Other', scopes: [['storage:read', 'Storage usage'], ['search:read', 'Search']] },
+const TOKEN_ACCESS_TENANTS = [
+  { key: 'reminders', label: 'Reminders', levels: [['read', 'Read only'], ['write', 'Read + write']], deletable: false },
+  { key: 'notes', label: 'Notes', levels: [['none', 'No access'], ['read', 'Read only'], ['write', 'Read + write']], deletable: true },
+  { key: 'docs', label: 'Docs', levels: [['none', 'No access'], ['read', 'Read only'], ['write', 'Read + write']], deletable: true },
 ];
+const TOKEN_OTHER_SCOPES = [['storage:read', 'Storage usage'], ['search:read', 'Search']];
 
-function buildTokenScopeEditor(container, selected = []) {
+function tokenLevelFor(tenant, token) {
+  if (tenant === 'reminders') {
+    return token && (token.profile === 'write' || token.profile === 'legacy') ? 'write' : 'read';
+  }
+  const permissions = new Set((token && token.permissions) || []);
+  if (permissions.has(`${tenant}:write`)) return 'write';
+  if (permissions.has(`${tenant}:read`)) return 'read';
+  return 'none';
+}
+
+function buildTokenAccessEditor(container, token = null) {
   container.replaceChildren();
-  const chosen = new Set(selected);
-  for (const group of TOKEN_SCOPE_GROUPS) {
-    container.append(el('div', { class: 'token-scope-group' }, [
-      el('span', { class: 'token-scope-label', text: group.label }),
-      ...group.scopes.map(([scope, label]) => el('label', { class: 'token-scope-option' }, [
-        el('input', { type: 'checkbox', value: scope, checked: chosen.has(scope) }),
-        el('span', { text: label }),
-      ])),
+  for (const tenant of TOKEN_ACCESS_TENANTS) {
+    const select = el('select', { 'aria-label': `${tenant.label} access` });
+    for (const [value, label] of tenant.levels) select.append(el('option', { value, text: label }));
+    select.value = tokenLevelFor(tenant.key, token);
+    const children = [
+      el('span', { class: 'token-access-name', text: tenant.label }),
+      select,
+    ];
+    if (tenant.deletable) {
+      children.push(el('label', { class: 'token-access-delete' }, [
+        el('input', { type: 'checkbox', value: `${tenant.key}:delete`, checked: Boolean(token && (token.permissions || []).includes(`${tenant.key}:delete`)) }),
+        el('span', { text: 'Allow delete' }),
+      ]));
+    }
+    container.append(el('div', { class: 'token-access-row' }, children));
+  }
+  const other = el('div', { class: 'token-access-row token-access-other' }, [
+    el('span', { class: 'token-access-name', text: 'Other' }),
+  ]);
+  const extras = el('div', { class: 'token-access-options' });
+  for (const [scope, label] of TOKEN_OTHER_SCOPES) {
+    extras.append(el('label', { class: 'token-scope-option' }, [
+      el('input', { type: 'checkbox', value: scope, checked: Boolean(token && (token.permissions || []).includes(scope)) }),
+      el('span', { text: label }),
     ]));
   }
+  other.append(extras);
+  container.append(other);
 }
 
-function tokenScopesFrom(container) {
-  return $$('input[type="checkbox"]:checked', container).map((input) => input.value);
+function tokenAccessValues(container) {
+  const profile = container.querySelector('[aria-label="Reminders access"]').value === 'write' ? 'write' : 'read';
+  const permissions = [];
+  for (const tenant of TOKEN_ACCESS_TENANTS.filter((item) => item.key !== 'reminders')) {
+    const select = container.querySelector(`[aria-label="${tenant.label} access"]`);
+    const level = select ? select.value : 'none';
+    if (level === 'read') permissions.push(`${tenant.key}:read`);
+    if (level === 'write') permissions.push(`${tenant.key}:read`, `${tenant.key}:write`);
+    const deleteInput = container.querySelector(`input[type="checkbox"][value="${tenant.key}:delete"]`);
+    if (deleteInput && deleteInput.checked) permissions.push(`${tenant.key}:delete`);
+  }
+  for (const [scope] of TOKEN_OTHER_SCOPES) {
+    const input = container.querySelector(`input[type="checkbox"][value="${scope}"]`);
+    if (input && input.checked) permissions.push(scope);
+  }
+  return { profile, permissions };
 }
 
-function tokenScopeSummary(scopes) {
-  if (!scopes || !scopes.length) return 'none';
-  return scopes.map((scope) => scope.replace(':', ' ')).join(' · ');
+function tokenAccessSummary(token) {
+  const reminders = tokenLevelFor('reminders', token) === 'write' ? 'read + write' : 'read';
+  const parts = [`Reminders ${reminders}`];
+  for (const tenant of ['notes', 'docs']) {
+    const level = tokenLevelFor(tenant, token);
+    const hasDelete = (token.permissions || []).includes(`${tenant}:delete`);
+    if (level === 'none') {
+      parts.push(`${tenant === 'notes' ? 'Notes' : 'Docs'} ${hasDelete ? 'delete only' : 'no access'}`);
+      continue;
+    }
+    const label = level === 'write' ? 'read + write' : 'read only';
+    parts.push(`${tenant === 'notes' ? 'Notes' : 'Docs'} ${label}${hasDelete ? ' + delete' : ''}`);
+  }
+  const extras = (token.permissions || []).filter((scope) => scope === 'storage:read' || scope === 'search:read')
+    .map((scope) => scope === 'storage:read' ? 'Storage' : 'Search');
+  if (extras.length) parts.push(extras.join(' + '));
+  return parts.join(' · ');
 }
 
 async function renderTokenList() {
@@ -6824,69 +6898,18 @@ async function renderTokenList() {
     return;
   }
   for (const token of tokens) {
-    const profileLabel = token.profile === 'write' ? 'read + write'
-      : token.profile === 'legacy' ? 'legacy (pre-profiles)'
-      : 'read only';
+    const tokenName = token.name || 'token';
+    const summary = tokenAccessSummary(token);
     const row = el('div', { class: 'token-row' }, [
-      el('span', { class: 'token-name', text: token.name || 'token' }),
+      el('span', { class: 'token-name', text: tokenName }),
       el('span', {
         class: 'token-meta',
         text: token.revoked_at
-          ? `revoked · ${profileLabel}`
-          : `${profileLabel} · used ${token.last_used_at ? new Date(token.last_used_at).toLocaleDateString() : 'never'}`,
+          ? `revoked · ${summary}`
+          : `used ${token.last_used_at ? new Date(token.last_used_at).toLocaleDateString() : 'never'}`,
       }),
     ]);
     if (!token.revoked_at) {
-      const tokenName = token.name || 'token';
-      const targets = token.profile === 'legacy' ? ['read', 'write']
-        : token.profile === 'write' ? ['read']
-        : ['write'];
-      const select = el('select', {
-        class: 'secondary-btn small-btn',
-        'aria-label': `Change access for ${tokenName}`,
-      });
-      for (const target of targets) {
-        select.append(el('option', {
-          value: target,
-          text: target === 'write' ? 'read + write' : 'read only',
-        }));
-      }
-      const accessButton = el('button', {
-        type: 'button',
-        class: 'secondary-btn small-btn',
-        text: 'Change access',
-        'aria-label': `Change access for ${tokenName}`,
-      });
-      let accessArmed = false;
-      let accessTimer = null;
-      const resetAccess = () => {
-        accessArmed = false;
-        clearTimeout(accessTimer);
-        accessTimer = null;
-        accessButton.textContent = 'Change access';
-        accessButton.setAttribute('aria-label', `Change access for ${tokenName}`);
-      };
-      select.addEventListener('change', resetAccess);
-      accessButton.addEventListener('click', async () => {
-        if (!accessArmed) {
-          accessArmed = true;
-          accessButton.textContent = 'Confirm?';
-          accessButton.setAttribute('aria-label', `Confirm access change for ${tokenName}`);
-          clearTimeout(accessTimer);
-          accessTimer = setTimeout(resetAccess, INLINE_CONFIRM_MS);
-          return;
-        }
-        const profile = select.value;
-        resetAccess();
-        try {
-          await api('/api/tokens/' + token.id + '/profile', { method: 'POST', body: { profile } });
-          await renderTokenList();
-          toast('Token access changed');
-        } catch (err) {
-          toast(err.message);
-        }
-      });
-
       const revokeButton = el('button', {
         type: 'button',
         class: 'secondary-btn small-btn',
@@ -6921,34 +6944,32 @@ async function renderTokenList() {
         }
       });
 
-      row.append(select, accessButton, revokeButton);
-      const scopeGrid = el('div', { class: 'token-scope-grid' });
-      buildTokenScopeEditor(scopeGrid, token.permissions || []);
-      const scopeSave = el('button', {
+      const accessGrid = el('div', { class: 'token-access-grid' });
+      buildTokenAccessEditor(accessGrid, token);
+      const accessSave = el('button', {
         type: 'button',
         class: 'secondary-btn small-btn',
-        text: 'Save permissions',
-        'aria-label': `Save additional permissions for ${tokenName}`,
+        text: 'Save access',
+        'aria-label': `Save access for ${tokenName}`,
       });
-      scopeSave.addEventListener('click', async () => {
-        scopeSave.disabled = true;
+      accessSave.addEventListener('click', async () => {
+        accessSave.disabled = true;
         try {
-          await api('/api/tokens/' + token.id + '/permissions', {
-            method: 'POST',
-            body: { permissions: tokenScopesFrom(scopeGrid) },
-          });
+          const values = tokenAccessValues(accessGrid);
+          await api('/api/tokens/' + token.id + '/profile', { method: 'POST', body: { profile: values.profile } });
+          await api('/api/tokens/' + token.id + '/permissions', { method: 'POST', body: { permissions: values.permissions } });
           await renderTokenList();
-          toast('Token permissions saved');
+          toast('Token access saved');
         } catch (err) {
           toast(err.message);
         } finally {
-          scopeSave.disabled = false;
+          accessSave.disabled = false;
         }
       });
-      row.append(el('details', { class: 'token-scope-details' }, [
-        el('summary', { text: `Additional permissions: ${tokenScopeSummary(token.permissions)}` }),
-        scopeGrid,
-        scopeSave,
+      row.append(revokeButton, el('details', { class: 'token-scope-details' }, [
+        el('summary', { text: `Access: ${summary}` }),
+        accessGrid,
+        accessSave,
       ]));
     }
     wrap.append(row);
@@ -6957,8 +6978,9 @@ async function renderTokenList() {
 
 async function generateToken() {
   const name = $('#token-name').value.trim() || 'agent';
-  const profile = $('#token-profile') ? $('#token-profile').value : 'read';
-  const permissions = tokenScopesFrom($('#token-scopes-new'));
+  const access = tokenAccessValues($('#token-access-new'));
+  const profile = access.profile;
+  const permissions = access.permissions;
   try {
     const result = await api('/api/tokens', { method: 'POST', body: { name, profile, permissions } });
     $('#token-value').textContent = result.token;
@@ -7344,6 +7366,7 @@ $('#note-link-url').addEventListener('keydown', (event) => {
 $('#doc-form').addEventListener('submit', saveDoc);
 $('#doc-folder').addEventListener('change', () => { syncDocFolderVisual(); syncDocSave(); });
 $('#doc-name').addEventListener('input', syncDocSheetInfo);
+$('#doc-description').addEventListener('input', () => { syncDocDescriptionCount(); syncDocSave(); });
 $('#doc-image-preview-img').addEventListener('error', () => {
   $('#doc-image-preview').hidden = true;
 });
@@ -7619,7 +7642,7 @@ document.addEventListener('visibilitychange', () => {
 
 applyDensity();
 syncMenuButtons();
-buildTokenScopeEditor($('#token-scopes-new'));
+buildTokenAccessEditor($('#token-access-new'));
 
 initPullToRefresh();
 initDayPeek();

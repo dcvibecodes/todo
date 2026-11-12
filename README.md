@@ -2,6 +2,13 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v4.8.4
+
+- **Portrait images fit the web viewer** - the full-screen image now fits inside its panel at every viewport height instead of showing only the top portion with no scroll.
+- **Docs descriptions** - the File sheet has a description field (1,000-character limit) and cards show a two-line description excerpt. Description changes use the existing revision/epoch/idempotency write path and do not alter the added date.
+- **Unified token access editor** - Reminders, Notes, Docs and Other are listed together. Each tenant uses an access dropdown; Add/edit is covered by `Read + write`, while Delete remains a separate destructive checkbox for Notes/Docs (Reminders tokens cannot delete). Existing tokens use the same editor.
+- Service worker cache bumped to `workspace-v4.8.4`.
+
 ## What's New in v4.8.3
 
 - **Cleaner note attachment summary** - the note card's "N files" count no longer uses a copy-style icon, and the duplicate "N images" line under the thumbnails is gone. Document chips now use their own type icons (table for CSV, braces for JSON, archive for ZIP).

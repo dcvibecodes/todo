@@ -2716,7 +2716,7 @@ async function main() {
       ORDER BY n.updated_at DESC, n.id DESC
     `);
     const docs = await db.all(`
-      SELECT a.id, a.folder_id, a.name, a.mime, a.size, a.stored_size, a.original_size, a.compression, a.optimization, a.revision, a.created_at,
+      SELECT a.id, a.folder_id, a.name, a.description, a.mime, a.size, a.stored_size, a.original_size, a.compression, a.optimization, a.revision, a.created_at,
              l.name AS folder_name, l.color AS folder_color
       FROM attachments a JOIN lists l ON l.id = a.folder_id
       WHERE a.owner_type = 'doc'
@@ -3571,7 +3571,7 @@ async function main() {
     }
     const where = conditions.join(' AND ');
     const rows = await db.all(
-      `SELECT a.id, a.folder_id, a.name, a.mime, a.size, a.stored_size, a.original_size, a.compression, a.optimization, a.revision, a.created_at
+      `SELECT a.id, a.folder_id, a.name, a.description, a.mime, a.size, a.stored_size, a.original_size, a.compression, a.optimization, a.revision, a.created_at
        FROM attachments a WHERE ${where}
        ORDER BY a.created_at DESC, a.id DESC${limit ? ' LIMIT ?' : ''}`,
       limit ? [...params, limit + 1] : params
@@ -3596,7 +3596,7 @@ async function main() {
     const id = parseId(req.params.id);
     if (!id) return res.status(400).json({ error: 'Invalid file' });
     const doc = await db.get(
-      `SELECT id, folder_id, name, mime, size, stored_size, original_size, compression, optimization, revision, created_at
+      `SELECT id, folder_id, name, description, mime, size, stored_size, original_size, compression, optimization, revision, created_at
        FROM attachments WHERE id = ? AND owner_type = 'doc'`, [id]
     );
     if (!doc) return res.status(404).json({ error: 'File not found' });
@@ -3734,16 +3734,23 @@ async function main() {
     const id = parseId(req.params.id);
     if (!id) return res.status(400).json({ error: 'Invalid file' });
     const file = await db.get(
-      "SELECT id, folder_id, name, stored_name, revision FROM attachments WHERE id = ? AND owner_type = 'doc'", [id]
+      "SELECT id, folder_id, name, description, stored_name, revision FROM attachments WHERE id = ? AND owner_type = 'doc'", [id]
     );
     if (!file) return res.status(404).json({ error: 'File not found' });
 
     const hasName = req.body.name !== undefined;
     const hasFolder = req.body.folder_id !== undefined;
-    if (!hasName && !hasFolder) return res.status(400).json({ error: 'Nothing to update' });
+    const hasDescription = req.body.description !== undefined;
+    if (!hasName && !hasFolder && !hasDescription) return res.status(400).json({ error: 'Nothing to update' });
 
     let nextName = file.name;
     let nextMime = null;
+    let nextDescription = file.description || '';
+    if (hasDescription) {
+      if (typeof req.body.description !== 'string') return res.status(400).json({ error: 'Description must be text' });
+      nextDescription = req.body.description.trim();
+      if (nextDescription.length > 1000) return res.status(400).json({ error: 'Description must be 1000 characters or fewer' });
+    }
     if (hasName) {
       const requested = typeof req.body.name === 'string' ? req.body.name.trim() : '';
       if (!requested) return res.status(400).json({ error: 'File name is required' });
@@ -3774,7 +3781,7 @@ async function main() {
     }
 
     if (req.token) {
-      const allowed = ['name', 'folder_id', 'base_revision', 'base_epoch', 'idempotency_key'];
+      const allowed = ['name', 'description', 'folder_id', 'base_revision', 'base_epoch', 'idempotency_key'];
       for (const key of Object.keys(req.body || {})) {
         if (!allowed.includes(key)) return res.status(400).json({ error: `Unknown field: ${key}` });
       }
@@ -3790,7 +3797,7 @@ async function main() {
         fingerprint: payloadFingerprint(req.body),
         execute: async () => {
           const current = await db.get(
-            "SELECT id, folder_id, name, revision FROM attachments WHERE id = ? AND owner_type = 'doc'", [id]
+            "SELECT id, folder_id, name, description, revision FROM attachments WHERE id = ? AND owner_type = 'doc'", [id]
           );
           if (!current) return { status: 404, body: { error: 'File not found' } };
           if ((await getStoreEpoch()) !== req.body.base_epoch) {
@@ -3808,10 +3815,11 @@ async function main() {
             fields.push('mime = ?');
             params.push(nextMime);
           }
+          if (hasDescription) { fields.push('description = ?'); params.push(nextDescription); }
           fields.push('revision = revision + 1');
           params.push(id);
           await db.run(`UPDATE attachments SET ${fields.join(', ')} WHERE id = ?`, params);
-          return { status: 200, body: { ok: true, name: nextName, folder_id: nextFolder } };
+          return { status: 200, body: { ok: true, name: nextName, folder_id: nextFolder, description: nextDescription } };
         },
       });
     }
@@ -3825,10 +3833,11 @@ async function main() {
       fields.push('mime = ?');
       params.push(nextMime);
     }
+    if (hasDescription) { fields.push('description = ?'); params.push(nextDescription); }
     fields.push('revision = revision + 1');
     params.push(id);
     await db.run(`UPDATE attachments SET ${fields.join(', ')} WHERE id = ?`, params);
-    res.json({ ok: true, name: nextName, folder_id: nextFolder });
+    res.json({ ok: true, name: nextName, folder_id: nextFolder, description: nextDescription });
   });
 
   app.delete('/api/docs/:id', async (req, res) => {

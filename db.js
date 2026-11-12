@@ -341,6 +341,9 @@ async function init() {
   if (!attachmentColumns.some((column) => column.name === 'optimization')) {
     await run("ALTER TABLE attachments ADD COLUMN optimization TEXT NOT NULL DEFAULT ''");
   }
+  if (!attachmentColumns.some((column) => column.name === 'description')) {
+    await run("ALTER TABLE attachments ADD COLUMN description TEXT NOT NULL DEFAULT ''");
+  }
   await run('UPDATE attachments SET stored_size = size WHERE stored_size IS NULL');
   await run('UPDATE attachments SET original_size = size WHERE original_size IS NULL');
   await run(`CREATE TABLE IF NOT EXISTS push_subscriptions (
