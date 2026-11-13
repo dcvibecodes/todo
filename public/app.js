@@ -4245,40 +4245,20 @@ function linkChip(url) {
   ]);
 }
 
-// Split notes into prose and links. Punctuation that merely joined a link
-// (commas/semicolons around it) is removed from the prose, so the card never
-// shows stray commas between chips.
+// Collect links for supplementary chips without removing their visible text
+// from the prose. The body stays exactly as written, so sentence meaning,
+// spacing, punctuation and line breaks survive in collapsed and expanded rows.
 function noteParts(value) {
   const text = String(value || '');
   const links = [];
-  // Keep a marker where each URL was so removing the link cannot also remove
-  // the line breaks around it. Joining the remaining text with spaces (the
-  // old behaviour) collapsed an inline URL's paragraph break into a space.
-  const MARK = '\u0000';
-  let prose = '';
-  let last = 0;
   for (const match of text.matchAll(URL_PATTERN)) {
-    const raw = match[0];
-    const url = cleanUrl(raw);
+    const url = cleanUrl(match[0]);
     if (!url) continue;
-    prose += text.slice(last, match.index) + MARK;
-    last = match.index + raw.length;
     const href = toHref(url);
     if (!links.includes(href)) links.push(href);
   }
-  prose += text.slice(last);
-  const proseText = prose
-    // Punctuation/space that merely joined the link goes with it, but never
-    // a nearby newline.
-    .replace(/[ \t]*[,;:!?.]*[ \t]*\u0000[ \t]*[,;:!?.]*[ \t]*/g, MARK)
-    .replace(/\u0000/g, ' ')
-    .replace(/[^\S\n]+/g, ' ')
-    .replace(/ *\n */g, '\n')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
-  return { text: proseText, links };
+  return { text: text.trim(), links };
 }
-
 function renderEditorLinks() {
   const wrap = $('#e-notes-links');
   if (!wrap) return;

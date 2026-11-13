@@ -2,6 +2,11 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v4.10.1
+
+- **Link text stays in the sentence** - Reminder previews no longer remove inline URLs/domains while creating link chips. Chips remain supplementary; the original sentence, punctuation and line breaks stay in collapsed and expanded previews.
+- Service worker cache bumped to `workspace-v4.10.1`.
+
 ## What's New in v4.10.0
 
 - **Unsaved-changes guard** - closing or navigating away from a dirty Reminder, Note or Docs File sheet now opens an in-app **Unsaved changes** prompt with **Keep editing** and **Discard**. It covers Cancel, backdrop, browser/hardware Back, and dirty new-item editors. The guard does not use native browser dialogs.
