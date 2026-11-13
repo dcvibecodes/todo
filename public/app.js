@@ -3295,6 +3295,16 @@ function syncDocSave() {
     && description === (state.docSnapshot ? state.docSnapshot.description : (doc.description || '')));
 }
 
+function docIsDirty() {
+  const doc = state.docEditingId ? docById(state.docEditingId) : null;
+  if (!doc) return false;
+  const name = $('#doc-name').value.trim();
+  const description = $('#doc-description').value.trim();
+  const folderId = Number($('#doc-folder').value);
+  const snapshot = state.docSnapshot || { name: doc.name, folder_id: doc.folder_id, description: doc.description || '' };
+  return name !== snapshot.name || folderId !== snapshot.folder_id || description !== snapshot.description;
+}
+
 function autoGrowDocName() {
   const name = $('#doc-name');
   if (!name) return;
@@ -5677,7 +5687,7 @@ function openEditor(id) {
   syncSnoozeRow();
   $('#e-history').hidden = true;
   if (editing && rule.type !== 'none') loadHistory(reminder.id);
-  editorSnapshot = editing ? editorValues() : null;
+  editorSnapshot = editorValues();
   syncEditorSubmit();
 
   openSheet('#editor');
@@ -6303,10 +6313,28 @@ function openNoteEditor(id) {
     : (viewFolderId(state.view) || (systemFolder('notes') ? systemFolder('notes').id : null));
   if (preferred) folderSelect.value = String(preferred);
   syncNoteFolderVisual();
-  state.noteSnapshot = note ? { title: note.title, body: note.body, folder_id: note.folder_id } : null;
+  state.noteSnapshot = note ? {
+    title: note.title,
+    body: normalizeNoteHtml($('#n-body').innerHTML),
+    folder_id: note.folder_id,
+  } : null;
   renderNoteAttachments();
   openSheet('#note-editor');
   if (!note) setTimeout(() => $('#n-title').focus(), 80);
+}
+
+function noteIsDirty() {
+  if (state.notePendingFiles.length || state.noteRemovedFiles.length) return true;
+  const title = $('#n-title').value.trim();
+  const body = normalizeNoteHtml($('#n-body').innerHTML);
+  const folderId = Number($('#n-folder').value);
+  if (!state.noteEditingId) {
+    return Boolean(title || $('#n-body').textContent.trim());
+  }
+  if (!state.noteSnapshot) return true;
+  return title !== state.noteSnapshot.title
+    || body !== state.noteSnapshot.body
+    || folderId !== state.noteSnapshot.folder_id;
 }
 
 function syncNoteFolderVisual() {
@@ -6753,12 +6781,63 @@ const closingSheets = new WeakSet();
 const sheetCloseTimers = new WeakMap();
 const SHEET_MOBILE = window.matchMedia('(max-width: 899px)');
 
+let pendingDiscard = null;
+
+function sheetHasUnsavedChanges(sheet) {
+  if (!sheet || sheet.hidden) return false;
+  if (sheet.id === 'editor') return editorIsDirty();
+  if (sheet.id === 'note-editor') return noteIsDirty();
+  if (sheet.id === 'doc-sheet') return docIsDirty();
+  return false;
+}
+
+function openDiscardPrompt(sheetId, { fromHistory = false } = {}) {
+  const prompt = $('#discard-sheet');
+  if (!prompt) return;
+  if (!prompt.hidden) {
+    pendingDiscard = sheetId;
+    return;
+  }
+  if (fromHistory) {
+    try {
+      const depth = (history.state && history.state.todoSheet) || 0;
+      history.pushState({ todoSheet: Math.max(1, depth + 1) }, '', location.href);
+    } catch { /* history unavailable */ }
+  }
+  pendingDiscard = sheetId;
+  openSheet('#discard-sheet');
+  requestAnimationFrame(() => $('#discard-keep')?.focus());
+}
+
+function closeDiscardPrompt() {
+  pendingDiscard = null;
+  closeSheet('#discard-sheet');
+}
+
+function discardPendingChanges() {
+  const target = pendingDiscard;
+  pendingDiscard = null;
+  closeSheet('#discard-sheet');
+  if (target) closeSheet('#' + target);
+}
+
+function requestSheetClose(sheet) {
+  if (!sheet) return;
+  if (sheetHasUnsavedChanges(sheet)) {
+    openDiscardPrompt(sheet.id);
+    return;
+  }
+  if (sheet.id === 'settings-sheet') revertSettingsPreview();
+  closeSheet('#' + sheet.id);
+}
+
 function finishSheetClose(sheet) {
   const timer = sheetCloseTimers.get(sheet);
   if (timer) clearTimeout(timer);
   sheetCloseTimers.delete(sheet);
   closingSheets.delete(sheet);
   if (sheet.id === 'image-sheet') clearImageCache();
+  if (sheet.id === 'discard-sheet') pendingDiscard = null;
   sheet.hidden = true;
   sheet.classList.remove('is-visible');
   syncSheetState();
@@ -6823,8 +6902,13 @@ function closeTopSheetInPlace() {
   const open = $$('.sheet').filter((sheet) => !sheet.hidden);
   if (open.length) {
     const sheet = open[open.length - 1];
+    if (sheetHasUnsavedChanges(sheet)) {
+      openDiscardPrompt(sheet.id, { fromHistory: true });
+      return false;
+    }
     if (sheet.id === 'settings-sheet') revertSettingsPreview();
     if (sheet.id === 'image-sheet') clearImageCache();
+    if (sheet.id === 'discard-sheet') pendingDiscard = null;
     const timer = sheetCloseTimers.get(sheet);
     if (timer) clearTimeout(timer);
     sheetCloseTimers.delete(sheet);
@@ -7875,6 +7959,7 @@ $('#note-link-url').addEventListener('keydown', (event) => {
   applyNoteLink();
 });
 $('#doc-form').addEventListener('submit', saveDoc);
+$('#discard-confirm').addEventListener('click', discardPendingChanges);
 $('#doc-folder').addEventListener('change', () => { syncDocFolderVisual(); syncDocSave(); });
 $('#doc-name').addEventListener('input', syncDocSheetInfo);
 $('#image-prev').addEventListener('click', () => stepImage(-1));
@@ -8098,8 +8183,8 @@ document.addEventListener('click', (event) => {
   if (closer) {
     const sheet = closer.closest('.sheet');
     if (sheet) {
-      if (sheet.id === 'settings-sheet') revertSettingsPreview();
-      closeSheet('#' + sheet.id);
+      if (sheet.id === 'discard-sheet') closeDiscardPrompt();
+      else requestSheetClose(sheet);
     }
   }
 });

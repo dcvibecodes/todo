@@ -4314,3 +4314,9 @@ button.link-chip { border: 0; font-family: inherit; cursor: pointer; }
 @media (prefers-reduced-motion: reduce) {
   .card-batch-spinner { animation: none; }
 }
+
+#discard-sheet { z-index: 85; }
+.discard-card { width: min(440px, 100%); }
+
+#discard-sheet { z-index: 85; }
+.discard-card { width: min(440px, 100%); }
