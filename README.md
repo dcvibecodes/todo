@@ -2,6 +2,12 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v4.9.8
+
+- **Notes/Docs delete animation parity** - confirmed Notes and Docs deletions now collapse the row immediately with the same local animation as Reminders, then remove the local collection entry, folder count, attachment references and storage cache after the server confirms. Failures restore the row and reset confirmation.
+- **Confirmation structure fixed** - swipe Delete → Confirm keeps the label/icon structure and resets cleanly; desktop delete confirmation still resets after 4 seconds.
+- Service worker cache bumped to `workspace-v4.9.8`.
+
 ## What's New in v4.9.7
 
 - **Notifications status in the menu** - the hamburger menu now shows `On` or `Off` beside Notifications, matching the Storage total.

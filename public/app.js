@@ -3812,51 +3812,189 @@ function attachmentExtras(files) {
 }
 
 
-async function handleNoteDelete(note, button) {
-  if (button.dataset.confirm !== '1') {
-    if (!button.dataset.origLabel) button.dataset.origLabel = button.getAttribute('aria-label') || 'Delete note';
+function isSwipeDeleteButton(button) {
+  return Boolean(button && button.classList.contains('swipe-act'));
+}
+
+function armInlineDelete(button, row, label) {
+  if (!button) return;
+  clearTimeout(button._confirmTimer);
+  if (isSwipeDeleteButton(button)) {
     button.dataset.confirm = '1';
-    button.classList.add('confirming');
-    button.textContent = 'Confirm?';
-    button.setAttribute('aria-label', 'Confirm delete note');
-    clearTimeout(button._confirmTimer);
-    button._confirmTimer = setTimeout(() => resetRowDelete(button), INLINE_CONFIRM_MS);
+    const text = button.querySelector('.del-label');
+    if (text) text.textContent = 'Confirm?';
+    button.setAttribute('aria-label', `Confirm delete ${label}`);
     return;
   }
-  try {
-    await api('/api/notes/' + note.id, { method: 'DELETE' });
-    await loadState();
-    render();
-    toast('Note deleted');
-  } catch (err) {
-    toast(err.message);
-    resetRowDelete(button);
+  if (!button.dataset.origLabel) {
+    button.dataset.origLabel = button.getAttribute('aria-label') || `Delete ${label}`;
   }
+  button.dataset.confirm = '1';
+  button.classList.add('confirming');
+  button.textContent = 'Confirm?';
+  button.setAttribute('aria-label', `Confirm delete ${label}`);
+  button._confirmTimer = setTimeout(() => resetRowDelete(button), INLINE_CONFIRM_MS);
+}
+
+function resetInlineDelete(button, row) {
+  if (isSwipeDeleteButton(button)) resetSwipe(row);
+  else resetRowDelete(button);
+}
+
+function focusAfterRowRemoval(row) {
+  const sibling = row.nextElementSibling || row.previousElementSibling;
+  const target = sibling && sibling.querySelector('.row-edit, .doc-download, .row-delete');
+  if (target) target.focus({ preventScroll: true });
+}
+
+function removeNoteLocally(note, row) {
+  const index = state.notes.findIndex((item) => item.id === note.id);
+  if (index !== -1) state.notes.splice(index, 1);
+  state.attachments = state.attachments.filter((file) => !(file.owner_type === 'note' && file.owner_id === note.id));
+  const list = state.lists.find((item) => item.id === note.folder_id);
+  if (list) list.count = Math.max(0, (list.count || 0) - 1);
+  if (cardBatch && cardBatch.kind === 'notes') {
+    const batchIndex = cardBatch.items.findIndex((item) => item.id === note.id);
+    if (batchIndex !== -1) {
+      cardBatch.items.splice(batchIndex, 1);
+      if (cardBatch.shown > batchIndex) cardBatch.shown -= 1;
+    }
+    if (cardBatch.ended) setCardBatchStatus(cardBatch, 'end');
+  }
+  const group = row.closest('.reminder-group');
+  focusAfterRowRemoval(row);
+  row.remove();
+  if (group && !group.querySelector('.reminder')) group.remove();
+  renderSidebar();
+  if (!document.querySelector('#content .reminder')) {
+    resetCardBatch();
+    renderMain();
+  } else {
+    updateTenantViewCount('notes');
+  }
+}
+
+function removeDocLocally(doc, row) {
+  const index = state.docs.findIndex((item) => item.id === doc.id);
+  if (index !== -1) state.docs.splice(index, 1);
+  const list = state.lists.find((item) => item.id === doc.folder_id);
+  if (list) list.count = Math.max(0, (list.count || 0) - 1);
+  if (cardBatch && cardBatch.kind === 'docs') {
+    const batchIndex = cardBatch.items.findIndex((item) => item.id === doc.id);
+    if (batchIndex !== -1) {
+      cardBatch.items.splice(batchIndex, 1);
+      if (cardBatch.shown > batchIndex) cardBatch.shown -= 1;
+    }
+    if (cardBatch.ended) setCardBatchStatus(cardBatch, 'end');
+  }
+  const group = row.closest('.reminder-group');
+  focusAfterRowRemoval(row);
+  row.remove();
+  if (group && !group.querySelector('.reminder')) group.remove();
+  renderSidebar();
+  if (!document.querySelector('#content .reminder')) {
+    resetCardBatch();
+    renderMain();
+  } else {
+    updateTenantViewCount('docs');
+  }
+}
+
+function updateTenantViewCount(kind) {
+  if (state.search) return;
+  const items = kind === 'notes' ? notesForView(state.view) : docsForView(state.view);
+  setPulseText($('#view-count'), items.length ? String(items.length) : '');
+}
+
+function deleteTenantRowInline({ row, button, request, removeLocal, noun }) {
+  if (!row || row.dataset.deleting) return;
+  row.dataset.deleting = '1';
+  const scroller = screenScroller();
+  const startTop = scroller ? scroller.scrollTop : 0;
+  const viewAtStart = state.view;
+  const searchAtStart = Boolean(state.search);
+  const content = swipeContentOf(row);
+  const height = row.offsetHeight;
+  const restoreScroll = () => {
+    if (!scroller) return;
+    const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+    scroller.scrollTop = Math.min(startTop, max);
+  };
+  document.documentElement.classList.add('deleting-row');
+  row.style.height = `${height}px`;
+  row.classList.add('removing');
+  if (content) content.style.transform = 'translateX(-100%)';
+  requestAnimationFrame(() => {
+    row.style.height = '0px';
+    row.style.opacity = '0';
+  });
+  setTimeout(async () => {
+    try {
+      await request();
+      state.storage = null;
+      if (!searchAtStart && !state.search && state.view === viewAtStart && row.isConnected) {
+        removeLocal();
+        toast(`${noun} deleted`);
+      } else {
+        await loadState();
+        render();
+        restoreScroll();
+        toast(`${noun} deleted`);
+      }
+    } catch (err) {
+      if (row.isConnected) {
+        row.classList.remove('removing');
+        row.style.height = '';
+        row.style.opacity = '';
+        if (content) content.style.transform = '';
+        row.dataset.deleting = '';
+        resetInlineDelete(button, row);
+        restoreScroll();
+      } else {
+        await loadState();
+        render();
+        restoreScroll();
+      }
+      toast(err.message);
+    } finally {
+      document.documentElement.classList.remove('deleting-row');
+    }
+  }, MOTION_REDUCED.matches ? 0 : 230);
+}
+
+async function handleNoteDelete(note, button) {
+  const row = button.closest('.reminder');
+  if (!row || row.dataset.deleting) return;
+  if (button.dataset.confirm !== '1') {
+    armInlineDelete(button, row, 'note');
+    return;
+  }
+  clearTimeout(button._confirmTimer);
+  deleteTenantRowInline({
+    row,
+    button,
+    noun: 'Note',
+    request: () => api('/api/notes/' + note.id, { method: 'DELETE' }),
+    removeLocal: () => removeNoteLocally(note, row),
+  });
 }
 
 async function handleDocDelete(doc, button) {
+  const row = button.closest('.reminder');
+  if (!row || row.dataset.deleting) return;
   if (button.dataset.confirm !== '1') {
-    if (!button.dataset.origLabel) button.dataset.origLabel = button.getAttribute('aria-label') || 'Delete file';
-    button.dataset.confirm = '1';
-    button.classList.add('confirming');
-    button.textContent = 'Confirm?';
-    button.setAttribute('aria-label', 'Confirm delete file');
-    clearTimeout(button._confirmTimer);
-    button._confirmTimer = setTimeout(() => resetRowDelete(button), INLINE_CONFIRM_MS);
+    armInlineDelete(button, row, 'file');
     return;
   }
-  try {
-    await api('/api/docs/' + doc.id, { method: 'DELETE' });
-    state.storage = null;
-    await loadState();
-    render();
-    toast('File deleted');
-  } catch (err) {
-    toast(err.message);
-    resetRowDelete(button);
-  }
+  clearTimeout(button._confirmTimer);
+  deleteTenantRowInline({
+    row,
+    button,
+    noun: 'File',
+    request: () => api('/api/docs/' + doc.id, { method: 'DELETE' }),
+    removeLocal: () => removeDocLocally(doc, row),
+  });
 }
-
 
 function renderStorageSettings() {
   const summary = $('#storage-summary');

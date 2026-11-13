@@ -1500,6 +1500,10 @@ body.flipping .reminder-group { overflow: visible; }
   transition: height 0.22s ease, opacity 0.18s ease;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .reminder.removing { transition: none; }
+}
+
 /* Keep the browser from changing the scroll position while a row collapses. */
 html.deleting-row,
 html.deleting-row body,
