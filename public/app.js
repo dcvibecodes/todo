@@ -3200,7 +3200,7 @@ function docRow(doc, options = {}) {
   const body = el('div', { class: 'doc-body' }, [
     el('div', { class: 'doc-main' }, [
       el('div', { class: 'reminder-title', text: doc.name }),
-      folder ? el('div', { class: 'doc-folder meta-list', style: { '--c': colorVar(folder.color) } }, [
+      options.showFolder && folder ? el('div', { class: 'doc-folder meta-list', style: { '--c': colorVar(folder.color) } }, [
         el('span', { class: 'meta-dot' }),
         el('span', { text: folder.name }),
       ]) : null,
