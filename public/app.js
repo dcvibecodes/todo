@@ -2961,12 +2961,6 @@ function renderNotesView(content, view) {
       el('span', { html: ICON('note') }),
       el('h3', { class: 'empty-heading', text: 'No notes yet' }),
       el('p', { text: 'Notes live in folders and can carry file attachments.' }),
-      el('button', {
-        type: 'button',
-        class: 'primary-btn',
-        text: 'New Note',
-        onclick: () => openNoteEditor(null),
-      }),
     ]));
     return;
   }
@@ -2997,12 +2991,6 @@ function renderDocsView(content, view) {
       el('h3', { class: 'empty-heading', text: 'No files yet' }),
       el('p', { class: 'docs-format-list', text: docsFormatMessage() }),
       el('p', { class: 'notify-hint', text: 'New images and PDFs may be stored as smaller optimized copies; downloads return the optimized bytes. Text files are compressed losslessly. HEIC/HEIF photos are converted to JPG. Change this in Settings → Uploads.' }),
-      el('button', {
-        type: 'button',
-        class: 'primary-btn',
-        text: 'Add files',
-        onclick: chooseDocsFiles,
-      }),
     ]));
     return;
   }
@@ -4130,7 +4118,7 @@ function chooseDocsFiles() {
 
 function emptyState(view) {
   // Warmer empty states with a primary action where one makes sense.
-  const copy = {
+  let copy = {
     today: { icon: 'calendar', heading: 'All clear', message: 'Nothing is due today. Enjoy the quiet — or get ahead.' },
     scheduled: { icon: 'clock', heading: 'Nothing scheduled', message: 'Give an item a date and it will show up here, grouped by when it is due.' },
     all: { icon: 'all', heading: 'A fresh start', message: 'No items yet. Capture the first thing on your mind.' },
@@ -4141,6 +4129,11 @@ function emptyState(view) {
       message: 'Finished items follow each folder’s completed retention.',
     },
   }[view] || { icon: 'all', heading: 'Nothing here', message: 'No items in this folder yet.' };
+  if (!state.search && typeof view === 'number') {
+    copy = completedInList(view).length
+      ? { icon: 'done', heading: 'All caught up', message: 'Everything in this folder is done' }
+      : { icon: 'folder-open', heading: 'Nothing here yet', message: 'Add your first item to this folder.' };
+  }
   const children = [
     el('span', { html: ICON(copy.icon) }),
     el('h3', { class: 'empty-heading', text: copy.heading }),

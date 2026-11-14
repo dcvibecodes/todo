@@ -2,6 +2,13 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v4.10.14
+
+- **Accurate Reminders folder empty states** - A folder with no open items but completed history now shows the check-in-circle, **All caught up** and **Everything in this folder is done**. A truly empty folder shows a new open-folder outline, **Nothing here yet** and a short add hint. The completed toggle still reveals finished items.
+- **One Add button** - Removed the empty-state **New Note** and **Add files** buttons; the bottom + remains the single create path across Reminders, Notes and Docs.
+- Smart-view empty states and the search **No matching items** / **Clear search** state are unchanged.
+- Service worker cache bumped to `workspace-v4.10.14`.
+
 ## What's New in v4.10.13
 
 - **Note cards stay at two lines** - Collapsed note previews now have a hard two-line height fallback in addition to `-webkit-line-clamp`, so browsers that ignore the clamp cannot reveal later content such as a link at the end of the note.
