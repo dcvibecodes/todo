@@ -2,6 +2,12 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v4.10.12
+
+- **Sticky Notes formatting toolbar** - In the full-screen Notes editor, the title and body scroll while the formatting toolbar stays frozen directly below the header, so Bold/Italic/H2/lists/links and the line-break button remain available anywhere in a long note.
+- The Notes editor now uses its own body scroll container; the toolbar has an opaque background and divider so text scrolls cleanly underneath it.
+- Service worker cache bumped to `workspace-v4.10.12`.
+
 ## What's New in v4.10.11
 
 - **Notes paragraph and line-break parity** - In the Notes editor, `Enter` creates a new paragraph, `Shift+Enter` (or the new `↵` toolbar button) inserts a line break, and `Tab`/`Shift+Tab` indents or outdents list items. A muted hint under the editor explains the shortcuts.
