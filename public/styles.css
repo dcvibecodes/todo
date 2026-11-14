@@ -1552,7 +1552,7 @@ html.deleting-row #content { overflow-anchor: none; }
 .reminder-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 
 .reminder-title {
-  font-size: calc(var(--card-body-size) + 2px);
+  font-size: min(calc(var(--card-body-size) + 2px), 17px);
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
@@ -1611,7 +1611,7 @@ html.deleting-row #content { overflow-anchor: none; }
 :root { --card-body-size: 10.75pt; }
 
 .reminder-notes {
-  font-size: var(--card-body-size);
+  font-size: min(var(--card-body-size), 15px);
   line-height: 1.4;
   color: var(--text-2);
   display: -webkit-box;
@@ -2877,13 +2877,17 @@ body.sheet-open .sidebar {
 [data-density="compact"] .swipe-content { min-height: 0; padding: 8px 12px; gap: 10px; }
 [data-density="compact"] .reminder-due { font-size: 0.7rem; }
 [data-density="compact"] .reminder-meta { font-size: 0.7rem; gap: 8px; }
-[data-density="compact"] .reminder-notes { font-size: calc(var(--card-body-size) - 0.75pt); }
-[data-density="compact"] .reminder-title { font-size: calc(var(--card-body-size) - 0.75pt + 2px); }
+[data-density="compact"] .reminder-notes { font-size: min(calc(var(--card-body-size) - 0.75pt), 15px); }
+[data-density="compact"] .reminder-title { font-size: min(calc(var(--card-body-size) - 0.75pt + 2px), 17px); }
 [data-density="compact"] .check { width: 20px; height: 20px; }
 [data-density="compact"] .content { padding-top: 10px; }
 [data-density="compact"] .group-title { margin-top: 14px; }
 
 @media (max-width: 899px) {
+  .reminder:not(.note-row):not(.doc-row) .reminder-title {
+    font-size: min(calc(var(--card-body-size) + 2px), 16px);
+  }
+
   .sidebar {
     position: static;
     width: 100%;
@@ -2960,8 +2964,6 @@ body.sheet-open .sidebar {
   .ed-subrow input[type="date"], .ed-subrow input[type="time"],
   .ed-list-row select { font-size: 16px; }
 
-  html body #editor .e-title { font-size: 17px !important; }
-  html body #doc-name { font-size: 17px !important; }
 
   .ed-subrow {
     padding: 0 14px 12px;
@@ -3427,7 +3429,7 @@ body.sheet-open .sidebar {
 .doc-download { text-decoration: none; }
 
 .doc-row .reminder-title {
-  font-size: calc(var(--card-body-size) + 2px);
+  font-size: min(calc(var(--card-body-size) + 2px), 15px);
   font-weight: 400;
   line-height: 1.35;
 }
@@ -3452,7 +3454,7 @@ body.sheet-open .sidebar {
   background: transparent;
   color: var(--text);
   font-family: inherit;
-  font-size: 1.0625rem;
+  font-size: 0.9375rem;
   font-weight: 400;
   line-height: 1.35;
   resize: none;
@@ -4081,7 +4083,7 @@ button.link-chip { border: 0; font-family: inherit; cursor: pointer; }
   overflow: hidden;
   white-space: pre-line;
   color: var(--text-2);
-  font-size: var(--card-body-size);
+  font-size: min(var(--card-body-size), 14px);
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
@@ -4095,7 +4097,7 @@ button.link-chip { border: 0; font-family: inherit; cursor: pointer; }
   border-radius: var(--radius-sm);
   background: var(--elev);
   color: var(--text);
-  font-size: 0.9375rem;
+  font-size: 0.875rem;
   line-height: 1.4;
   resize: vertical;
 }
