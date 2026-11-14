@@ -3140,10 +3140,16 @@ function noteRow(note, options = {}) {
         ? el('span', { class: 'meta-files', text: `${attachments.length} file${attachments.length === 1 ? '' : 's'}` })
         : null,
     ]),
-    note.body ? el('div', {
-      class: 'reminder-notes',
-      html: note.body_format === 'html' ? safeNoteHtml(note.body, true) : noteMarkdownHtml(note.body),
-    }) : null,
+    note.body ? el('div', { class: 'reminder-notes' }, [
+      el('div', {
+        class: 'reminder-note-preview',
+        html: note.body_format === 'html' ? safeNoteHtml(note.body, true) : noteMarkdownHtml(note.body),
+      }),
+      el('div', {
+        class: 'reminder-note-full',
+        html: note.body_format === 'html' ? safeNoteHtml(note.body, false) : noteMarkdownHtml(note.body),
+      }),
+    ]) : null,
   ]);
   const extras = attachmentExtras(attachments);
   if (extras) body.append(extras);

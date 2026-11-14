@@ -1640,6 +1640,52 @@ html.deleting-row #content { overflow-anchor: none; }
   white-space: pre-line;
 }
 
+/* Note cards keep a compact two-line preview when collapsed, then swap to the
+   full rich body when expanded. The block max-height avoids the line-clamp
+   bug that could paint a trailing inline link outside the clamped area. */
+.note-row .reminder-notes {
+  display: block;
+  -webkit-line-clamp: unset;
+  max-height: calc(2 * 1.4em);
+  overflow: hidden;
+}
+.note-row .reminder-notes.is-expanded {
+  max-height: none;
+  overflow: visible;
+}
+.reminder-note-full { display: none; }
+.note-row .reminder-notes.is-expanded .reminder-note-preview { display: none; }
+.note-row .reminder-notes.is-expanded .reminder-note-full {
+  display: block;
+  white-space: normal;
+}
+.note-row .reminder-note-full p { margin: 0 0 0.45em; }
+.note-row .reminder-note-full h1 {
+  margin: 0.4em 0 0.2em;
+  font-size: 1.25em;
+  font-weight: 550;
+  line-height: 1.25;
+}
+.note-row .reminder-note-full h2 {
+  margin: 0.6em 0 0.25em;
+  font-size: 1.1333em;
+  font-weight: 500;
+  line-height: 1.25;
+}
+.note-row .reminder-note-full h3 {
+  margin: 0.4em 0 0.2em;
+  font-size: 1em;
+  font-weight: 500;
+  line-height: 1.25;
+}
+.note-row .reminder-note-full ul,
+.note-row .reminder-note-full ol {
+  margin: 0.4em 0;
+  padding-left: 1.5em;
+  list-style-position: outside;
+}
+.note-row .reminder-note-full li { margin: 0 0 0.2em; }
+
 .note-wrap {
   position: relative;
   min-width: 0;
