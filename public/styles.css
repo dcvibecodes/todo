@@ -1646,7 +1646,7 @@ html.deleting-row #content { overflow-anchor: none; }
 .note-row .reminder-notes {
   display: block;
   -webkit-line-clamp: unset;
-  max-height: calc(2 * 1.4em);
+  max-height: calc(2 * 1.4em + 1px);
   overflow: hidden;
 }
 .note-row .reminder-notes.is-expanded {
@@ -1675,7 +1675,7 @@ html.deleting-row #content { overflow-anchor: none; }
 .note-row .reminder-note-full h3 {
   margin: 0.4em 0 0.2em;
   font-size: 1em;
-  font-weight: 500;
+  font-weight: 700;
   line-height: 1.25;
 }
 .note-row .reminder-note-full ul,
@@ -1685,6 +1685,17 @@ html.deleting-row #content { overflow-anchor: none; }
   list-style-position: outside;
 }
 .note-row .reminder-note-full li { margin: 0 0 0.2em; }
+
+/* Keep the collapsed two-line window aligned to whole line boxes. Heading
+   margins/line-height and list margins would otherwise push the second line
+   past the hard max-height and clip it mid-line. */
+.note-row .reminder-note-preview .note-md-heading {
+  margin: 0;
+  line-height: calc(min(var(--card-body-size), 15px) * 1.4);
+}
+.note-row .reminder-note-preview ul,
+.note-row .reminder-note-preview ol { margin: 0; }
+.note-row .reminder-note-preview li { margin: 0; }
 
 .note-wrap {
   position: relative;

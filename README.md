@@ -2,6 +2,12 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v4.10.17
+
+- **Collapsed preview lines no longer clip** - Preview headings and lists now use the same line height as body text, with heading/list margins removed inside the two-line preview. The second line ends on a full line box instead of being sliced through the middle.
+- **Expanded headings match the editor** - Full-card `h3` weight is now 700, matching the editor and collapsed preview. `h1` (550) and `h2` (500) were already aligned.
+- Service worker cache bumped to `workspace-v4.10.17`.
+
 ## What's New in v4.10.16
 
 - **Note cards: compact preview, rich expanded body** - Collapsed note cards keep a hard two-line preview that clips the rest of the note, including a trailing link. Expanding swaps in the full rich body.
