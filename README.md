@@ -2,6 +2,11 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v4.10.10
+
+- **Lighter card titles** - Card and note H1 weight is now 550 instead of 600; H2 stays 500 and body 400. This keeps a clear title > H2 > body hierarchy without heavy card titles.
+- Service worker cache bumped to `workspace-v4.10.10`.
+
 ## What's New in v4.10.9
 
 - **Cleaner typography hierarchy** - Card titles are 600, note H1 600, H2 500 and body 400, so note headings no longer outrank the card title.
