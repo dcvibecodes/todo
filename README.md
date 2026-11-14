@@ -2,6 +2,12 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v4.10.13
+
+- **Note cards stay at two lines** - Collapsed note previews now have a hard two-line height fallback in addition to `-webkit-line-clamp`, so browsers that ignore the clamp cannot reveal later content such as a link at the end of the note.
+- Links that genuinely fall within the first two lines remain visible and clickable; expanding the card still shows the full note and its links.
+- Service worker cache bumped to `workspace-v4.10.13`.
+
 ## What's New in v4.10.12
 
 - **Sticky Notes formatting toolbar** - In the full-screen Notes editor, the title and body scroll while the formatting toolbar stays frozen directly below the header, so Bold/Italic/H2/lists/links and the line-break button remain available anywhere in a long note.
