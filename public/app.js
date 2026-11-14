@@ -6210,6 +6210,46 @@ function restoreNoteRange(range) {
   selection.addRange(range);
 }
 
+const NOTE_FORMAT_COMMANDS = {
+  bold: 'bold',
+  italic: 'italic',
+  underline: 'underline',
+  ul: 'insertUnorderedList',
+  ol: 'insertOrderedList',
+};
+
+function updateNoteFormatState() {
+  const body = $('#n-body');
+  if (!body) return;
+  const selection = window.getSelection();
+  const inBody = Boolean(selection && selection.rangeCount && body.contains(selection.anchorNode));
+  const active = {};
+  if (inBody) {
+    for (const [kind, command] of Object.entries(NOTE_FORMAT_COMMANDS)) {
+      try {
+        active[kind] = document.queryCommandState(command);
+      } catch {
+        active[kind] = false;
+      }
+    }
+    try {
+      const block = String(document.queryCommandValue('formatBlock') || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+      active.heading = block === 'h2';
+    } catch {
+      active.heading = false;
+    }
+    const anchor = selection.anchorNode;
+    const element = anchor && anchor.nodeType === Node.ELEMENT_NODE ? anchor : anchor?.parentElement;
+    active.link = Boolean(element?.closest('a'));
+    if (active.link) active.underline = Boolean(element?.closest('u'));
+  }
+  $$('.note-format-btn').forEach((button) => {
+    const isActive = Boolean(active[button.dataset.noteFormat]);
+    button.classList.toggle('is-active', isActive);
+    button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+  });
+}
+
 function applyNoteFormat(kind) {
   const body = $('#n-body');
   if (!body) return;
@@ -6226,10 +6266,12 @@ function applyNoteFormat(kind) {
   if (kind === 'heading') {
     const current = document.queryCommandValue('formatBlock').toLowerCase();
     document.execCommand('formatBlock', false, current === 'h2' ? 'p' : 'h2');
+    requestAnimationFrame(updateNoteFormatState);
     return;
   }
   const command = kind === 'ul' ? 'insertUnorderedList' : kind === 'ol' ? 'insertOrderedList' : kind;
   document.execCommand(command, false, null);
+  requestAnimationFrame(updateNoteFormatState);
 }
 
 function applyNoteLink() {
@@ -6255,6 +6297,7 @@ function applyNoteLink() {
   }
   noteLinkRange = null;
   $('#note-link-row').hidden = true;
+  requestAnimationFrame(updateNoteFormatState);
 }
 
 function resetNoteMore() {
@@ -6319,6 +6362,7 @@ function openNoteEditor(id) {
   } : null;
   renderNoteAttachments();
   openSheet('#note-editor');
+  requestAnimationFrame(updateNoteFormatState);
   if (!note) setTimeout(() => $('#n-title').focus(), 80);
 }
 
@@ -7955,8 +7999,11 @@ $('#n-body').addEventListener('paste', (event) => {
   event.preventDefault();
   const text = event.clipboardData.getData('text/plain');
   document.execCommand('insertText', false, text);
+  requestAnimationFrame(updateNoteFormatState);
 });
+$('#n-body').addEventListener('input', updateNoteFormatState);
 document.addEventListener('selectionchange', () => {
+  updateNoteFormatState();
   const body = $('#n-body');
   if (!body || !body.contains(window.getSelection()?.anchorNode)) return;
   const range = noteSelectedRange();

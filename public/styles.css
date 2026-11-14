@@ -1553,6 +1553,7 @@ html.deleting-row #content { overflow-anchor: none; }
 
 .reminder-title {
   font-size: min(calc(var(--card-body-size) + 2px), 17px);
+  font-weight: 600;
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
@@ -3426,7 +3427,6 @@ body.sheet-open .sidebar {
 
 .doc-row .reminder-title {
   font-size: min(calc(var(--card-body-size) + 2px), 17px);
-  font-weight: 400;
   line-height: 1.35;
 }
 
@@ -3691,6 +3691,11 @@ body.sheet-open .sidebar {
 }
 
 .note-format-btn:hover { background: var(--fill); color: var(--text); }
+.note-format-btn.is-active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--surface);
+}
 .note-format-btn .underline { text-decoration: underline; }
 
 .note-link-row {
@@ -3745,11 +3750,11 @@ body.sheet-open .sidebar {
   line-height: 1.25;
 }
 
-.note-rich h1 { font-size: 1.25em; }
+.note-rich h1 { font-size: 1.25em; font-weight: 600; }
 .note-rich h2 {
   margin: 0.6em 0 0.25em;
   font-size: 1.1333em;
-  font-weight: 700;
+  font-weight: 500;
 }
 .note-rich h3 { font-size: 1em; }
 .note-rich p { margin: 0 0 0.45em; }
@@ -3763,9 +3768,11 @@ body.sheet-open .sidebar {
 .reminder-notes h3 {
   margin: 0;
   font-size: inherit;
-  font-weight: 700;
   display: inline;
 }
+.reminder-notes h1 { font-weight: 600; }
+.reminder-notes h2,
+.reminder-notes h3 { font-weight: 500; }
 
 /* Mobile focus-zoom guard: every text-entry control is at least 16px so
    iOS never auto-zooms when a field gains focus. Checkboxes are unaffected. */
