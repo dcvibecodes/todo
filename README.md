@@ -2,6 +2,13 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v4.10.7
+
+- **Consistent typography across all tenants** - Reminder, Note and Doc cards now share the same body and title sizes; the text slider moves all of them together.
+- **Docs editor aligned** - Doc filename editor is now 17 px and the description editor 15 px on desktop, matching Reminder/Note body text. Mobile editor sizes stay at 16 px or larger for the iOS focus guard.
+- **Unified caps** - Every card caps at 15 px body / 17 px title. The slider stays centred at 10.75 pt with a 10.25–11.25 pt range.
+- Service worker cache bumped to `workspace-v4.10.7`.
+
 ## What's New in v4.10.6
 
 - **Restored edit-view sizes** - Docs name/description and mobile Reminder title are back to their original sizes.

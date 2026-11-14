@@ -2884,9 +2884,6 @@ body.sheet-open .sidebar {
 [data-density="compact"] .group-title { margin-top: 14px; }
 
 @media (max-width: 899px) {
-  .reminder:not(.note-row):not(.doc-row) .reminder-title {
-    font-size: min(calc(var(--card-body-size) + 2px), 16px);
-  }
 
   .sidebar {
     position: static;
@@ -3429,7 +3426,7 @@ body.sheet-open .sidebar {
 .doc-download { text-decoration: none; }
 
 .doc-row .reminder-title {
-  font-size: min(calc(var(--card-body-size) + 2px), 15px);
+  font-size: min(calc(var(--card-body-size) + 2px), 17px);
   font-weight: 400;
   line-height: 1.35;
 }
@@ -3454,7 +3451,7 @@ body.sheet-open .sidebar {
   background: transparent;
   color: var(--text);
   font-family: inherit;
-  font-size: 0.9375rem;
+  font-size: 1.0625rem;
   font-weight: 400;
   line-height: 1.35;
   resize: none;
@@ -3780,6 +3777,9 @@ body.sheet-open .sidebar {
   html body [contenteditable="true"] {
     font-size: 16px !important;
   }
+
+  html body #editor .e-title { font-size: 17px !important; }
+  html body #doc-name { font-size: 17px !important; }
   html body #note-editor .e-title {
     font-size: 1.25rem !important;
   }
@@ -4083,7 +4083,7 @@ button.link-chip { border: 0; font-family: inherit; cursor: pointer; }
   overflow: hidden;
   white-space: pre-line;
   color: var(--text-2);
-  font-size: min(var(--card-body-size), 14px);
+  font-size: min(var(--card-body-size), 15px);
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
@@ -4097,7 +4097,7 @@ button.link-chip { border: 0; font-family: inherit; cursor: pointer; }
   border-radius: var(--radius-sm);
   background: var(--elev);
   color: var(--text);
-  font-size: 0.875rem;
+  font-size: 0.9375rem;
   line-height: 1.4;
   resize: vertical;
 }
