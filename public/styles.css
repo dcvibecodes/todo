@@ -1624,6 +1624,14 @@ html.deleting-row #content { overflow-anchor: none; }
   overflow-wrap: anywhere;
 }
 
+.reminder-notes ul,
+.reminder-notes ol {
+  margin: 0.4em 0;
+  padding-left: 1.5em;
+  list-style-position: outside;
+}
+.reminder-notes li { margin: 0 0 0.2em; }
+
 .reminder-notes.is-expanded {
   display: block;
   -webkit-line-clamp: unset;

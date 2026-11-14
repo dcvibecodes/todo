@@ -3077,9 +3077,9 @@ function safeNoteHtml(value, preview = false) {
       return block ? `${block}<br>` : '<br>';
     }
     if (tag === 'UL' || tag === 'OL') {
-      return preview ? inner : `<${tag.toLowerCase()}>${inner}</${tag.toLowerCase()}>`;
+      return `<${tag.toLowerCase()}>${inner}</${tag.toLowerCase()}>`;
     }
-    if (tag === 'LI') return preview ? `• ${inner}<br>` : `<li>${inner}</li>`;
+    if (tag === 'LI') return `<li>${inner}</li>`;
     if (tag === 'SPAN') return `<span>${inner}</span>`;
     return inner;
   };
