@@ -2,6 +2,15 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v4.10.18
+
+- **Larger card text range** - The slider is now 10.25–12.25 pt, with 11.25 pt at the centre/default. Card body max is 16.33 px and card title max is 18.33 px. Editors are 16.33 px body and 18.33 px titles (Note title stays 20 px), so card text can never exceed editor text.
+- **Search icon on every screen** - Detail pages no longer show a permanent search bar. Search sits beside the hamburger on Home and in folders, opening the same right-to-left overlay animation. Header order is 3-dot → search → refresh (desktop) → hamburger.
+- **Folder title alignment** - The folder name now occupies the tenant-bar position, vertically centred beside the header icons, with ellipsis when space is tight.
+- **Refresh is desktop-only** - Mobile layouts hide the refresh icon; pull-to-refresh remains the mobile path.
+- **Slider reaches both ends** - The text-size slider uses a full-width custom track/thumb so minimum and maximum sit flush with the control edges.
+- Service worker cache bumped to `workspace-v4.10.18`.
+
 ## What's New in v4.10.17
 
 - **Collapsed preview lines no longer clip** - Preview headings and lists now use the same line height as body text, with heading/list margins removed inside the two-line preview. The second line ends on a full line box instead of being sliced through the middle.

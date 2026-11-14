@@ -131,9 +131,9 @@ const LIST_PROGRESS_MODES = ['bar', 'ring', 'off'];
 const LIST_PROGRESS_RANGES = ['all', '30d'];
 const SETTINGS_PROGRESS_KEYS = ['list_progress', 'list_progress_range'];
 const SETTINGS_BODY_KEYS = ['card_body_size'];
-const CARD_BODY_SIZE_DEFAULT = 10.75;
+const CARD_BODY_SIZE_DEFAULT = 11.25;
 const CARD_BODY_SIZE_MIN = 10.25;
-const CARD_BODY_SIZE_MAX = 11.25;
+const CARD_BODY_SIZE_MAX = 12.25;
 const RETENTION_ORDER = { '1m': 1, '3m': 3, '6m': 6, '12m': 12, forever: Infinity };
 const RETENTION_DAYS = { '1m': 30, '3m': 90, '6m': 180, '12m': 365 };
 const RETENTION_LABELS = { '1m': '1 month', '3m': '3 months', '6m': '6 months', '12m': '1 year', forever: 'indefinitely' };
@@ -7858,15 +7858,24 @@ $$('.refresh-btn').forEach((btn) => btn.addEventListener('click', refreshState))
 
 let searchTimer = null;
 
+function searchInputForScreen() {
+  return document.body.dataset.screen === 'detail' ? $('#main-search') : $('#search');
+}
+
 function setSearchOverlay(open) {
-  const overlay = $('#search-form');
-  if (!overlay) return;
-  overlay.classList.toggle('open', open);
-  overlay.setAttribute('aria-hidden', open ? 'false' : 'true');
-  overlay.inert = !open;
-  const button = $('#search-open-btn');
-  if (button) button.setAttribute('aria-expanded', open ? 'true' : 'false');
-  if (open) setTimeout(() => $('#search').focus(), 80);
+  for (const overlay of [$('#search-form'), $('#main-search-form')]) {
+    if (!overlay) continue;
+    overlay.classList.toggle('open', open);
+    overlay.setAttribute('aria-hidden', open ? 'false' : 'true');
+    overlay.inert = !open;
+  }
+  $$('.search-open-btn').forEach((button) => {
+    button.setAttribute('aria-expanded', open ? 'true' : 'false');
+  });
+  if (open) {
+    const input = searchInputForScreen();
+    if (input) setTimeout(() => input.focus(), 80);
+  }
 }
 
 function closeSearchOverlay(clear = true) {
@@ -7975,8 +7984,11 @@ function setSearch(value, source) {
 
 $('#search').addEventListener('input', (event) => setSearch(event.target.value, 'sidebar'));
 $('#main-search').addEventListener('input', (event) => setSearch(event.target.value, 'main'));
-$('#search-open-btn').addEventListener('click', () => setSearchOverlay(true));
+$$('.search-open-btn').forEach((button) => {
+  button.addEventListener('click', () => setSearchOverlay(true));
+});
 $('#search-close').addEventListener('click', () => closeSearchOverlay(true));
+$('#main-search-close').addEventListener('click', () => closeSearchOverlay(true));
 
 $('#main-search-form').addEventListener('submit', (event) => {
   event.preventDefault();

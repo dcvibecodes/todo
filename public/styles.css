@@ -474,7 +474,7 @@ body.gate-open {
    The refresh glyph is a desktop/web affordance: touch devices in the mobile
    layout pull down at the top of a scroller instead. The pill is fixed and
    slides into view as the pull progresses. */
-@media (max-width: 899px) and (pointer: coarse) {
+@media (max-width: 899px) {
   .refresh-btn { display: none; }
 }
 
@@ -1027,14 +1027,17 @@ body.list-dragging .list-grip { cursor: grabbing; }
 }
 
 .main-head {
+  position: relative;
   width: 100%;
   max-width: 860px;
   margin: 0 auto;
   padding: 22px 36px 10px;
   display: flex;
-  align-items: flex-end;
+  flex-wrap: nowrap;
+  align-items: center;
   gap: 12px;
 }
+.main-head .head-actions { flex: none; }
 
 .back-btn {
   display: none;
@@ -1078,9 +1081,6 @@ body.list-dragging .list-grip { cursor: grabbing; }
   color: var(--text-3);
   font-variant-numeric: tabular-nums;
 }
-
-.main-search { display: none; }
-.main-search input { flex: 1; min-width: 0; }
 
 .sort-bar {
   display: flex;
@@ -1552,7 +1552,7 @@ html.deleting-row #content { overflow-anchor: none; }
 .reminder-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 
 .reminder-title {
-  font-size: min(calc(var(--card-body-size) + 2px), 17px);
+  font-size: min(calc(var(--card-body-size) + 2px), 18.33px);
   font-weight: 550;
   line-height: 1.35;
   overflow-wrap: anywhere;
@@ -1609,10 +1609,10 @@ html.deleting-row #content { overflow-anchor: none; }
 .meta-completed { display: inline-flex; align-items: center; gap: 5px; }
 .meta-completed .ic { width: 12px; height: 12px; }
 
-:root { --card-body-size: 10.75pt; }
+:root { --card-body-size: 11.25pt; }
 
 .reminder-notes {
-  font-size: min(var(--card-body-size), 15px);
+  font-size: min(var(--card-body-size), 16.33px);
   line-height: 1.4;
   color: var(--text-2);
   display: -webkit-box;
@@ -1691,7 +1691,7 @@ html.deleting-row #content { overflow-anchor: none; }
    past the hard max-height and clip it mid-line. */
 .note-row .reminder-note-preview .note-md-heading {
   margin: 0;
-  line-height: calc(min(var(--card-body-size), 15px) * 1.4);
+  line-height: calc(min(var(--card-body-size), 16.33px) * 1.4);
 }
 .note-row .reminder-note-preview ul,
 .note-row .reminder-note-preview ol { margin: 0; }
@@ -2073,7 +2073,7 @@ body.sheet-open .sidebar {
 }
 
 #editor .e-title {
-  font-size: 1.0625rem;
+  font-size: 18.33px;
   font-weight: 550;
   line-height: 1.35;
   min-height: 64px;
@@ -2091,7 +2091,7 @@ body.sheet-open .sidebar {
 #editor .e-notes {
   min-height: 48px;
   max-height: 30dvh;
-  font-size: 0.9375rem;
+  font-size: 16.33px;
   resize: none;
   overflow-y: auto;
 }
@@ -2882,7 +2882,7 @@ body.sheet-open .sidebar {
   }
 
   .main-head {
-    position: static;
+    position: relative;
     max-width: none;
     padding: 18px 24px 10px;
     align-items: center;
@@ -2894,31 +2894,6 @@ body.sheet-open .sidebar {
 
   #menu-btn { display: grid; }
   #sidebar-menu-btn { display: grid; }
-
-  .main-search {
-    display: flex;
-    align-items: center;
-    position: relative;
-    margin: 0 24px 0;
-  }
-
-  .main-search .search-ic { left: 10px; width: 16px; height: 16px; }
-
-  .main-search input {
-    width: 100%;
-    border: 1px solid var(--line);
-    border-radius: var(--radius-sm);
-    padding: 9px 10px 9px 32px;
-    background: var(--elev);
-    color: var(--text);
-    font-size: 0.8125rem;
-    -webkit-appearance: none;
-    appearance: none;
-  }
-
-  .main-search input::placeholder { color: var(--text-3); }
-  .main-search input:focus { outline: none; border-color: var(--line); }
-  .main-search input::-webkit-search-cancel-button { -webkit-appearance: none; }
 
   .sort-bar { margin: 12px 24px 0; }
 
@@ -2945,8 +2920,8 @@ body.sheet-open .sidebar {
 [data-density="compact"] .swipe-content { min-height: 0; padding: 8px 12px; gap: 10px; }
 [data-density="compact"] .reminder-due { font-size: 0.7rem; }
 [data-density="compact"] .reminder-meta { font-size: 0.7rem; gap: 8px; }
-[data-density="compact"] .reminder-notes { font-size: min(calc(var(--card-body-size) - 0.75pt), 15px); }
-[data-density="compact"] .reminder-title { font-size: min(calc(var(--card-body-size) - 0.75pt + 2px), 17px); }
+[data-density="compact"] .reminder-notes { font-size: min(calc(var(--card-body-size) - 0.75pt), 16.33px); }
+[data-density="compact"] .reminder-title { font-size: min(calc(var(--card-body-size) - 0.75pt + 2px), 18.33px); }
 [data-density="compact"] .check { width: 20px; height: 20px; }
 [data-density="compact"] .content { padding-top: 10px; }
 [data-density="compact"] .group-title { margin-top: 14px; }
@@ -3010,9 +2985,8 @@ body.sheet-open .sidebar {
   .sidebar-head { align-items: center; }
 
   .main-head {
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     align-items: center;
-    row-gap: 0;
     padding: calc(14px + env(safe-area-inset-top)) 18px 10px;
   }
 
@@ -3021,9 +2995,9 @@ body.sheet-open .sidebar {
   .title-wrap { order: 2; flex-direction: row; align-items: baseline; gap: 8px; }
   .title-wrap h2 { font-size: 1.375rem; }
   .view-count { font-size: 0.8125rem; }
-  .head-actions { order: 3; align-self: flex-start; }
+  .head-actions { order: 3; align-self: center; }
 
-  .search-bar-overlay input, .main-search input,
+  .search-bar-overlay input,
   .auth-card input, .gate-card input, .settings-group input, .e-title, .e-notes,
   #editor .e-title, #editor .e-notes,
   .ed-subrow input[type="date"], .ed-subrow input[type="time"],
@@ -3055,13 +3029,6 @@ body.sheet-open .sidebar {
   .swipe-act.del { gap: 0; padding: 0; justify-content: center; }
   .swipe-act.del .ic { display: none; }
 
-  .main-search {
-    display: flex;
-    align-items: center;
-    position: relative;
-    margin: 0 18px 0;
-  }
-
   .sort-bar {
     margin: 12px 18px 0;
     flex-wrap: nowrap;
@@ -3078,23 +3045,6 @@ body.sheet-open .sidebar {
     min-width: 0;
     font-size: 0.71875rem;
   }
-
-  .main-search .search-ic { left: 10px; width: 16px; height: 16px; }
-
-  .main-search input {
-    width: 100%;
-    border: 1px solid var(--line);
-    border-radius: var(--radius-sm);
-    padding: 9px 10px 9px 32px;
-    background: var(--elev);
-    color: var(--text);
-    -webkit-appearance: none;
-    appearance: none;
-  }
-
-  .main-search input::placeholder { color: var(--text-3); }
-  .main-search input:focus { outline: none; border-color: var(--line); }
-  .main-search input::-webkit-search-cancel-button { -webkit-appearance: none; }
 
   .content { padding: 12px 18px calc(132px + env(safe-area-inset-bottom)); }
 
@@ -3493,7 +3443,7 @@ body.sheet-open .sidebar {
 .doc-download { text-decoration: none; }
 
 .doc-row .reminder-title {
-  font-size: min(calc(var(--card-body-size) + 2px), 17px);
+  font-size: min(calc(var(--card-body-size) + 2px), 18.33px);
   line-height: 1.35;
 }
 
@@ -3734,7 +3684,7 @@ body.sheet-open .sidebar {
   font-weight: 600;
 }
 
-#note-editor .note-rich { font-size: 0.9375rem; }
+#note-editor .note-rich { font-size: 16.33px; }
 
 #note-editor .note-body {
   min-height: 45dvh;
@@ -3746,7 +3696,7 @@ body.sheet-open .sidebar {
   #note-editor .sheet-card { width: 100%; }
   /* iOS auto-zooms any focused field below 16px. Keep the editor body and
      link field at 16px so tapping never changes the viewport scale. */
-  #note-editor .note-rich { font-size: 16px; }
+  #note-editor .note-rich { font-size: 16.33px; }
   #note-editor #note-link-url { font-size: 16px; }
 }
 
@@ -3880,8 +3830,11 @@ body.sheet-open .sidebar {
     font-size: 16px !important;
   }
 
-  html body #editor .e-title { font-size: 17px !important; }
-  html body #doc-name { font-size: 17px !important; }
+  html body #editor .e-title { font-size: 18.33px !important; }
+  html body #editor .e-notes { font-size: 16.33px !important; }
+  html body #doc-name { font-size: 18.33px !important; }
+  html body #doc-description { font-size: 16.33px !important; }
+  html body #note-editor .note-rich { font-size: 16.33px !important; }
   html body #note-editor .e-title {
     font-size: 1.25rem !important;
   }
@@ -4185,7 +4138,7 @@ button.link-chip { border: 0; font-family: inherit; cursor: pointer; }
   overflow: hidden;
   white-space: pre-line;
   color: var(--text-2);
-  font-size: min(var(--card-body-size), 15px);
+  font-size: min(var(--card-body-size), 16.33px);
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
@@ -4199,7 +4152,7 @@ button.link-chip { border: 0; font-family: inherit; cursor: pointer; }
   border-radius: var(--radius-sm);
   background: var(--elev);
   color: var(--text);
-  font-size: 0.9375rem;
+  font-size: 16.33px;
   line-height: 1.4;
   resize: vertical;
 }
@@ -4438,9 +4391,57 @@ button.link-chip { border: 0; font-family: inherit; cursor: pointer; }
 }
 
 .settings-row input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: calc(100% + 16px);
+  height: var(--control-height);
+  margin: 0 -8px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--elev);
+  cursor: pointer;
+}
+
+.settings-row input[type="range"]::-webkit-slider-runnable-track {
   width: 100%;
+  height: 4px;
   margin: 0;
-  accent-color: var(--accent);
+  border-radius: 999px;
+  background: var(--line);
+}
+
+.settings-row input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  margin-top: -6px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.settings-row input[type="range"]::-moz-range-track {
+  width: 100%;
+  height: 4px;
+  margin: 0;
+  border: 0;
+  border-radius: 999px;
+  background: var(--line);
+}
+
+.settings-row input[type="range"]::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.settings-row input[type="range"]:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  outline-offset: 4px;
+  border-radius: 999px;
 }
 
 .settings-range-center {
@@ -4448,8 +4449,8 @@ button.link-chip { border: 0; font-family: inherit; cursor: pointer; }
   left: 50%;
   top: 50%;
   width: 2px;
-  height: 20px;
-  transform: translate(-50%, 4px);
+  height: 16px;
+  transform: translate(-50%, -50%);
   border-radius: 1px;
   background: var(--accent);
   opacity: 0.8;
