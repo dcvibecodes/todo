@@ -3084,7 +3084,7 @@ function safeNoteHtml(value, preview = false) {
         : `<${tag.toLowerCase()}>${inner}</${tag.toLowerCase()}>`;
     }
     if (tag === 'P' || tag === 'DIV') {
-      if (!preview) return `<div>${inner}</div>`;
+      if (!preview) return `<p>${inner}</p>`;
       const block = inner.replace(/(?:<br>\s*)+$/, '');
       return block ? `${block}<br>` : '<br>';
     }
@@ -3095,7 +3095,7 @@ function safeNoteHtml(value, preview = false) {
     if (tag === 'SPAN') return `<span>${inner}</span>`;
     return inner;
   };
-  return walk(root)
+  return Array.from(root.childNodes).map(walk).join('')
     .replace(/(?:\s*<br>){3,}/g, '<br><br>')
     .replace(/^(?:\s*<br>)+/, '')
     .replace(/(?:\s*<br>)+$/, '');
@@ -3122,10 +3122,7 @@ function normalizeNoteHtml(value) {
     if (tag === 'H1' || tag === 'H2' || tag === 'H3') {
       return `<${tag.toLowerCase()}>${inner}</${tag.toLowerCase()}>`;
     }
-    if (tag === 'P' || tag === 'DIV') {
-      const block = inner.replace(/(?:<br>\s*)+$/, '');
-      return block ? `${block}<br>` : '<br>';
-    }
+    if (tag === 'P' || tag === 'DIV') return `<p>${inner}</p>`;
     if (tag === 'UL' || tag === 'OL') {
       return `<${tag.toLowerCase()}>${inner}</${tag.toLowerCase()}>`;
     }
@@ -3133,7 +3130,7 @@ function normalizeNoteHtml(value) {
     if (tag === 'SPAN') return `<span>${inner}</span>`;
     return inner;
   };
-  return walk(root)
+  return Array.from(root.childNodes).map(walk).join('')
     .replace(/(?:\s*<br>){3,}/g, '<br><br>')
     .replace(/^(?:\s*<br>)+/, '')
     .replace(/(?:\s*<br>)+$/, '');
@@ -6193,6 +6190,11 @@ function noteEditorFolderId() {
 
 let noteLinkRange = null;
 let noteSavedRange = null;
+const NOTE_BLOCK_TAGS = /^(P|H[1-6]|DIV|BLOCKQUOTE|LI|FIGCAPTION)$/;
+
+try {
+  document.execCommand('defaultParagraphSeparator', false, 'p');
+} catch { /* Safari can reject this command; the key handler still inserts paragraphs */ }
 
 function noteSelectedRange() {
   const selection = window.getSelection();
@@ -6244,6 +6246,7 @@ function updateNoteFormatState() {
     if (active.link) active.underline = Boolean(element?.closest('u'));
   }
   $$('.note-format-btn').forEach((button) => {
+    if (button.dataset.noteFormat === 'linebreak') return;
     const isActive = Boolean(active[button.dataset.noteFormat]);
     button.classList.toggle('is-active', isActive);
     button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
@@ -6261,6 +6264,13 @@ function applyNoteFormat(kind) {
     $('#note-link-url').value = '';
     $('#note-link-row').hidden = false;
     $('#note-link-url').focus();
+    return;
+  }
+  if (kind === 'linebreak') {
+    if (!document.execCommand('insertLineBreak', false, null)) {
+      document.execCommand('insertHTML', false, '<br>');
+    }
+    requestAnimationFrame(updateNoteFormatState);
     return;
   }
   if (kind === 'heading') {
@@ -7990,6 +8000,54 @@ $('#note-link-apply').addEventListener('click', applyNoteLink);
 $('#note-link-cancel').addEventListener('click', () => {
   noteLinkRange = null;
   $('#note-link-row').hidden = true;
+});
+$('#n-body').addEventListener('keydown', (event) => {
+  if (event.isComposing) return;
+  const body = event.currentTarget;
+  if (event.key === 'Enter') {
+    if (event.shiftKey) {
+      event.preventDefault();
+      if (!document.execCommand('insertLineBreak', false, null)) {
+        document.execCommand('insertHTML', false, '<br>');
+      }
+      requestAnimationFrame(updateNoteFormatState);
+      return;
+    }
+    const selection = window.getSelection();
+    if (!selection || !selection.rangeCount) return;
+    let node = selection.anchorNode;
+    let inBlock = false;
+    while (node && node !== body) {
+      if (node.nodeType === Node.ELEMENT_NODE && NOTE_BLOCK_TAGS.test(node.tagName)) {
+        inBlock = true;
+        break;
+      }
+      node = node.parentNode;
+    }
+    event.preventDefault();
+    if (!inBlock && body.textContent.trim()) {
+      document.execCommand('formatBlock', false, '<p>');
+    }
+    if (!document.execCommand('insertParagraph', false, null)) {
+      document.execCommand('insertHTML', false, '<p><br></p>');
+    }
+    requestAnimationFrame(updateNoteFormatState);
+    return;
+  }
+  if (event.key === 'Tab') {
+    const selection = window.getSelection();
+    if (!selection || !selection.rangeCount) return;
+    let node = selection.anchorNode;
+    while (node && node !== body) {
+      if (node.nodeType === Node.ELEMENT_NODE && node.tagName === 'LI') {
+        event.preventDefault();
+        document.execCommand(event.shiftKey ? 'outdent' : 'indent', false, null);
+        requestAnimationFrame(updateNoteFormatState);
+        return;
+      }
+      node = node.parentNode;
+    }
+  }
 });
 $('#n-body').addEventListener('click', (event) => {
   const link = event.target.closest('a');

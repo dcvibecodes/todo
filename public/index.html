@@ -559,6 +559,7 @@
           <button type="button" class="note-format-btn" data-note-format="ul" aria-pressed="false" title="Bullet list" aria-label="Bullet list">&bull;</button>
           <button type="button" class="note-format-btn" data-note-format="ol" aria-pressed="false" title="Numbered list" aria-label="Numbered list">1.</button>
           <button type="button" class="note-format-btn" data-note-format="link" aria-pressed="false" title="Add link" aria-label="Add link">Link</button>
+          <button type="button" class="note-format-btn" data-note-format="linebreak" title="Line break (Shift+Enter)" aria-label="Line break">&#8629;</button>
         </div>
         <div id="note-link-row" class="note-link-row" hidden>
           <input id="note-link-url" type="url" placeholder="https://example.com" autocomplete="off">
@@ -566,6 +567,7 @@
           <button type="button" id="note-link-cancel" class="mini-btn">Cancel</button>
         </div>
           <div id="n-body" class="e-notes note-body note-rich" contenteditable="true" role="textbox" aria-multiline="true" data-placeholder="Write your note"></div>
+          <p class="note-editor-hint">Enter = new paragraph &middot; Shift+Enter or &#8629; button = line break &middot; Tab = indent list item</p>
         </div>
         <div class="note-more-toggle-wrap">
           <button type="button" id="n-more-toggle" class="e-more-toggle" aria-expanded="false" aria-controls="n-more">
