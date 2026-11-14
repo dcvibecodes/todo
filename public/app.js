@@ -132,6 +132,8 @@ const LIST_PROGRESS_RANGES = ['all', '30d'];
 const SETTINGS_PROGRESS_KEYS = ['list_progress', 'list_progress_range'];
 const SETTINGS_BODY_KEYS = ['card_body_size'];
 const CARD_BODY_SIZE_DEFAULT = 10.75;
+const CARD_BODY_SIZE_MIN = 10.25;
+const CARD_BODY_SIZE_MAX = 11.25;
 const RETENTION_ORDER = { '1m': 1, '3m': 3, '6m': 6, '12m': 12, forever: Infinity };
 const RETENTION_DAYS = { '1m': 30, '3m': 90, '6m': 180, '12m': 365 };
 const RETENTION_LABELS = { '1m': '1 month', '3m': '3 months', '6m': '6 months', '12m': '1 year', forever: 'indefinitely' };
@@ -139,7 +141,7 @@ const RETENTION_LABELS = { '1m': '1 month', '3m': '3 months', '6m': '6 months', 
 function normalizedCardBodySize(value) {
   const n = Number(value);
   if (!Number.isFinite(n)) return CARD_BODY_SIZE_DEFAULT;
-  return Math.min(12.75, Math.max(8.75, n));
+  return Math.min(CARD_BODY_SIZE_MAX, Math.max(CARD_BODY_SIZE_MIN, n));
 }
 
 function applyCardBodySize(value) {
