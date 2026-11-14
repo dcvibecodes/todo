@@ -1608,8 +1608,10 @@ html.deleting-row #content { overflow-anchor: none; }
 .meta-completed { display: inline-flex; align-items: center; gap: 5px; }
 .meta-completed .ic { width: 12px; height: 12px; }
 
+:root { --card-body-size: 10.75pt; }
+
 .reminder-notes {
-  font-size: 0.8125rem;
+  font-size: var(--card-body-size);
   line-height: 1.4;
   color: var(--text-2);
   display: -webkit-box;
@@ -2876,7 +2878,7 @@ body.sheet-open .sidebar {
 [data-density="compact"] .reminder-due { font-size: 0.7rem; }
 [data-density="compact"] .reminder-title { font-size: 0.875rem; }
 [data-density="compact"] .reminder-meta { font-size: 0.7rem; gap: 8px; }
-[data-density="compact"] .reminder-notes { font-size: 0.75rem; }
+[data-density="compact"] .reminder-notes { font-size: calc(var(--card-body-size) - 0.75pt); }
 [data-density="compact"] .check { width: 20px; height: 20px; }
 [data-density="compact"] .content { padding-top: 10px; }
 [data-density="compact"] .group-title { margin-top: 14px; }
@@ -4077,7 +4079,7 @@ button.link-chip { border: 0; font-family: inherit; cursor: pointer; }
   overflow: hidden;
   white-space: pre-line;
   color: var(--text-2);
-  font-size: 0.8125rem;
+  font-size: var(--card-body-size);
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
@@ -4320,3 +4322,23 @@ button.link-chip { border: 0; font-family: inherit; cursor: pointer; }
 
 #discard-sheet { z-index: 85; }
 .discard-card { width: min(440px, 100%); }
+
+/* Card body text size */
+.settings-row input[type="range"] {
+  flex: 0 0 var(--settings-control-width);
+  width: var(--settings-control-width);
+  accent-color: var(--accent);
+}
+
+.settings-range-meta {
+  display: flex;
+  justify-content: space-between;
+  margin: 2px 0 6px;
+  color: var(--text-3);
+  font-size: 0.6875rem;
+}
+
+#set-card-body-size-value {
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}

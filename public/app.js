@@ -130,9 +130,25 @@ const LIST_PROGRESS_SYNCED_KEY = 'todo.listProgressSynced';
 const LIST_PROGRESS_MODES = ['bar', 'ring', 'off'];
 const LIST_PROGRESS_RANGES = ['all', '30d'];
 const SETTINGS_PROGRESS_KEYS = ['list_progress', 'list_progress_range'];
+const SETTINGS_BODY_KEYS = ['card_body_size'];
+const CARD_BODY_SIZE_DEFAULT = 10.75;
 const RETENTION_ORDER = { '1m': 1, '3m': 3, '6m': 6, '12m': 12, forever: Infinity };
 const RETENTION_DAYS = { '1m': 30, '3m': 90, '6m': 180, '12m': 365 };
 const RETENTION_LABELS = { '1m': '1 month', '3m': '3 months', '6m': '6 months', '12m': '1 year', forever: 'indefinitely' };
+
+function normalizedCardBodySize(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return CARD_BODY_SIZE_DEFAULT;
+  return Math.min(12.75, Math.max(8.75, n));
+}
+
+function applyCardBodySize(value) {
+  const size = normalizedCardBodySize(value);
+  document.documentElement.style.setProperty('--card-body-size', `${size}pt`);
+  const label = $('#set-card-body-size-value');
+  if (label) label.textContent = `${size.toFixed(2).replace(/\.?0+$/, '')} pt`;
+  return size;
+}
 
 function listRetention(list) {
   const value = list && list.completed_retention;
@@ -869,6 +885,7 @@ async function loadState() {
   state.attachments = data.attachments || [];
   applyDocsFormatUI();
   state.settings = data.settings || {};
+  applyCardBodySize(state.settings.card_body_size);
   await syncListProgressWithServer();
   await syncSortWithServer();
   if (state.lastListId && !listById(state.lastListId)) {
@@ -7188,6 +7205,9 @@ function revertSettingsAppearance() {
 // progress choices.
 function revertSettingsPreview() {
   revertSettingsAppearance();
+  if (settingsSnapshot && settingsSnapshot.card_body_size) {
+    applyCardBodySize(settingsSnapshot.card_body_size);
+  }
   if (settingsSnapshot) {
     for (const key of SETTINGS_PROGRESS_KEYS) {
       if (key in settingsSnapshot) state.settings[key] = settingsSnapshot[key];
@@ -7209,6 +7229,7 @@ function settingsValues() {
     quiet_start: $('#set-quiet-start').value,
     quiet_end: $('#set-quiet-end').value,
     optimize_uploads: $('#set-optimize-uploads').checked ? '1' : '0',
+    card_body_size: $('#set-card-body-size').value,
     list_progress: $('#set-list-progress').value,
     list_progress_range: $('#set-list-progress-range').value,
   };
@@ -7252,6 +7273,8 @@ async function openSettings() {
   }
   const s = state.settings;
   $('#set-density').value = localStorage.getItem(DENSITY_KEY) === 'compact' ? 'compact' : 'comfortable';
+  $('#set-card-body-size').value = String(normalizedCardBodySize(s.card_body_size));
+  applyCardBodySize(s.card_body_size);
   $('#set-default-model').value = ['floating', 'anchored'].includes(s.default_time_model)
     ? s.default_time_model : 'floating';
   renderSettingsZones(s.default_time_zone || '');
@@ -7299,9 +7322,10 @@ async function saveAppSettings() {
   const notifyChanged = changed(SETTINGS_NOTIFY_KEYS);
   const progressChanged = changed(SETTINGS_PROGRESS_KEYS);
   const uploadChanged = changed(SETTINGS_UPLOAD_KEYS);
+  const bodySizeChanged = changed(SETTINGS_BODY_KEYS);
   const appearanceDirty = appearanceIsDirty();
   const sortChanged = sortIsDirty();
-  if (!defaultsChanged && !notifyChanged && !progressChanged && !uploadChanged && !appearanceDirty && !sortChanged) return;
+  if (!defaultsChanged && !notifyChanged && !progressChanged && !uploadChanged && !bodySizeChanged && !appearanceDirty && !sortChanged) return;
 
   const saveBtn = $('#settings-save');
   const startedAt = Date.now();
@@ -7311,7 +7335,7 @@ async function saveAppSettings() {
   $('#settings-sheet').setAttribute('aria-busy', 'true');
   try {
     let message = '';
-    if (defaultsChanged || notifyChanged || progressChanged || uploadChanged) {
+    if (defaultsChanged || notifyChanged || progressChanged || uploadChanged || bodySizeChanged) {
       try {
         const result = await api('/api/settings', {
           method: 'POST',
@@ -7329,6 +7353,8 @@ async function saveAppSettings() {
           message = 'Saved. Applies to new items only — existing items were not changed.';
         } else if (uploadChanged) {
           message = 'Saved. Upload optimization applies to new uploads only.';
+        } else if (bodySizeChanged) {
+          message = 'Saved — card text size applies to all tenants.';
         } else {
           message = 'Saved — folder progress now follows you on all devices.';
         }
@@ -7718,6 +7744,7 @@ $('#notify-enable').addEventListener('click', enableNotifications);
 $('#notify-disable').addEventListener('click', disableNotifications);
 $('#notify-test').addEventListener('click', sendTestNotification);
 $('#settings-save').addEventListener('click', saveAppSettings);
+$('#set-card-body-size').addEventListener('input', (event) => applyCardBodySize(event.target.value));
 $('#settings-sheet').addEventListener('input', () => updateSettingsDirty());
 $('#settings-sheet').addEventListener('change', () => updateSettingsDirty());
 $('#set-density').addEventListener('change', () => {
