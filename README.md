@@ -2,6 +2,13 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v4.10.42
+
+- **Touch focus uses the hover background** - Focused cards now get the same quiet background as desktop hover, with no border or tint. It also works for one-line reminder notes.
+- **Short reminder notes use reader size** - Tapping a reminder card with a one-line note focuses it and applies the saved Reader text size, even though there is nothing to expand.
+- **Clearer Aa scope** - The popover heading now reads **Text size (focused card only)**, explaining that changes apply to the focused card.
+- Service worker cache bumped to `workspace-v4.10.42`.
+
 ## What's New in v4.10.41
 
 - **Removed the extra card focus outline** - Cards no longer get the green tinted background or border. Desktop hover keeps the existing subtle background change; the focus state still drives Aa/reader behavior without adding a new visual treatment.

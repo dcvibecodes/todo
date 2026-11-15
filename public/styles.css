@@ -1695,15 +1695,15 @@ html.deleting-row #content { overflow-anchor: none; }
 }
 
 html body .reminder-notes.is-expanded,
-.note-row.is-note-focused:not(.has-long-note) .reminder-notes {
+.reminder.is-note-focused:not(.has-long-note) .reminder-notes {
   font-size: var(--reader-note-size, min(var(--card-body-size), 16px));
 }
 .reminder.is-note-expanded .reminder-title,
-.note-row.is-note-focused:not(.has-long-note) .reminder-title {
+.reminder.is-note-focused:not(.has-long-note) .reminder-title {
   font-size: calc(var(--reader-note-size, min(var(--card-body-size), 16px)) + 2px);
 }
 
-.note-row.is-note-focused:not(.has-long-note) .reminder-notes {
+.reminder.is-note-focused:not(.has-long-note) .reminder-notes {
   -webkit-line-clamp: unset;
   max-height: none;
   overflow: visible;
@@ -2024,7 +2024,7 @@ body.sheet-open .fab {
   flex-direction: column;
   align-items: stretch;
   gap: 4px;
-  width: 132px;
+  width: 160px;
   padding: 6px;
   border: 1px solid var(--line);
   border-radius: 12px;
@@ -4744,3 +4744,6 @@ button.link-chip { border: 0; font-family: inherit; cursor: pointer; }
   color: var(--text-2);
   font-variant-numeric: tabular-nums;
 }
+
+/* Touch/desktop focus uses the same quiet background as hover, no border. */
+.reminder.is-note-focused .swipe-content { background: var(--elev); }

@@ -5017,9 +5017,10 @@ function reminderRow(reminder, options = {}) {
         resetSwipe(row);
         return;
       }
-      if (!row.classList.contains('has-long-note')) return;
       const note = row.querySelector('.reminder-notes');
       if (!note) return;
+      focusNoteRow(row);
+      if (!row.classList.contains('has-long-note')) return;
       toggleNoteForRow(row, note);
     },
   }, [background, content]);
@@ -8138,8 +8139,9 @@ $('#smart-nav').addEventListener('click', (event) => {
 
 document.addEventListener('pointerdown', (event) => {
   if (event.button !== 0) return;
-  const row = event.target.closest('.note-row');
-  if (!row || event.target.closest('a, button, input, textarea, select')) return;
+  const row = event.target.closest('.reminder');
+  if (!row || row.classList.contains('doc-row') || !row.querySelector('.reminder-notes')) return;
+  if (event.target.closest('a, button, input, textarea, select')) return;
   focusNoteRow(row);
 }, true);
 
