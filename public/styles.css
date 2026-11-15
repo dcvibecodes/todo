@@ -1695,11 +1695,11 @@ html.deleting-row #content { overflow-anchor: none; }
 }
 
 html body .reminder-notes.is-expanded,
-.reminder.is-note-focused:not(.has-long-note) .reminder-notes {
+.reminder.is-note-focused .reminder-notes {
   font-size: var(--reader-note-size, min(var(--card-body-size), 16px));
 }
 .reminder.is-note-expanded .reminder-title,
-.reminder.is-note-focused:not(.has-long-note) .reminder-title {
+.reminder.is-note-focused .reminder-title {
   font-size: calc(var(--reader-note-size, min(var(--card-body-size), 16px)) + 2px);
 }
 

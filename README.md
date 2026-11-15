@@ -2,6 +2,14 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v4.10.45
+
+- **First tap focuses, second tap expands** - A card now focuses on the first tap without opening its note. A second tap on the same long card expands it; a third collapses it while keeping focus and Reader size.
+- **Reader size applies to focused long notes** - Long notes now grow to the saved Reader size as soon as they are focused, even while still clamped to two lines. Previously they stayed at the slider size until expanded.
+- **Saved Reader size applies on launch** - The stored Reader size is installed at startup, so the first focused card is sized correctly after a force-close or reload. Aa no longer shows a size that has not taken effect.
+- **Focus moves cleanly** - Focusing a different card collapses the previously expanded note and enlarges the new card without expanding it.
+- Service worker cache bumped to `workspace-v4.10.45`.
+
 ## What's New in v4.10.44
 
 - **Title-only cards focus too** - Every Reminders card now focuses on pointer-down, including cards with no note. Aa appears for title-only cards and the Reader size adjusts the card title even though there is no note body to resize.

@@ -3389,7 +3389,7 @@ function noteRow(note, options = {}) {
         resetSwipe(row);
         return;
       }
-      focusNoteRow(row);
+      if (!cardTapAllowsExpansion(row)) return;
       if (!row.classList.contains('has-long-note')) return;
       const noteEl = row.querySelector('.reminder-notes');
       if (noteEl) toggleNoteForRow(row, noteEl);
@@ -4558,6 +4558,7 @@ async function rescheduleRow(reminder, date) {
 
 let expandedNoteId = null;
 let focusedNoteId = null;
+let focusGestureId = null;
 let lastNoteScrollAt = 0;
 
 function cardForId(id) {
@@ -4727,15 +4728,12 @@ function animateNoteFocus(row, focus, onDone) {
 }
 
 function focusNoteRow(row) {
-  if (!row) return;
+  if (!row) return false;
   const id = row.dataset.reminderId;
-  if (focusedNoteId === id) return;
+  if (focusedNoteId === id) return false;
   if (focusedNoteId) {
     const previous = cardForId(focusedNoteId);
-    if (previous) {
-      if (previous.classList.contains('has-long-note')) previous.classList.remove('is-note-focused');
-      else animateNoteFocus(previous, false);
-    }
+    if (previous) animateNoteFocus(previous, false);
   }
   const note = row.querySelector('.reminder-notes');
   row.classList.remove('is-note-focused');
@@ -4745,19 +4743,29 @@ function focusNoteRow(row) {
     row.classList.toggle('has-long-note', expandable);
   }
   focusedNoteId = id;
-  if (note && row.classList.contains('has-long-note')) row.classList.add('is-note-focused');
-  else animateNoteFocus(row, true);
+  animateNoteFocus(row, true);
+  if (expandedNoteId && expandedNoteId !== id) collapseExpandedNote();
   syncReaderControl();
+  return true;
+}
+
+function cardTapAllowsExpansion(row) {
+  const id = row.dataset.reminderId;
+  if (focusGestureId) {
+    const justFocused = focusGestureId === id;
+    focusGestureId = null;
+    if (justFocused) return false;
+  }
+  const wasFocused = focusedNoteId === id;
+  focusNoteRow(row);
+  return wasFocused;
 }
 
 function clearNoteFocus() {
   if (!focusedNoteId) return;
   const previous = cardForId(focusedNoteId);
   focusedNoteId = null;
-  if (previous) {
-    if (previous.classList.contains('has-long-note')) previous.classList.remove('is-note-focused');
-    else animateNoteFocus(previous, false);
-  }
+  if (previous) animateNoteFocus(previous, false);
   syncReaderControl();
 }
 
@@ -5069,7 +5077,7 @@ function reminderRow(reminder, options = {}) {
         resetSwipe(row);
         return;
       }
-      focusNoteRow(row);
+      if (!cardTapAllowsExpansion(row)) return;
       const note = row.querySelector('.reminder-notes');
       if (!note || !row.classList.contains('has-long-note')) return;
       toggleNoteForRow(row, note);
@@ -8181,6 +8189,7 @@ async function changePassword(event) {
 }
 
 applyTheme(themePreference, false);
+applyReaderNoteSize(localStorage.getItem(READER_SIZE_KEY), false);
 darkQuery.addEventListener('change', () => {
   if (themePreference === 'auto') applyTheme('auto', false);
 });
@@ -8199,10 +8208,11 @@ $('#smart-nav').addEventListener('click', (event) => {
 
 document.addEventListener('pointerdown', (event) => {
   if (event.button !== 0) return;
+  focusGestureId = null;
   const row = event.target.closest('.reminder');
   if (!row || row.classList.contains('doc-row')) return;
   if (event.target.closest('a, button, input, textarea, select')) return;
-  focusNoteRow(row);
+  if (focusNoteRow(row)) focusGestureId = row.dataset.reminderId;
 }, true);
 
 $('#tenant-switch').addEventListener('click', (event) => {
