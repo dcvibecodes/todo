@@ -1714,7 +1714,7 @@ html body .reminder-notes.is-expanded { font-size: 17.2px; }
   display: block;
   white-space: normal;
 }
-.note-row .reminder-note-full p { margin: 0 0 0.45em; }
+.note-row .reminder-note-full p { margin: 0 0 1em; }
 .note-row .reminder-note-full h1 {
   margin: 0.4em 0 0.2em;
   font-size: 1.25em;
@@ -3872,7 +3872,7 @@ body.sheet-open .sidebar {
 }
 .note-rich h3 { font-size: 1em; }
 .note-rich p,
-.note-rich div { margin: 0 0 0.45em; }
+.note-rich div { margin: 0 0 1em; }
 .note-rich ul,
 .note-rich ol { margin: 0.4em 0; padding-left: 1.5em; }
 .note-rich li { margin: 0 0 0.2em; }
