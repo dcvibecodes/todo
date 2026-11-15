@@ -185,8 +185,12 @@ function activeReaderNoteId() {
 
 function expandedReaderFontSize() {
   const id = activeReaderNoteId();
-  const found = id ? noteForId(id) : null;
-  return found ? parseFloat(getComputedStyle(found.note).fontSize) : null;
+  const row = id ? cardForId(id) : null;
+  if (!row) return null;
+  const note = row.querySelector('.reminder-notes');
+  if (note) return parseFloat(getComputedStyle(note).fontSize);
+  const title = row.querySelector('.reminder-title');
+  return title ? parseFloat(getComputedStyle(title).fontSize) - 2 : null;
 }
 
 function currentReaderSizeForUI() {
@@ -218,7 +222,7 @@ function syncReaderControl() {
   const control = $('#reader-size');
   if (!control) return;
   const id = activeReaderNoteId();
-  const visible = Boolean(id && noteForId(id));
+  const visible = Boolean(id && cardForId(id));
   control.hidden = !visible;
   if (!visible) setReaderPopover(false);
   else updateReaderSizeUI(currentReaderSizeForUI());
@@ -228,21 +232,22 @@ function applyReaderNoteSize(value, animate = false) {
   const hasValue = value !== null && value !== '' && Number.isFinite(Number(value));
   const size = hasValue ? normalizedReaderSize(value) : null;
   const id = activeReaderNoteId();
-  const found = id ? noteForId(id) : null;
-  const note = found ? found.note : null;
-  const row = found ? found.row : null;
+  const row = id ? cardForId(id) : null;
+  const note = row ? row.querySelector('.reminder-notes') : null;
   const title = row ? row.querySelector('.reminder-title') : null;
   let from = 0;
   let fromFont = '';
   let fromTitleFont = '';
   if (note) {
     note.getAnimations().forEach((animation) => animation.cancel());
-    if (title) title.getAnimations().forEach((animation) => animation.cancel());
     note.style.height = '';
     note.style.overflow = '';
     from = note.getBoundingClientRect().height;
     fromFont = getComputedStyle(note).fontSize;
-    fromTitleFont = title ? getComputedStyle(title).fontSize : '';
+  }
+  if (title) {
+    title.getAnimations().forEach((animation) => animation.cancel());
+    fromTitleFont = getComputedStyle(title).fontSize;
   }
   if (hasValue) {
     document.documentElement.style.setProperty('--reader-note-size', `${size}px`);
@@ -252,35 +257,43 @@ function applyReaderNoteSize(value, animate = false) {
     localStorage.removeItem(READER_SIZE_KEY);
   }
   updateReaderSizeUI(size ?? currentReaderSizeForUI());
-  if (!animate || !note || MOTION_REDUCED.matches) return;
-  const to = note.getBoundingClientRect().height;
-  const toFont = getComputedStyle(note).fontSize;
+  if (!animate || MOTION_REDUCED.matches) return;
+  const to = note ? note.getBoundingClientRect().height : 0;
+  const toFont = note ? getComputedStyle(note).fontSize : '';
   const toTitleFont = title ? getComputedStyle(title).fontSize : '';
-  if (Math.abs(to - from) < 1 && fromFont === toFont) return;
+  const noteChanged = Boolean(note && (Math.abs(to - from) >= 1 || fromFont !== toFont));
+  const titleChanged = Boolean(title && fromTitleFont && toTitleFont && fromTitleFont !== toTitleFont);
+  if (!noteChanged && !titleChanged) return;
   const duration = 180;
   const easing = 'ease-out';
-  note.style.overflow = 'hidden';
-  note.style.height = `${from}px`;
-  const heightAnim = note.animate(
-    [{ height: `${from}px` }, { height: `${to}px` }],
-    { duration, easing },
-  );
-  note.animate(
-    [{ fontSize: fromFont }, { fontSize: toFont }],
-    { duration, easing },
-  );
-  if (title && fromTitleFont && toTitleFont && fromTitleFont !== toTitleFont) {
+  let heightAnim = null;
+  if (note && noteChanged) {
+    note.style.overflow = 'hidden';
+    note.style.height = `${from}px`;
+    heightAnim = note.animate(
+      [{ height: `${from}px` }, { height: `${to}px` }],
+      { duration, easing },
+    );
+    note.animate(
+      [{ fontSize: fromFont }, { fontSize: toFont }],
+      { duration, easing },
+    );
+  }
+  if (titleChanged) {
     title.animate(
       [{ fontSize: fromTitleFont }, { fontSize: toTitleFont }],
       { duration, easing },
     );
   }
   const cleanup = () => {
+    if (!note) return;
     note.style.height = '';
     note.style.overflow = '';
   };
-  heightAnim.onfinish = cleanup;
-  heightAnim.oncancel = cleanup;
+  if (heightAnim) {
+    heightAnim.onfinish = cleanup;
+    heightAnim.oncancel = cleanup;
+  }
 }
 
 function adjustReaderSize(delta) {
@@ -4547,6 +4560,15 @@ let expandedNoteId = null;
 let focusedNoteId = null;
 let lastNoteScrollAt = 0;
 
+function cardForId(id) {
+  let fallback = null;
+  for (const row of $$(`.reminder[data-reminder-id="${id}"]`)) {
+    if (row.getClientRects().length) return row;
+    fallback = fallback || row;
+  }
+  return fallback;
+}
+
 function noteForId(id) {
   let fallback = null;
   for (const row of $$(`.reminder[data-reminder-id="${id}"]`)) {
@@ -4642,48 +4664,66 @@ function collapseExpandedNote() {
 }
 
 function animateNoteFocus(row, focus, onDone) {
-  const note = row ? row.querySelector('.reminder-notes') : null;
-  if (!note) { if (onDone) onDone(); return; }
+  if (!row) { if (onDone) onDone(); return; }
+  const note = row.querySelector('.reminder-notes');
   const title = row.querySelector('.reminder-title');
-  note.getAnimations().forEach((animation) => animation.cancel());
-  if (title) title.getAnimations().forEach((animation) => animation.cancel());
-  note.style.height = '';
-  note.style.overflow = '';
-  const from = note.getBoundingClientRect().height;
-  const fromFont = getComputedStyle(note).fontSize;
-  const fromTitleFont = title ? getComputedStyle(title).fontSize : '';
+  if (!note && !title) { if (onDone) onDone(); return; }
+  let from = 0;
+  let fromFont = '';
+  let fromTitleFont = '';
+  if (note) {
+    note.getAnimations().forEach((animation) => animation.cancel());
+    note.style.height = '';
+    note.style.overflow = '';
+    from = note.getBoundingClientRect().height;
+    fromFont = getComputedStyle(note).fontSize;
+  }
+  if (title) {
+    title.getAnimations().forEach((animation) => animation.cancel());
+    fromTitleFont = getComputedStyle(title).fontSize;
+  }
   row.classList.toggle('is-note-focused', focus);
-  const to = note.getBoundingClientRect().height;
-  const toFont = getComputedStyle(note).fontSize;
+  const to = note ? note.getBoundingClientRect().height : 0;
+  const toFont = note ? getComputedStyle(note).fontSize : '';
   const toTitleFont = title ? getComputedStyle(title).fontSize : '';
-  if (MOTION_REDUCED.matches || (Math.abs(to - from) < 1 && fromFont === toFont)) {
+  const noteChanged = Boolean(note && (Math.abs(to - from) >= 1 || fromFont !== toFont));
+  const titleChanged = Boolean(title && fromTitleFont && toTitleFont && fromTitleFont !== toTitleFont);
+  if (MOTION_REDUCED.matches || (!noteChanged && !titleChanged)) {
     if (onDone) onDone();
     return;
   }
   const duration = 200;
   const easing = 'ease-out';
-  note.style.overflow = 'hidden';
-  note.style.height = `${from}px`;
-  const heightAnim = note.animate(
-    [{ height: `${from}px` }, { height: `${to}px` }],
-    { duration, easing },
-  );
-  note.animate(
-    [{ fontSize: fromFont }, { fontSize: toFont }],
-    { duration, easing },
-  );
-  if (title && fromTitleFont && toTitleFont && fromTitleFont !== toTitleFont) {
+  let heightAnim = null;
+  if (note && noteChanged) {
+    note.style.overflow = 'hidden';
+    note.style.height = `${from}px`;
+    heightAnim = note.animate(
+      [{ height: `${from}px` }, { height: `${to}px` }],
+      { duration, easing },
+    );
+    note.animate(
+      [{ fontSize: fromFont }, { fontSize: toFont }],
+      { duration, easing },
+    );
+  }
+  if (titleChanged) {
     title.animate(
       [{ fontSize: fromTitleFont }, { fontSize: toTitleFont }],
       { duration, easing },
     );
   }
   const cleanup = () => {
+    if (!note) return;
     note.style.height = '';
     note.style.overflow = '';
   };
-  heightAnim.onfinish = () => { cleanup(); if (onDone) onDone(); };
-  heightAnim.oncancel = cleanup;
+  if (heightAnim) {
+    heightAnim.onfinish = () => { cleanup(); if (onDone) onDone(); };
+    heightAnim.oncancel = cleanup;
+  } else if (onDone) {
+    onDone();
+  }
 }
 
 function focusNoteRow(row) {
@@ -4691,14 +4731,12 @@ function focusNoteRow(row) {
   const id = row.dataset.reminderId;
   if (focusedNoteId === id) return;
   if (focusedNoteId) {
-    const previous = noteForId(focusedNoteId);
+    const previous = cardForId(focusedNoteId);
     if (previous) {
-      if (previous.row.classList.contains('has-long-note')) previous.row.classList.remove('is-note-focused');
-      else animateNoteFocus(previous.row, false);
+      if (previous.classList.contains('has-long-note')) previous.classList.remove('is-note-focused');
+      else animateNoteFocus(previous, false);
     }
   }
-  // Measure overflow without the short-note focus unclamp before deciding
-  // whether this card can expand.
   const note = row.querySelector('.reminder-notes');
   row.classList.remove('is-note-focused');
   if (note) {
@@ -4707,18 +4745,18 @@ function focusNoteRow(row) {
     row.classList.toggle('has-long-note', expandable);
   }
   focusedNoteId = id;
-  if (row.classList.contains('has-long-note')) row.classList.add('is-note-focused');
+  if (note && row.classList.contains('has-long-note')) row.classList.add('is-note-focused');
   else animateNoteFocus(row, true);
   syncReaderControl();
 }
 
 function clearNoteFocus() {
   if (!focusedNoteId) return;
-  const previous = noteForId(focusedNoteId);
+  const previous = cardForId(focusedNoteId);
   focusedNoteId = null;
   if (previous) {
-    if (previous.row.classList.contains('has-long-note')) previous.row.classList.remove('is-note-focused');
-    else animateNoteFocus(previous.row, false);
+    if (previous.classList.contains('has-long-note')) previous.classList.remove('is-note-focused');
+    else animateNoteFocus(previous, false);
   }
   syncReaderControl();
 }
@@ -4760,7 +4798,10 @@ function syncNoteExpanders() {
     if (expandable && expanded) expandedSeen = true;
   }
   if (expandedNoteId && !expandedSeen) expandedNoteId = null;
-  if (focusedNoteId && !focusedSeen) focusedNoteId = null;
+  if (focusedNoteId && !focusedSeen && !cardForId(focusedNoteId)) focusedNoteId = null;
+  $$('.reminder').forEach((row) => {
+    row.classList.toggle('is-note-focused', row.dataset.reminderId === focusedNoteId);
+  });
   syncReaderControl();
 }
 
@@ -5028,10 +5069,9 @@ function reminderRow(reminder, options = {}) {
         resetSwipe(row);
         return;
       }
-      const note = row.querySelector('.reminder-notes');
-      if (!note) return;
       focusNoteRow(row);
-      if (!row.classList.contains('has-long-note')) return;
+      const note = row.querySelector('.reminder-notes');
+      if (!note || !row.classList.contains('has-long-note')) return;
       toggleNoteForRow(row, note);
     },
   }, [background, content]);
@@ -8160,7 +8200,7 @@ $('#smart-nav').addEventListener('click', (event) => {
 document.addEventListener('pointerdown', (event) => {
   if (event.button !== 0) return;
   const row = event.target.closest('.reminder');
-  if (!row || row.classList.contains('doc-row') || !row.querySelector('.reminder-notes')) return;
+  if (!row || row.classList.contains('doc-row')) return;
   if (event.target.closest('a, button, input, textarea, select')) return;
   focusNoteRow(row);
 }, true);
