@@ -2,6 +2,11 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v4.10.46
+
+- **Longer pull-to-refresh gesture** - On touch phones, refresh now requires roughly **160 px of finger travel**, double the previous distance. The drag cap was raised so the new threshold remains reachable, and the pill still tracks the pull and switches to **Release to refresh** only after the new threshold.
+- Service worker cache bumped to `workspace-v4.10.46`.
+
 ## What's New in v4.10.45
 
 - **First tap focuses, second tap expands** - A card now focuses on the first tap without opening its note. A second tap on the same long card expands it; a third collapses it while keeping focus and Reader size.

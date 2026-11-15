@@ -1093,8 +1093,8 @@ function pageScroller() {
 function screenScroller() {
   return PAGE_SCROLL_MEDIA.matches ? pageScroller() : $('#content');
 }
-const PULL_THRESHOLD = 56;
-const PULL_MAX = 90;
+const PULL_THRESHOLD = 112;
+const PULL_MAX = 180;
 const PULL_RESISTANCE = 0.7;
 const PULL_MIN_SPIN = 500;
 const PULL_START_OFFSET = -36;
