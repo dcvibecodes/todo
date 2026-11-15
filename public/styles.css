@@ -1694,12 +1694,22 @@ html.deleting-row #content { overflow-anchor: none; }
   white-space: pre-line;
 }
 
-html body .reminder-notes.is-expanded {
+html body .reminder-notes.is-expanded,
+.note-row.is-note-focused:not(.has-long-note) .reminder-notes {
   font-size: var(--reader-note-size, min(var(--card-body-size), 16px));
 }
-.reminder.is-note-expanded .reminder-title {
+.reminder.is-note-expanded .reminder-title,
+.note-row.is-note-focused:not(.has-long-note) .reminder-title {
   font-size: calc(var(--reader-note-size, min(var(--card-body-size), 16px)) + 2px);
 }
+
+.note-row.is-note-focused:not(.has-long-note) .reminder-notes {
+  -webkit-line-clamp: unset;
+  max-height: none;
+  overflow: visible;
+}
+
+.reminder.is-note-focused .swipe-content { background: var(--elev); }
 
 /* Note cards keep a compact two-line preview when collapsed, then swap to the
    full rich body when expanded. The block max-height avoids the line-clamp
@@ -1962,8 +1972,8 @@ body.sheet-open .fab {
 
 .reader-size {
   position: fixed;
-  right: 28px;
-  bottom: calc(28px + env(safe-area-inset-bottom));
+  right: max(33.5px, calc((100vw - min(54vw, 990px)) / 2 + 33.5px));
+  bottom: calc(96px + env(safe-area-inset-bottom));
   left: auto;
   z-index: 40;
   display: flex;
@@ -1983,15 +1993,15 @@ body.sheet-open .fab {
 }
 
 .reader-size-toggle {
-  width: 56px;
-  height: 56px;
+  width: 45px;
+  height: 45px;
   padding: 0;
   border: 0;
   border-radius: 50%;
   background: var(--accent);
   color: var(--accent-contrast);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18), 0 2px 6px rgba(0, 0, 0, 0.12);
-  font-size: 1rem;
+  font-size: 0.9rem;
   transition: background 0.15s, transform 0.15s, box-shadow 0.15s, opacity 0.15s;
 }
 
@@ -2006,10 +2016,6 @@ body.sheet-open .fab {
 .reader-size-step:hover,
 .reader-size-default:hover { background: var(--fill); color: var(--text); }
 
-body.reader-mode .fab {
-  opacity: 0;
-  pointer-events: none;
-}
 
 .reader-size-popover {
   position: absolute;
@@ -2057,6 +2063,15 @@ body.reader-mode .fab {
   padding: 0 10px;
   border-radius: 8px;
   font-size: 0.72rem;
+}
+
+.reader-size-title {
+  padding: 2px 4px 4px;
+  color: var(--text-3);
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .reader-size-value {
@@ -3088,7 +3103,7 @@ body.sheet-open .sidebar {
   }
 
   .reader-size {
-    right: max(28px, calc((100vw - min(54vw, 990px)) / 2 + 28px));
+    right: max(33.5px, calc((100vw - min(54vw, 990px)) / 2 + 33.5px));
   }
 
   .content {
@@ -3247,8 +3262,8 @@ body.sheet-open .sidebar {
   }
 
   .reader-size {
-    right: 20px;
-    bottom: calc(20px + env(safe-area-inset-bottom));
+    right: 25.5px;
+    bottom: calc(88px + env(safe-area-inset-bottom));
   }
 
 

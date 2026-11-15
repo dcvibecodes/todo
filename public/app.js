@@ -168,8 +168,13 @@ function storedReaderSize() {
   return raw == null || raw === '' ? null : normalizedReaderSize(raw);
 }
 
+function activeReaderNoteId() {
+  return focusedNoteId || expandedNoteId;
+}
+
 function expandedReaderFontSize() {
-  const found = expandedNoteId ? noteForId(expandedNoteId) : null;
+  const id = activeReaderNoteId();
+  const found = id ? noteForId(id) : null;
   return found ? parseFloat(getComputedStyle(found.note).fontSize) : null;
 }
 
@@ -201,9 +206,9 @@ function setReaderPopover(open) {
 function syncReaderControl() {
   const control = $('#reader-size');
   if (!control) return;
-  const visible = Boolean(expandedNoteId && noteForId(expandedNoteId));
+  const id = activeReaderNoteId();
+  const visible = Boolean(id && noteForId(id));
   control.hidden = !visible;
-  document.body.classList.toggle('reader-mode', visible);
   if (!visible) setReaderPopover(false);
   else updateReaderSizeUI(currentReaderSizeForUI());
 }
@@ -211,7 +216,8 @@ function syncReaderControl() {
 function applyReaderNoteSize(value, animate = false) {
   const hasValue = value !== null && value !== '' && Number.isFinite(Number(value));
   const size = hasValue ? normalizedReaderSize(value) : null;
-  const found = expandedNoteId ? noteForId(expandedNoteId) : null;
+  const id = activeReaderNoteId();
+  const found = id ? noteForId(id) : null;
   const note = found ? found.note : null;
   const row = found ? found.row : null;
   const title = row ? row.querySelector('.reminder-title') : null;
@@ -1507,6 +1513,7 @@ function route() {
     : null;
   if (view !== state.view) {
     expandedNoteId = null;
+    focusedNoteId = null;
     syncReaderControl();
   }
   if (view !== state.view) {
@@ -3358,6 +3365,7 @@ function noteRow(note, options = {}) {
         resetSwipe(row);
         return;
       }
+      focusNoteRow(row);
       if (!row.classList.contains('has-long-note')) return;
       const noteEl = row.querySelector('.reminder-notes');
       if (noteEl) toggleNoteForRow(row, noteEl);
@@ -4525,6 +4533,7 @@ async function rescheduleRow(reminder, date) {
 }
 
 let expandedNoteId = null;
+let focusedNoteId = null;
 let lastNoteScrollAt = 0;
 
 function noteForId(id) {
@@ -4621,6 +4630,79 @@ function collapseExpandedNote() {
   if (found) animateNote(found.note, false);
 }
 
+function animateNoteFocus(row, focus, onDone) {
+  const note = row ? row.querySelector('.reminder-notes') : null;
+  if (!note) { if (onDone) onDone(); return; }
+  const title = row.querySelector('.reminder-title');
+  note.getAnimations().forEach((animation) => animation.cancel());
+  if (title) title.getAnimations().forEach((animation) => animation.cancel());
+  note.style.height = '';
+  note.style.overflow = '';
+  const from = note.getBoundingClientRect().height;
+  const fromFont = getComputedStyle(note).fontSize;
+  const fromTitleFont = title ? getComputedStyle(title).fontSize : '';
+  row.classList.toggle('is-note-focused', focus);
+  const to = note.getBoundingClientRect().height;
+  const toFont = getComputedStyle(note).fontSize;
+  const toTitleFont = title ? getComputedStyle(title).fontSize : '';
+  if (MOTION_REDUCED.matches || (Math.abs(to - from) < 1 && fromFont === toFont)) {
+    if (onDone) onDone();
+    return;
+  }
+  const duration = 200;
+  const easing = 'ease-out';
+  note.style.overflow = 'hidden';
+  note.style.height = `${from}px`;
+  const heightAnim = note.animate(
+    [{ height: `${from}px` }, { height: `${to}px` }],
+    { duration, easing },
+  );
+  note.animate(
+    [{ fontSize: fromFont }, { fontSize: toFont }],
+    { duration, easing },
+  );
+  if (title && fromTitleFont && toTitleFont && fromTitleFont !== toTitleFont) {
+    title.animate(
+      [{ fontSize: fromTitleFont }, { fontSize: toTitleFont }],
+      { duration, easing },
+    );
+  }
+  const cleanup = () => {
+    note.style.height = '';
+    note.style.overflow = '';
+  };
+  heightAnim.onfinish = () => { cleanup(); if (onDone) onDone(); };
+  heightAnim.oncancel = cleanup;
+}
+
+function focusNoteRow(row) {
+  if (!row) return;
+  const id = row.dataset.reminderId;
+  if (focusedNoteId === id) return;
+  if (focusedNoteId) {
+    const previous = noteForId(focusedNoteId);
+    if (previous) {
+      if (previous.row.classList.contains('has-long-note')) previous.row.classList.remove('is-note-focused');
+      else animateNoteFocus(previous.row, false);
+    }
+  }
+  focusedNoteId = id;
+  if (row.classList.contains('has-long-note')) row.classList.add('is-note-focused');
+  else animateNoteFocus(row, true);
+  syncReaderControl();
+}
+
+function clearNoteFocus() {
+  if (!focusedNoteId) return;
+  const previous = noteForId(focusedNoteId);
+  focusedNoteId = null;
+  if (previous) {
+    if (previous.row.classList.contains('has-long-note')) previous.row.classList.remove('is-note-focused');
+    else animateNoteFocus(previous.row, false);
+  }
+  syncReaderControl();
+}
+
 function toggleNoteForRow(row, note) {
   const id = row.dataset.reminderId;
   if (expandedNoteId === id) {
@@ -4635,13 +4717,17 @@ function toggleNoteForRow(row, note) {
 
 function syncNoteExpanders() {
   let expandedSeen = false;
+  let focusedSeen = false;
   for (const note of $$('.reminder-notes')) {
     const row = note.closest('.reminder');
     if (!row) continue;
     const id = row.dataset.reminderId;
     const expanded = expandedNoteId === id;
+    const focused = focusedNoteId === id;
     note.classList.toggle('is-expanded', expanded);
     row.classList.toggle('is-note-expanded', expanded);
+    row.classList.toggle('is-note-focused', focused);
+    if (focused) focusedSeen = true;
     if (!expanded) {
       note.style.height = '';
       note.style.overflow = '';
@@ -4651,6 +4737,7 @@ function syncNoteExpanders() {
     if (expandable && expanded) expandedSeen = true;
   }
   if (expandedNoteId && !expandedSeen) expandedNoteId = null;
+  if (focusedNoteId && !focusedSeen) focusedNoteId = null;
   syncReaderControl();
 }
 
@@ -8364,6 +8451,7 @@ $('#reader-size-up').addEventListener('click', () => adjustReaderSize(1));
 $('#reader-size-default').addEventListener('click', () => applyReaderNoteSize(null, true));
 document.addEventListener('click', (event) => {
   if (!event.target.closest('#reader-size')) setReaderPopover(false);
+  if (focusedNoteId && !event.target.closest('.reminder, #reader-size')) clearNoteFocus();
 });
 document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape') setReaderPopover(false);
