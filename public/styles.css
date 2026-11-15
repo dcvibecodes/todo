@@ -772,7 +772,7 @@ body.gate-open {
   flex: 1;
   min-width: 0;
   padding-left: 2px;
-  font-size: min(calc(var(--card-body-size) + 2px), 19.2px);
+  font-size: min(calc(var(--card-body-size) + 2px), 18px);
   font-weight: 550;
   line-height: 1.35;
   overflow: hidden;
@@ -871,7 +871,7 @@ body.gate-open {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: min(calc(var(--card-body-size) + 2px), 19.2px);
+  font-size: min(calc(var(--card-body-size) + 2px), 18px);
   font-weight: 550;
   line-height: 1.35;
 }
@@ -1603,7 +1603,7 @@ html.deleting-row #content { overflow-anchor: none; }
 .reminder-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 
 .reminder-title {
-  font-size: min(calc(var(--card-body-size) + 2px), 19.2px);
+  font-size: min(calc(var(--card-body-size) + 2px), 18px);
   font-weight: 550;
   line-height: 1.35;
   overflow-wrap: anywhere;
@@ -1662,11 +1662,11 @@ html.deleting-row #content { overflow-anchor: none; }
 .meta-completed .ic { width: 12px; height: 12px; }
 
 :root {
-  --card-body-size: 11.575pt;
+  --card-body-size: 11.125pt;
 }
 
 .reminder-notes {
-  font-size: min(var(--card-body-size), 17.2px);
+  font-size: min(var(--card-body-size), 16px);
   line-height: 1.4;
   color: var(--text-2);
   display: -webkit-box;
@@ -1695,10 +1695,10 @@ html.deleting-row #content { overflow-anchor: none; }
 }
 
 html body .reminder-notes.is-expanded {
-  font-size: var(--reader-note-size, min(var(--card-body-size), 17.2px));
+  font-size: var(--reader-note-size, min(var(--card-body-size), 16px));
 }
 .reminder.is-note-expanded .reminder-title {
-  font-size: calc(var(--reader-note-size, min(var(--card-body-size), 17.2px)) + 2px);
+  font-size: calc(var(--reader-note-size, min(var(--card-body-size), 16px)) + 2px);
 }
 
 /* Note cards keep a compact two-line preview when collapsed, then swap to the
@@ -1752,7 +1752,7 @@ html body .reminder-notes.is-expanded {
    past the hard max-height and clip it mid-line. */
 .note-row .reminder-note-preview .note-md-heading {
   margin: 0;
-  line-height: calc(min(var(--card-body-size), 17.2px) * 1.4);
+  line-height: calc(min(var(--card-body-size), 16px) * 1.4);
 }
 .note-row .reminder-note-preview ul,
 .note-row .reminder-note-preview ol { margin: 0; }
@@ -2208,7 +2208,7 @@ body.sheet-open .sidebar {
 }
 
 #editor .e-title {
-  font-size: 19.2px;
+  font-size: 18px;
   font-weight: 550;
   line-height: 1.35;
   min-height: 64px;
@@ -2226,7 +2226,7 @@ body.sheet-open .sidebar {
 #editor .e-notes {
   min-height: 48px;
   max-height: 30dvh;
-  font-size: 17.2px;
+  font-size: 16px;
   resize: none;
   overflow-y: auto;
 }
@@ -3055,8 +3055,8 @@ body.sheet-open .sidebar {
 [data-density="compact"] .swipe-content { min-height: 0; padding: 8px 12px; gap: 10px; }
 [data-density="compact"] .reminder-due { font-size: 0.7rem; }
 [data-density="compact"] .reminder-meta { font-size: 0.7rem; gap: 8px; }
-[data-density="compact"] .reminder-notes { font-size: min(calc(var(--card-body-size) - 0.75pt), 17.2px); }
-[data-density="compact"] .reminder-title { font-size: min(calc(var(--card-body-size) - 0.75pt + 2px), 19.2px); }
+[data-density="compact"] .reminder-notes { font-size: min(calc(var(--card-body-size) - 0.75pt), 16px); }
+[data-density="compact"] .reminder-title { font-size: min(calc(var(--card-body-size) - 0.75pt + 2px), 18px); }
 [data-density="compact"] .check { width: 16px; height: 16px; }
 [data-density="compact"] .check .ic { width: 9px; height: 9px; }
 [data-density="compact"] .content { padding-top: 10px; }
@@ -3513,7 +3513,7 @@ body.sheet-open .sidebar {
   background: transparent;
   color: var(--text-2);
   font-family: inherit;
-  font-size: 0.8125rem;
+  font-size: min(calc(var(--card-body-size) + 2px), 18px);
   font-weight: 600;
   cursor: pointer;
 }
@@ -3585,7 +3585,7 @@ body.sheet-open .sidebar {
 .doc-download { text-decoration: none; }
 
 .doc-row .reminder-title {
-  font-size: min(calc(var(--card-body-size) + 2px), 19.2px);
+  font-size: min(calc(var(--card-body-size) + 2px), 18px);
   line-height: 1.35;
 }
 
@@ -3609,7 +3609,7 @@ body.sheet-open .sidebar {
   background: transparent;
   color: var(--text);
   font-family: inherit;
-  font-size: 1.0625rem;
+  font-size: 18px;
   font-weight: 400;
   line-height: 1.35;
   resize: none;
@@ -3824,7 +3824,7 @@ body.sheet-open .sidebar {
   display: block;
   width: 100%;
   min-height: calc(1.25em + 22px);
-  font-size: 1.25rem;
+  font-size: 18px;
   line-height: 1.25;
   font-weight: 600;
   resize: none;
@@ -3833,7 +3833,7 @@ body.sheet-open .sidebar {
   overflow-wrap: anywhere;
 }
 
-#note-editor .note-rich { font-size: 17.2px; }
+#note-editor .note-rich { font-size: 16px; }
 
 #note-editor .note-body {
   min-height: 45dvh;
@@ -3845,7 +3845,7 @@ body.sheet-open .sidebar {
   #note-editor .sheet-card { width: 100%; }
   /* iOS auto-zooms any focused field below 16px. Keep the editor body and
      link field at 16px so tapping never changes the viewport scale. */
-  #note-editor .note-rich { font-size: 17.2px; }
+  #note-editor .note-rich { font-size: 16px; }
   #note-editor #note-link-url { font-size: 16px; }
 }
 
@@ -4031,13 +4031,13 @@ body.sheet-open .sidebar {
     font-size: 16px !important;
   }
 
-  html body #editor .e-title { font-size: 19.2px !important; }
-  html body #editor .e-notes { font-size: 17.2px !important; }
-  html body #doc-name { font-size: 19.2px !important; }
-  html body #doc-description { font-size: 17.2px !important; }
-  html body #note-editor .note-rich { font-size: 17.2px !important; }
+  html body #editor .e-title { font-size: 18px !important; }
+  html body #editor .e-notes { font-size: 16px !important; }
+  html body #doc-name { font-size: 18px !important; }
+  html body #doc-description { font-size: 16px !important; }
+  html body #note-editor .note-rich { font-size: 16px !important; }
   html body #note-editor .e-title {
-    font-size: 19.2px !important;
+    font-size: 18px !important;
   }
   /* Sort/Order values use the notes-preview size, not title size. */
   html body .sort-control select {
@@ -4339,7 +4339,7 @@ button.link-chip { border: 0; font-family: inherit; cursor: pointer; }
   overflow: hidden;
   white-space: pre-line;
   color: var(--text-2);
-  font-size: min(var(--card-body-size), 17.2px);
+  font-size: min(var(--card-body-size), 16px);
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
@@ -4353,7 +4353,7 @@ button.link-chip { border: 0; font-family: inherit; cursor: pointer; }
   border-radius: var(--radius-sm);
   background: var(--elev);
   color: var(--text);
-  font-size: 17.2px;
+  font-size: 16px;
   line-height: 1.4;
   resize: vertical;
 }

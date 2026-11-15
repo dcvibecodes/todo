@@ -2,6 +2,12 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v4.10.35
+
+- **Text-size maximum set to 12 pt** - The global card slider now runs 10.25–12 pt, centred/defaulting at 11.125 pt. Card body caps at 16 px and titles at 18 px; editors use 16 px body / 18 px titles. Reader mode remains independent and can still grow larger.
+- **Tenant-bar labels follow the slider** - Reminders, Notes and Docs labels now use the card-title size formula and weight, capped at 18 px, matching the folder/smart-group labels.
+- Service worker cache bumped to `workspace-v4.10.35`.
+
 ## What's New in v4.10.34
 
 - **Reader text size for expanded notes** - Expanded note cards no longer jump to the maximum size by default. They follow the global card slider until you set a reader size with the floating **Aa** control, which appears only while a note is expanded. The chosen size persists on the device for every future expanded note; A−/A+ adjust it smoothly.
