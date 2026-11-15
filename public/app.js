@@ -4433,23 +4433,42 @@ function ensureNoteRowVisible(row) {
 }
 
 function animateNote(note, expand, onDone) {
+  const row = note.closest('.reminder');
+  const title = row ? row.querySelector('.reminder-title') : null;
   note.getAnimations().forEach((animation) => animation.cancel());
+  if (title) title.getAnimations().forEach((animation) => animation.cancel());
   note.style.height = '';
   note.style.overflow = '';
   const from = note.getBoundingClientRect().height;
+  const fromFont = getComputedStyle(note).fontSize;
+  const fromTitleFont = title ? getComputedStyle(title).fontSize : null;
   note.classList.toggle('is-expanded', expand);
-  note.closest('.reminder')?.classList.toggle('is-note-expanded', expand);
+  row?.classList.toggle('is-note-expanded', expand);
   const to = note.getBoundingClientRect().height;
+  const toFont = getComputedStyle(note).fontSize;
+  const toTitleFont = title ? getComputedStyle(title).fontSize : null;
   if (MOTION_REDUCED.matches || Math.abs(to - from) < 1) {
     if (onDone) onDone();
     return;
   }
   note.style.overflow = 'hidden';
   note.style.height = `${from}px`;
+  const duration = 200;
+  const easing = 'ease-out';
   const anim = note.animate(
     [{ height: `${from}px` }, { height: `${to}px` }],
-    { duration: 200, easing: 'ease-out' },
+    { duration, easing },
   );
+  note.animate(
+    [{ fontSize: fromFont }, { fontSize: toFont }],
+    { duration, easing },
+  );
+  if (title && fromTitleFont && toTitleFont && fromTitleFont !== toTitleFont) {
+    title.animate(
+      [{ fontSize: fromTitleFont }, { fontSize: toTitleFont }],
+      { duration, easing },
+    );
+  }
   const cleanup = () => {
     note.style.height = '';
     note.style.overflow = '';
