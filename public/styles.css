@@ -1565,7 +1565,7 @@ html.deleting-row #content { overflow-anchor: none; }
 .reminder-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 
 .reminder-title {
-  font-size: min(calc(var(--card-body-size) + 2px), 30.67px);
+  font-size: min(calc(var(--card-body-size) + 2px), 19.2px);
   font-weight: 550;
   line-height: 1.35;
   overflow-wrap: anywhere;
@@ -1623,10 +1623,10 @@ html.deleting-row #content { overflow-anchor: none; }
 .meta-completed { display: inline-flex; align-items: center; gap: 5px; }
 .meta-completed .ic { width: 12px; height: 12px; }
 
-:root { --card-body-size: 11.25pt; }
+:root { --card-body-size: 11.575pt; }
 
 .reminder-notes {
-  font-size: min(var(--card-body-size), 28.67px);
+  font-size: min(var(--card-body-size), 17.2px);
   line-height: 1.4;
   color: var(--text-2);
   display: -webkit-box;
@@ -1705,7 +1705,7 @@ html.deleting-row #content { overflow-anchor: none; }
    past the hard max-height and clip it mid-line. */
 .note-row .reminder-note-preview .note-md-heading {
   margin: 0;
-  line-height: calc(min(var(--card-body-size), 28.67px) * 1.4);
+  line-height: calc(min(var(--card-body-size), 17.2px) * 1.4);
 }
 .note-row .reminder-note-preview ul,
 .note-row .reminder-note-preview ol { margin: 0; }
@@ -2087,7 +2087,7 @@ body.sheet-open .sidebar {
 }
 
 #editor .e-title {
-  font-size: 30.67px;
+  font-size: 19.2px;
   font-weight: 550;
   line-height: 1.35;
   min-height: 64px;
@@ -2105,7 +2105,7 @@ body.sheet-open .sidebar {
 #editor .e-notes {
   min-height: 48px;
   max-height: 30dvh;
-  font-size: 28.67px;
+  font-size: 17.2px;
   resize: none;
   overflow-y: auto;
 }
@@ -2934,8 +2934,8 @@ body.sheet-open .sidebar {
 [data-density="compact"] .swipe-content { min-height: 0; padding: 8px 12px; gap: 10px; }
 [data-density="compact"] .reminder-due { font-size: 0.7rem; }
 [data-density="compact"] .reminder-meta { font-size: 0.7rem; gap: 8px; }
-[data-density="compact"] .reminder-notes { font-size: min(calc(var(--card-body-size) - 0.75pt), 28.67px); }
-[data-density="compact"] .reminder-title { font-size: min(calc(var(--card-body-size) - 0.75pt + 2px), 30.67px); }
+[data-density="compact"] .reminder-notes { font-size: min(calc(var(--card-body-size) - 0.75pt), 17.2px); }
+[data-density="compact"] .reminder-title { font-size: min(calc(var(--card-body-size) - 0.75pt + 2px), 19.2px); }
 [data-density="compact"] .check { width: 16px; height: 16px; }
 [data-density="compact"] .check .ic { width: 9px; height: 9px; }
 [data-density="compact"] .content { padding-top: 10px; }
@@ -3464,7 +3464,7 @@ body.sheet-open .sidebar {
 .doc-download { text-decoration: none; }
 
 .doc-row .reminder-title {
-  font-size: min(calc(var(--card-body-size) + 2px), 30.67px);
+  font-size: min(calc(var(--card-body-size) + 2px), 19.2px);
   line-height: 1.35;
 }
 
@@ -3712,7 +3712,7 @@ body.sheet-open .sidebar {
   overflow-wrap: anywhere;
 }
 
-#note-editor .note-rich { font-size: 28.67px; }
+#note-editor .note-rich { font-size: 17.2px; }
 
 #note-editor .note-body {
   min-height: 45dvh;
@@ -3724,7 +3724,7 @@ body.sheet-open .sidebar {
   #note-editor .sheet-card { width: 100%; }
   /* iOS auto-zooms any focused field below 16px. Keep the editor body and
      link field at 16px so tapping never changes the viewport scale. */
-  #note-editor .note-rich { font-size: 28.67px; }
+  #note-editor .note-rich { font-size: 17.2px; }
   #note-editor #note-link-url { font-size: 16px; }
 }
 
@@ -3910,13 +3910,13 @@ body.sheet-open .sidebar {
     font-size: 16px !important;
   }
 
-  html body #editor .e-title { font-size: 30.67px !important; }
-  html body #editor .e-notes { font-size: 28.67px !important; }
-  html body #doc-name { font-size: 30.67px !important; }
-  html body #doc-description { font-size: 28.67px !important; }
-  html body #note-editor .note-rich { font-size: 28.67px !important; }
+  html body #editor .e-title { font-size: 19.2px !important; }
+  html body #editor .e-notes { font-size: 17.2px !important; }
+  html body #doc-name { font-size: 19.2px !important; }
+  html body #doc-description { font-size: 17.2px !important; }
+  html body #note-editor .note-rich { font-size: 17.2px !important; }
   html body #note-editor .e-title {
-    font-size: 30.67px !important;
+    font-size: 19.2px !important;
   }
   /* Sort/Order values use the notes-preview size, not title size. */
   html body .sort-control select {
@@ -4218,7 +4218,7 @@ button.link-chip { border: 0; font-family: inherit; cursor: pointer; }
   overflow: hidden;
   white-space: pre-line;
   color: var(--text-2);
-  font-size: min(var(--card-body-size), 28.67px);
+  font-size: min(var(--card-body-size), 17.2px);
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
@@ -4232,7 +4232,7 @@ button.link-chip { border: 0; font-family: inherit; cursor: pointer; }
   border-radius: var(--radius-sm);
   background: var(--elev);
   color: var(--text);
-  font-size: 28.67px;
+  font-size: 17.2px;
   line-height: 1.4;
   resize: vertical;
 }
@@ -4526,7 +4526,7 @@ button.link-chip { border: 0; font-family: inherit; cursor: pointer; }
 
 .settings-range-center {
   position: absolute;
-  left: 8.89%; /* default 11.25 pt within 10.25–21.5 */
+  left: 50%;
   top: 50%;
   width: 2px;
   height: 16px;

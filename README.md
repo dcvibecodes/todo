@@ -2,6 +2,13 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v4.10.24
+
+- **Corrected 75% text range** - The old 12.25 pt maximum now sits at roughly 75% of the slider travel. New range is **10.25–12.9 pt**, with the centre/default at **11.575 pt**. Card body max is **17.2 px**, card title max **19.2 px**, and editor body/title sizes are **17.2 / 19.2 px**, so cards never exceed editor text.
+- The centre marker is back at 50% and the default is the new midpoint; the saved 11.25 pt value now sits slightly left of centre.
+- The bare slider and 20%-smaller completion circle from v4.10.23 remain.
+- Service worker cache bumped to `workspace-v4.10.24`.
+
 ## What's New in v4.10.23
 
 - **Much larger text range** - The slider now runs from 10.25 to **21.5 pt** (75% above the previous 12.25 pt maximum, rounded to the next 0.25 step). Card body max is **28.67 px**, card title max **30.67 px**, and editor body/title sizes are **28.67 / 30.67 px** so cards never exceed editor text.
