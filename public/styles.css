@@ -1662,7 +1662,7 @@ html.deleting-row #content { overflow-anchor: none; }
 .meta-completed .ic { width: 12px; height: 12px; }
 
 :root {
-  --card-body-size: 10.1pt;
+  --card-body-size: 10.5pt;
 }
 
 .reminder-notes {
@@ -1709,7 +1709,10 @@ html body .reminder-notes.is-expanded,
   overflow: visible;
 }
 
-.reminder.is-note-focused .swipe-content { background: var(--elev); }
+.reminder.is-note-focused .swipe-content {
+  background: color-mix(in srgb, var(--c) 9%, var(--surface));
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--c) 58%, transparent);
+}
 
 /* Note cards keep a compact two-line preview when collapsed, then swap to the
    full rich body when expanded. The block max-height avoids the line-clamp

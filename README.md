@@ -2,6 +2,13 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v4.10.40
+
+- **Focus follows every pressed card** - Card focus now starts on pointer-down for mouse, touch and pen, so the last card you press is always the focused one. A clearer list-colour outline makes the focused card visible in both themes.
+- **Earliest text size is the minimum** - The original card note size was 12 px; the slider minimum is now 9 pt (12 px), with the maximum still 12 pt and the centre/default at 10.5 pt. Reader minimum is also 12 px.
+- **Default-size expansion animates** - Overflow is measured before focus styling, so long notes keep their full height expand/collapse animation even when reader text size equals the default.
+- Service worker cache bumped to `workspace-v4.10.40`.
+
 ## What's New in v4.10.39
 
 - **Cleaner Text size label** - The reader popover header is now a subtle sentence-case **Text size** label with a soft divider.

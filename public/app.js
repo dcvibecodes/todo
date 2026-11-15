@@ -131,12 +131,12 @@ const LIST_PROGRESS_MODES = ['bar', 'ring', 'off'];
 const LIST_PROGRESS_RANGES = ['all', '30d'];
 const SETTINGS_PROGRESS_KEYS = ['list_progress', 'list_progress_range'];
 const SETTINGS_BODY_KEYS = ['card_body_size'];
-const CARD_BODY_SIZE_DEFAULT = 10.1;
-const CARD_BODY_SIZE_MIN = 8.2;
+const CARD_BODY_SIZE_DEFAULT = 10.5;
+const CARD_BODY_SIZE_MIN = 9;
 const CARD_BODY_SIZE_MAX = 12;
 const READER_SIZE_KEY = 'todo.readerNoteSize';
 const READER_SIZE_DEFAULT = 16;
-const READER_SIZE_MIN = 8.2;
+const READER_SIZE_MIN = 12;
 const READER_SIZE_MAX = 28.8;
 const READER_SIZE_STEP = 1.2;
 const RETENTION_ORDER = { '1m': 1, '3m': 3, '6m': 6, '12m': 12, forever: Infinity };
@@ -4686,6 +4686,15 @@ function focusNoteRow(row) {
       else animateNoteFocus(previous.row, false);
     }
   }
+  // Measure overflow without the short-note focus unclamp before deciding
+  // whether this card can expand.
+  const note = row.querySelector('.reminder-notes');
+  row.classList.remove('is-note-focused');
+  if (note) {
+    const expandable = note.classList.contains('is-expanded')
+      || note.scrollHeight > note.clientHeight + 1;
+    row.classList.toggle('has-long-note', expandable);
+  }
   focusedNoteId = id;
   if (row.classList.contains('has-long-note')) row.classList.add('is-note-focused');
   else animateNoteFocus(row, true);
@@ -8128,7 +8137,7 @@ $('#smart-nav').addEventListener('click', (event) => {
 });
 
 document.addEventListener('pointerdown', (event) => {
-  if (event.pointerType === 'mouse' || event.button !== 0) return;
+  if (event.button !== 0) return;
   const row = event.target.closest('.note-row');
   if (!row || event.target.closest('a, button, input, textarea, select')) return;
   focusNoteRow(row);
