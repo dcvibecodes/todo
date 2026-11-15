@@ -131,9 +131,10 @@ const LIST_PROGRESS_MODES = ['bar', 'ring', 'off'];
 const LIST_PROGRESS_RANGES = ['all', '30d'];
 const SETTINGS_PROGRESS_KEYS = ['list_progress', 'list_progress_range'];
 const SETTINGS_BODY_KEYS = ['card_body_size'];
-const CARD_BODY_SIZE_DEFAULT = 10.5;
+const CARD_BODY_SIZE_KEY = 'todo.cardBodySize';
+const CARD_BODY_SIZE_DEFAULT = 10.125;
 const CARD_BODY_SIZE_MIN = 9;
-const CARD_BODY_SIZE_MAX = 12;
+const CARD_BODY_SIZE_MAX = 11.25;
 const READER_SIZE_KEY = 'todo.readerNoteSize';
 const READER_SIZE_DEFAULT = 16;
 const READER_SIZE_MIN = 12;
@@ -149,11 +150,21 @@ function normalizedCardBodySize(value) {
   return Math.min(CARD_BODY_SIZE_MAX, Math.max(CARD_BODY_SIZE_MIN, n));
 }
 
-function applyCardBodySize(value) {
+function storedCardBodySize() {
+  const raw = localStorage.getItem(CARD_BODY_SIZE_KEY);
+  return raw == null || raw === '' ? null : normalizedCardBodySize(raw);
+}
+
+function deviceCardBodySize(fallback) {
+  return storedCardBodySize() ?? normalizedCardBodySize(fallback);
+}
+
+function applyCardBodySize(value, persist = false) {
   const size = normalizedCardBodySize(value);
   document.documentElement.style.setProperty('--card-body-size', `${size}pt`);
   const label = $('#set-card-body-size-value');
   if (label) label.textContent = `${size.toFixed(2).replace(/\.?0+$/, '')} pt`;
+  if (persist) localStorage.setItem(CARD_BODY_SIZE_KEY, String(size));
   return size;
 }
 
@@ -1012,7 +1023,7 @@ async function loadState() {
   state.attachments = data.attachments || [];
   applyDocsFormatUI();
   state.settings = data.settings || {};
-  applyCardBodySize(state.settings.card_body_size);
+  applyCardBodySize(deviceCardBodySize(state.settings.card_body_size));
   await syncListProgressWithServer();
   await syncSortWithServer();
   if (state.lastListId && !listById(state.lastListId)) {
@@ -7695,8 +7706,9 @@ applyReaderNoteSize(localStorage.getItem(READER_SIZE_KEY), false);
   }
   const s = state.settings;
   $('#set-density').value = localStorage.getItem(DENSITY_KEY) === 'compact' ? 'compact' : 'comfortable';
-  $('#set-card-body-size').value = String(normalizedCardBodySize(s.card_body_size));
-  applyCardBodySize(s.card_body_size);
+  const cardBodySize = deviceCardBodySize(s.card_body_size);
+  $('#set-card-body-size').value = String(cardBodySize);
+  applyCardBodySize(cardBodySize);
   $('#set-default-model').value = ['floating', 'anchored'].includes(s.default_time_model)
     ? s.default_time_model : 'floating';
   renderSettingsZones(s.default_time_zone || '');
@@ -7747,7 +7759,8 @@ async function saveAppSettings() {
   const bodySizeChanged = changed(SETTINGS_BODY_KEYS);
   const appearanceDirty = appearanceIsDirty();
   const sortChanged = sortIsDirty();
-  if (!defaultsChanged && !notifyChanged && !progressChanged && !uploadChanged && !bodySizeChanged && !appearanceDirty && !sortChanged) return;
+  const serverChanged = defaultsChanged || notifyChanged || progressChanged || uploadChanged;
+  if (!serverChanged && !bodySizeChanged && !appearanceDirty && !sortChanged) return;
 
   const saveBtn = $('#settings-save');
   const startedAt = Date.now();
@@ -7757,11 +7770,13 @@ async function saveAppSettings() {
   $('#settings-sheet').setAttribute('aria-busy', 'true');
   try {
     let message = '';
-    if (defaultsChanged || notifyChanged || progressChanged || uploadChanged || bodySizeChanged) {
+    if (serverChanged) {
       try {
+        const serverSettings = { ...current };
+        delete serverSettings.card_body_size;
         const result = await api('/api/settings', {
           method: 'POST',
-          body: { settings: current },
+          body: { settings: serverSettings },
         });
         state.settings = result.settings || state.settings;
         settingsSnapshot = current;
@@ -7775,8 +7790,6 @@ async function saveAppSettings() {
           message = 'Saved. Applies to new items only — existing items were not changed.';
         } else if (uploadChanged) {
           message = 'Saved. Upload optimization applies to new uploads only.';
-        } else if (bodySizeChanged) {
-          message = 'Saved — card text size applies to all tenants.';
         } else {
           message = 'Saved — folder progress now follows you on all devices.';
         }
@@ -7785,6 +7798,13 @@ async function saveAppSettings() {
         settingsMessage(err.message);
         return;
       }
+    }
+    if (bodySizeChanged) {
+      applyCardBodySize(current.card_body_size, true);
+      settingsSnapshot = current;
+      message = message
+        ? `${message} Card text size applies to this device.`
+        : 'Saved — card text size applies to this device.';
     }
     if (sortChanged) {
       const sort = sortValues();

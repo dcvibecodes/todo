@@ -700,8 +700,8 @@ const SETTING_DEFAULTS = {
   // Lossy image/PDF optimization for new uploads. Text gzip is lossless and
   // always applied. The owner can turn this off for signed/archival files.
   optimize_uploads: '1',
-  // Body/preview text size for cards in all tenants. 10.5pt = midpoint of 9–12.
-  card_body_size: '10.5',
+  // Fallback card text size for a new device. 10.125pt = midpoint of 9–11.25.
+  card_body_size: '10.125',
   // Per-view sorting, synced across devices. JSON string:
   // { default: {field, dir} | null, overrides: { "list:5": {field, dir},
   // "today": {...}, ... } }. Empty means no device has seeded it yet; the
@@ -826,7 +826,7 @@ function validateSetting(key, value) {
       return null;
     case 'card_body_size': {
       const n = Number(value);
-      if (!Number.isFinite(n) || n < 9 || n > 12) return 'Must be 9 to 12 pt';
+      if (!Number.isFinite(n) || n < 9 || n > 11.25) return 'Must be 9 to 11.25 pt';
       return null;
     }
     default:

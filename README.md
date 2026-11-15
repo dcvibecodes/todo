@@ -2,6 +2,13 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v4.10.43
+
+- **Sort/Order spacing** - Sort/Order moves up 4 px and gains a permanent 10 px gap below, on desktop and mobile. Cards scrolling under the sticky header no longer touch it.
+- **Slider maximum 11.25 pt** - Range is now **9–11.25 pt**, centre/default **10.125 pt**. Cards reach **15 px body / 17 px title** at maximum; editors stay **16 px / 18 px**.
+- **Device-specific card size** - The selected size is stored in `localStorage` per device and no longer saved through server settings. New devices fall back to the server default; Save/Cancel still preview and revert correctly.
+- Service worker cache bumped to `workspace-v4.10.43`.
+
 ## What's New in v4.10.42
 
 - **Touch focus uses the hover background** - Focused cards now get the same quiet background as desktop hover, with no border or tint. It also works for one-line reminder notes.
