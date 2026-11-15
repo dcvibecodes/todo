@@ -826,7 +826,7 @@ function validateSetting(key, value) {
       return null;
     case 'card_body_size': {
       const n = Number(value);
-      if (!Number.isFinite(n) || n < 10.25 || n > 12.25) return 'Must be 10.25 to 12.25 pt';
+      if (!Number.isFinite(n) || n < 10.25 || n > 21.5) return 'Must be 10.25 to 21.5 pt';
       return null;
     }
     default:
