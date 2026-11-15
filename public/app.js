@@ -7928,10 +7928,12 @@ function canStartTenantSwipe(target) {
   if (state.search || $('#search-form').classList.contains('open')) return false;
   if ($$('.sheet').some((sheet) => !sheet.hidden)) return false;
   if (!target) return false;
-  // The tenant bar and smart-view rows are safe gesture surfaces. Folder rows
-  // keep their own left-swipe Delete gesture.
-  if (target.closest('.tenant-switch, .nav-row')) return true;
-  return !target.closest('button, a, input, textarea, select, [contenteditable="true"], .reminder, .list-row, .day-peek, .sidebar-head, .sidebar-foot');
+  // The tenant bar, smart-view rows and folder rows are safe gesture
+  // surfaces. Folder rows only reserve their drag handle; the rest of the row
+  // still opens the folder on tap.
+  if (target.closest('.list-grip')) return false;
+  if (target.closest('.tenant-switch, .nav-row, .list-row')) return true;
+  return !target.closest('button, a, input, textarea, select, [contenteditable="true"], .reminder, .day-peek, .sidebar-head, .sidebar-foot');
 }
 
 tenantSwipeSurface.addEventListener('pointerdown', (event) => {
