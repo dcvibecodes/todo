@@ -3151,6 +3151,13 @@ function noteRow(note, options = {}) {
       attachments.length
         ? el('span', { class: 'meta-files', text: `${attachments.length} file${attachments.length === 1 ? '' : 's'}` })
         : null,
+      formatAddedDate(note.created_at)
+        ? el('span', {
+          class: 'meta-added',
+          text: `Added ${formatAddedDate(note.created_at)}`,
+          title: formatRecordDate(note.created_at),
+        })
+        : null,
     ]),
     note.body ? el('div', { class: 'reminder-notes' }, [
       el('div', {
@@ -4525,6 +4532,13 @@ function reminderRow(reminder, options = {}) {
     meta.append(el('span', {
       class: 'meta-snoozed',
       html: ICON('clock', 'ic') + `<span>${escapeHtml(snoozeLabel(reminder.snoozed_until))}</span>`,
+    }));
+  }
+  if (formatAddedDate(reminder.created_at)) {
+    meta.append(el('span', {
+      class: 'meta-added',
+      text: `Added ${formatAddedDate(reminder.created_at)}`,
+      title: formatRecordDate(reminder.created_at),
     }));
   }
 

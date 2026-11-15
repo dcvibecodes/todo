@@ -2,6 +2,11 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v4.10.22
+
+- **Added dates on every card** - Notes and Reminders cards now show the muted `Added <date>` metadata that Docs cards already had. The exact local date/time remains available as the hover title.
+- Service worker cache bumped to `workspace-v4.10.22`.
+
 ## What's New in v4.10.21
 
 - **Code blocks in Notes** - New toolbar button converts the current block or selection into a monospaced code block with subtle background, padding, rounded corners and preserved whitespace/line breaks. Clicking it again restores normal text.

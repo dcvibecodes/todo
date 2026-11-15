@@ -1582,6 +1582,7 @@ html.deleting-row #content { overflow-anchor: none; }
 
 .meta-list { display: inline-flex; align-items: center; gap: 5px; }
 .meta-files { display: inline-flex; align-items: center; }
+.meta-added { display: inline-flex; align-items: center; }
 
 .meta-dot {
   width: 7px;
