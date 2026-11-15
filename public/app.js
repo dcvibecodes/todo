@@ -1331,12 +1331,35 @@ function animateScreenTransition(push, snapshot) {
   animation.oncancel = finish;
 }
 
+function finishClosingSheetsForRoute() {
+  // A mobile sheet stays visible for its 280ms exit animation. If the user
+  // navigates during that window, treat it as already closed so the screen
+  // transition is not downgraded to the fallback animation.
+  for (const sheet of $$('.sheet')) {
+    if (closingSheets.has(sheet)) finishSheetClose(sheet);
+  }
+}
+
 function route() {
   finishNavAnimation();
+  finishClosingSheetsForRoute();
   const fromHistoryBack = historyBackHash !== null && historyBackHash === location.hash;
   historyBackHash = null;
   const view = parseRoute();
   if (view !== 'home') setSearchOverlay(false);
+  // Clear search before deciding whether this navigation can slide. Previously
+  // the search was cleared after canSlide was computed, so leaving search
+  // results always took the fallback animation.
+  if (state.search && view !== state.view) {
+    if (state.searchKeepNavigation) state.searchKeepNavigation = false;
+    else {
+      state.search = '';
+      $('#search').value = '';
+      $('#main-search').value = '';
+      clearSearchResults();
+      setSearchOverlay(false);
+    }
+  }
   const previousView = state.view;
   const previousScreen = document.body.dataset.screen;
   if (PAGE_SCROLL_MEDIA.matches && previousScreen) {
@@ -1347,25 +1370,12 @@ function route() {
   const slidePop = previousView !== 'home' && previousScreen === 'detail'
     && view === 'home' && !state.search && !fromHistoryBack;
   const canSlide = (slidePush || slidePop) && NAV_MOBILE.matches
-    && !MOTION_REDUCED.matches
-    && !$$('.sheet').some((sheet) => !sheet.hidden);
+    && !MOTION_REDUCED.matches;
   const snapshot = canSlide
     ? screenSnapshot(slidePush ? '.sidebar' : '.main', slidePush ? 20 : 35)
     : null;
   if (view !== state.view) {
     expandedNoteId = null;
-  }
-  // Search is global now, so navigating to a list or smart view leaves the
-  // results behind unless the search itself caused the jump to All.
-  if (state.search && view !== state.view) {
-    if (state.searchKeepNavigation) state.searchKeepNavigation = false;
-    else {
-      state.search = '';
-      $('#search').value = '';
-      $('#main-search').value = '';
-      clearSearchResults();
-      setSearchOverlay(false);
-    }
   }
   if (view !== state.view) {
     state.showCompleted = typeof view === 'number' ? getShowCompleted(view) : false;

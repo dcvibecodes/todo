@@ -2,6 +2,11 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v4.10.25
+
+- **Consistent folder slide on phones** - Fixed the intermittent alternate transition when opening a folder. Closing sheets are finalized before navigation, search state is cleared before the slide decision, and Home → folder on mobile always uses the slide path (unless reduced motion is on).
+- Service worker cache bumped to `workspace-v4.10.25`.
+
 ## What's New in v4.10.24
 
 - **Corrected 75% text range** - The old 12.25 pt maximum now sits at roughly 75% of the slider travel. New range is **10.25–12.9 pt**, with the centre/default at **11.575 pt**. Card body max is **17.2 px**, card title max **19.2 px**, and editor body/title sizes are **17.2 / 19.2 px**, so cards never exceed editor text.
