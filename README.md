@@ -2,6 +2,13 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v4.10.21
+
+- **Code blocks in Notes** - New toolbar button converts the current block or selection into a monospaced code block with subtle background, padding, rounded corners and preserved whitespace/line breaks. Clicking it again restores normal text.
+- **Blockquotes in Notes** - New toolbar button converts the current block or selection into a blockquote with a gray left rule, indentation and subtle background. Clicking it again removes the quote.
+- Both formats survive saving, reopening and editing, and render in the note editor, collapsed preview and expanded card.
+- Service worker cache bumped to `workspace-v4.10.21`.
+
 ## What's New in v4.10.20
 
 - **Search overlay fully covers the tenant bar** - The Home search overlay now matches the tenant selector height exactly (42 px desktop, 48 px mobile), and the folder overlay uses the same height. No strip of the bar underneath remains visible.

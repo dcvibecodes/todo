@@ -3048,6 +3048,12 @@ function noteMarkdownHtml(value) {
   return html.replace(/\n/g, '<br>');
 }
 
+function notePreText(node) {
+  const clone = node.cloneNode(true);
+  clone.querySelectorAll('br').forEach((br) => br.replaceWith('\n'));
+  return clone.textContent || '';
+}
+
 function safeNoteHtml(value, preview = false) {
   const doc = new DOMParser().parseFromString(`<div>${String(value || '')}</div>`, 'text/html');
   const root = doc.body.firstElementChild;
@@ -3056,6 +3062,7 @@ function safeNoteHtml(value, preview = false) {
     if (node.nodeType === Node.TEXT_NODE) return escapeHtml(node.nodeValue || '').replace(/\n/g, '<br>');
     if (node.nodeType !== Node.ELEMENT_NODE) return '';
     const tag = node.tagName;
+    if (tag === 'PRE') return `<pre>${escapeHtml(notePreText(node))}</pre>`;
     const inner = Array.from(node.childNodes).map(walk).join('');
     if (tag === 'BR') return '<br>';
     if (tag === 'B' || tag === 'STRONG') return `<strong>${inner}</strong>`;
@@ -3071,6 +3078,8 @@ function safeNoteHtml(value, preview = false) {
         ? `<span class="note-md-heading note-md-h${tag[1]}">${inner}</span>`
         : `<${tag.toLowerCase()}>${inner}</${tag.toLowerCase()}>`;
     }
+    if (tag === 'CODE') return `<code>${inner}</code>`;
+    if (tag === 'BLOCKQUOTE') return `<blockquote>${inner}</blockquote>`;
     if (tag === 'P' || tag === 'DIV') {
       if (!preview) return `<p>${inner}</p>`;
       const block = inner.replace(/(?:<br>\s*)+$/, '');
@@ -3097,6 +3106,7 @@ function normalizeNoteHtml(value) {
     if (node.nodeType === Node.TEXT_NODE) return escapeHtml(node.nodeValue || '').replace(/\n/g, '<br>');
     if (node.nodeType !== Node.ELEMENT_NODE) return '';
     const tag = node.tagName;
+    if (tag === 'PRE') return `<pre>${escapeHtml(notePreText(node))}</pre>`;
     const inner = Array.from(node.childNodes).map(walk).join('');
     if (tag === 'BR') return '<br>';
     if (tag === 'B' || tag === 'STRONG') return `<strong>${inner}</strong>`;
@@ -3110,6 +3120,8 @@ function normalizeNoteHtml(value) {
     if (tag === 'H1' || tag === 'H2' || tag === 'H3') {
       return `<${tag.toLowerCase()}>${inner}</${tag.toLowerCase()}>`;
     }
+    if (tag === 'CODE') return `<code>${inner}</code>`;
+    if (tag === 'BLOCKQUOTE') return `<blockquote>${inner}</blockquote>`;
     if (tag === 'P' || tag === 'DIV') return `<p>${inner}</p>`;
     if (tag === 'UL' || tag === 'OL') {
       return `<${tag.toLowerCase()}>${inner}</${tag.toLowerCase()}>`;
@@ -6249,6 +6261,8 @@ function updateNoteFormatState() {
     const anchor = selection.anchorNode;
     const element = anchor && anchor.nodeType === Node.ELEMENT_NODE ? anchor : anchor?.parentElement;
     active.link = Boolean(element?.closest('a'));
+    active.code = Boolean(element?.closest('pre'));
+    active.quote = Boolean(element?.closest('blockquote'));
     if (active.link) active.underline = Boolean(element?.closest('u'));
   }
   $$('.note-format-btn').forEach((button) => {
@@ -6257,6 +6271,60 @@ function updateNoteFormatState() {
     button.classList.toggle('is-active', isActive);
     button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
   });
+}
+
+function toggleNoteBlock(tag) {
+  const body = $('#n-body');
+  if (!body) return;
+  const selection = window.getSelection();
+  if (!selection || !selection.rangeCount) return;
+  const range = selection.getRangeAt(0);
+  const anchor = range.commonAncestorContainer;
+  const element = anchor && anchor.nodeType === Node.ELEMENT_NODE ? anchor : anchor?.parentElement;
+  const existing = element?.closest(tag);
+  if (existing && body.contains(existing)) {
+    const replacement = document.createDocumentFragment();
+    const hasBlocks = Array.from(existing.children).some((child) => (
+      /^(P|DIV|H[1-6]|UL|OL|PRE|BLOCKQUOTE)$/.test(child.tagName)
+    ));
+    let caretNode;
+    if (hasBlocks) {
+      replacement.append(...existing.childNodes);
+      caretNode = replacement.lastChild;
+    } else {
+      const paragraph = document.createElement('p');
+      const appendLineAware = (target, nodes) => {
+        for (const child of nodes) {
+          if (child.nodeType !== Node.TEXT_NODE) {
+            target.append(child);
+            continue;
+          }
+          const parts = child.nodeValue.split('\n');
+          parts.forEach((part, index) => {
+            if (index) target.append(document.createElement('br'));
+            if (part) target.append(document.createTextNode(part));
+          });
+        }
+      };
+      appendLineAware(paragraph, existing.childNodes);
+      replacement.append(paragraph);
+      caretNode = paragraph;
+    }
+    existing.replaceWith(replacement);
+    body.focus();
+    const next = document.createRange();
+    if (caretNode && caretNode.isConnected) {
+      next.selectNodeContents(caretNode);
+      next.collapse(false);
+    } else {
+      next.selectNodeContents(body);
+      next.collapse(false);
+    }
+    selection.removeAllRanges();
+    selection.addRange(next);
+    return;
+  }
+  document.execCommand('formatBlock', false, `<${tag}>`);
 }
 
 function applyNoteFormat(kind) {
@@ -6276,6 +6344,11 @@ function applyNoteFormat(kind) {
     if (!document.execCommand('insertLineBreak', false, null)) {
       document.execCommand('insertHTML', false, '<br>');
     }
+    requestAnimationFrame(updateNoteFormatState);
+    return;
+  }
+  if (kind === 'code' || kind === 'quote') {
+    toggleNoteBlock(kind === 'code' ? 'pre' : 'blockquote');
     requestAnimationFrame(updateNoteFormatState);
     return;
   }
