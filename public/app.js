@@ -131,12 +131,12 @@ const LIST_PROGRESS_MODES = ['bar', 'ring', 'off'];
 const LIST_PROGRESS_RANGES = ['all', '30d'];
 const SETTINGS_PROGRESS_KEYS = ['list_progress', 'list_progress_range'];
 const SETTINGS_BODY_KEYS = ['card_body_size'];
-const CARD_BODY_SIZE_DEFAULT = 11.125;
-const CARD_BODY_SIZE_MIN = 10.25;
+const CARD_BODY_SIZE_DEFAULT = 10.1;
+const CARD_BODY_SIZE_MIN = 8.2;
 const CARD_BODY_SIZE_MAX = 12;
 const READER_SIZE_KEY = 'todo.readerNoteSize';
 const READER_SIZE_DEFAULT = 16;
-const READER_SIZE_MIN = 12;
+const READER_SIZE_MIN = 8.2;
 const READER_SIZE_MAX = 28.8;
 const READER_SIZE_STEP = 1.2;
 const RETENTION_ORDER = { '1m': 1, '3m': 3, '6m': 6, '12m': 12, forever: Infinity };
@@ -182,8 +182,10 @@ function updateReaderSizeUI(size) {
   if (label) label.textContent = `${size.toFixed(1)} px`;
   const down = $('#reader-size-down');
   const up = $('#reader-size-up');
+  const reset = $('#reader-size-default');
   if (down) down.disabled = size <= READER_SIZE_MIN;
   if (up) up.disabled = size >= READER_SIZE_MAX;
+  if (reset) reset.disabled = storedReaderSize() == null;
 }
 
 function setReaderPopover(open) {
@@ -199,6 +201,7 @@ function syncReaderControl() {
   if (!control) return;
   const visible = Boolean(expandedNoteId && noteForId(expandedNoteId));
   control.hidden = !visible;
+  document.body.classList.toggle('reader-mode', visible);
   if (!visible) setReaderPopover(false);
   else updateReaderSizeUI(currentReaderSizeForUI());
 }
@@ -230,7 +233,7 @@ function applyReaderNoteSize(value, animate = false) {
     localStorage.removeItem(READER_SIZE_KEY);
   }
   updateReaderSizeUI(size ?? currentReaderSizeForUI());
-  if (!animate || !note || !hasValue || MOTION_REDUCED.matches) return;
+  if (!animate || !note || MOTION_REDUCED.matches) return;
   const to = note.getBoundingClientRect().height;
   const toFont = getComputedStyle(note).fontSize;
   const toTitleFont = title ? getComputedStyle(title).fontSize : '';
@@ -8356,6 +8359,7 @@ $('#reader-size-toggle').addEventListener('click', (event) => {
 });
 $('#reader-size-down').addEventListener('click', () => adjustReaderSize(-1));
 $('#reader-size-up').addEventListener('click', () => adjustReaderSize(1));
+$('#reader-size-default').addEventListener('click', () => applyReaderNoteSize(null, true));
 document.addEventListener('click', (event) => {
   if (!event.target.closest('#reader-size')) setReaderPopover(false);
 });

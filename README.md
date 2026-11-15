@@ -2,6 +2,13 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v4.10.36
+
+- **Aa replaces the FAB while reading** - Expanding a note hides the + button and shows the Aa reader-size button in exactly the same 56 px bottom-right position. Collapsing restores the + button; the chosen reader size stays saved.
+- **Default reader size action** - The Aa popover now includes **Default**, which clears the per-device reader override and animates back to the global slider size.
+- **Lower slider minimum** - The slider now runs **8.2–12 pt**, with the default/centre at **10.1 pt**. The maximum remains 12 pt; card/editor maximums are unchanged.
+- Service worker cache bumped to `workspace-v4.10.36`.
+
 ## What's New in v4.10.35
 
 - **Text-size maximum set to 12 pt** - The global card slider now runs 10.25–12 pt, centred/defaulting at 11.125 pt. Card body caps at 16 px and titles at 18 px; editors use 16 px body / 18 px titles. Reader mode remains independent and can still grow larger.

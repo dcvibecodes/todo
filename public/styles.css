@@ -1662,7 +1662,7 @@ html.deleting-row #content { overflow-anchor: none; }
 .meta-completed .ic { width: 12px; height: 12px; }
 
 :root {
-  --card-body-size: 11.125pt;
+  --card-body-size: 10.1pt;
 }
 
 .reminder-notes {
@@ -1962,16 +1962,18 @@ body.sheet-open .fab {
 
 .reader-size {
   position: fixed;
-  left: max(20px, calc((100vw - min(54vw, 990px)) / 2 + 20px));
-  bottom: calc(20px + env(safe-area-inset-bottom));
+  right: 28px;
+  bottom: calc(28px + env(safe-area-inset-bottom));
+  left: auto;
   z-index: 40;
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: flex-end;
 }
 
 .reader-size-toggle,
-.reader-size-step {
+.reader-size-step,
+.reader-size-default {
   border: 1px solid var(--line);
   background: var(--elev);
   color: var(--text);
@@ -1981,16 +1983,33 @@ body.sheet-open .fab {
 }
 
 .reader-size-toggle {
-  width: 46px;
-  height: 46px;
+  width: 56px;
+  height: 56px;
   padding: 0;
+  border: 0;
   border-radius: 50%;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16), 0 2px 6px rgba(0, 0, 0, 0.1);
-  font-size: 0.95rem;
+  background: var(--accent);
+  color: var(--accent-contrast);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18), 0 2px 6px rgba(0, 0, 0, 0.12);
+  font-size: 1rem;
+  transition: background 0.15s, transform 0.15s, box-shadow 0.15s, opacity 0.15s;
 }
 
-.reader-size-toggle:hover,
-.reader-size-step:hover { background: var(--fill); }
+.reader-size-toggle:hover {
+  background: var(--accent-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 11px 28px rgba(0, 0, 0, 0.2), 0 3px 7px rgba(0, 0, 0, 0.14);
+}
+
+.reader-size-toggle:active { transform: scale(0.95); }
+
+.reader-size-step:hover,
+.reader-size-default:hover { background: var(--fill); color: var(--text); }
+
+body.reader-mode .fab {
+  opacity: 0;
+  pointer-events: none;
+}
 
 .reader-size-popover {
   display: flex;
@@ -2012,7 +2031,15 @@ body.sheet-open .fab {
   font-size: 0.82rem;
 }
 
-.reader-size-step:disabled { opacity: 0.4; cursor: default; }
+.reader-size-step:disabled,
+.reader-size-default:disabled { opacity: 0.4; cursor: default; }
+
+.reader-size-default {
+  height: 38px;
+  padding: 0 10px;
+  border-radius: 8px;
+  font-size: 0.72rem;
+}
 
 .reader-size-value {
   min-width: 54px;
@@ -3191,6 +3218,11 @@ body.sheet-open .sidebar {
   .content { padding: 12px 18px calc(132px + env(safe-area-inset-bottom)); }
 
   .fab {
+    right: 20px;
+    bottom: calc(20px + env(safe-area-inset-bottom));
+  }
+
+  .reader-size {
     right: 20px;
     bottom: calc(20px + env(safe-area-inset-bottom));
   }
