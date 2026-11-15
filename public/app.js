@@ -192,7 +192,9 @@ function setReaderPopover(open) {
   const popover = $('#reader-size-popover');
   const toggle = $('#reader-size-toggle');
   if (!popover || !toggle) return;
-  popover.hidden = !open;
+  popover.classList.toggle('open', open);
+  popover.setAttribute('aria-hidden', open ? 'false' : 'true');
+  popover.inert = !open;
   toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
 }
 
@@ -8355,7 +8357,7 @@ $('#search-form').addEventListener('submit', (event) => {
 $('#editor-form').addEventListener('submit', saveEditor);
 $('#reader-size-toggle').addEventListener('click', (event) => {
   event.stopPropagation();
-  setReaderPopover($('#reader-size-popover').hidden);
+  setReaderPopover(!$('#reader-size-popover').classList.contains('open'));
 });
 $('#reader-size-down').addEventListener('click', () => adjustReaderSize(-1));
 $('#reader-size-up').addEventListener('click', () => adjustReaderSize(1));

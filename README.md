@@ -2,6 +2,12 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v4.10.37
+
+- **Aa matches the FAB on web** - The reader-size button now uses the same centred-column right offset as the FAB on desktop, so it replaces the + button in exactly the same place.
+- **Vertical reader menu** - Aa now opens a vertically stacked A− / size / A+ / Default panel above the button, animating upward from the button with a fluid fade/scale transition. Closing reverses smoothly.
+- Service worker cache bumped to `workspace-v4.10.37`.
+
 ## What's New in v4.10.36
 
 - **Aa replaces the FAB while reading** - Expanding a note hides the + button and shows the Aa reader-size button in exactly the same 56 px bottom-right position. Collapsing restores the + button; the chosen reader size stays saved.

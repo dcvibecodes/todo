@@ -2012,19 +2012,36 @@ body.reader-mode .fab {
 }
 
 .reader-size-popover {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
   display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 8px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  width: 132px;
   padding: 6px;
   border: 1px solid var(--line);
   border-radius: 12px;
   background: var(--elev);
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(8px) scale(0.96);
+  transform-origin: bottom right;
+  transition: opacity 0.16s ease, transform 0.18s ease, visibility 0.18s ease;
+}
+
+.reader-size-popover.open {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: none;
 }
 
 .reader-size-step {
-  width: 38px;
+  width: 100%;
   height: 38px;
   padding: 0;
   border-radius: 8px;
@@ -2035,6 +2052,7 @@ body.reader-mode .fab {
 .reader-size-default:disabled { opacity: 0.4; cursor: default; }
 
 .reader-size-default {
+  width: 100%;
   height: 38px;
   padding: 0 10px;
   border-radius: 8px;
@@ -2042,7 +2060,8 @@ body.reader-mode .fab {
 }
 
 .reader-size-value {
-  min-width: 54px;
+  width: 100%;
+  padding: 2px 0;
   color: var(--text-2);
   font-size: 0.75rem;
   font-variant-numeric: tabular-nums;
@@ -2056,7 +2075,8 @@ body.sheet-open .reader-size {
 
 @media (prefers-reduced-motion: reduce) {
   .reader-size-toggle,
-  .reader-size-step { transition: none; }
+  .reader-size-step,
+  .reader-size-popover { transition: none; }
 }
 
 /* ---------- Sheets ---------- */
@@ -3064,6 +3084,10 @@ body.sheet-open .sidebar {
   }
 
   .fab {
+    right: max(28px, calc((100vw - min(54vw, 990px)) / 2 + 28px));
+  }
+
+  .reader-size {
     right: max(28px, calc((100vw - min(54vw, 990px)) / 2 + 28px));
   }
 
