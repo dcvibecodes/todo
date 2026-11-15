@@ -2,6 +2,11 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v4.10.20
+
+- **Search overlay fully covers the tenant bar** - The Home search overlay now matches the tenant selector height exactly (42 px desktop, 48 px mobile), and the folder overlay uses the same height. No strip of the bar underneath remains visible.
+- Service worker cache bumped to `workspace-v4.10.20`.
+
 ## What's New in v4.10.19
 
 - **Long note titles wrap fully** - The Notes title is now an auto-growing textarea. Long titles wrap onto multiple rows and the field expands to show the full title; Enter still saves rather than inserting a newline.
