@@ -7964,6 +7964,46 @@ tenantSwipeSurface.addEventListener('pointercancel', () => {
   tenantSwipeStart = null;
 });
 
+// Inside a folder or smart view, a rightward swipe simulates the Back icon.
+// Leftward swipes stay reserved for row Delete.
+let detailSwipeStart = null;
+let detailSwipeSuppressClickUntil = 0;
+const detailSwipeSurface = $('.main');
+
+function canStartDetailSwipe(target) {
+  if (document.body.dataset.screen !== 'detail' || state.view === 'home') return false;
+  if (state.search || $('#main-search-form').classList.contains('open')) return false;
+  if ($$('.sheet').some((sheet) => !sheet.hidden)) return false;
+  if (!target) return false;
+  if (target.closest('.reminder.swipe-open')) return false;
+  return !target.closest('button, a, input, textarea, select, [contenteditable="true"], .sheet');
+}
+
+detailSwipeSurface.addEventListener('pointerdown', (event) => {
+  if (event.pointerType === 'mouse' || !canStartDetailSwipe(event.target)) return;
+  detailSwipeStart = { x: event.clientX, y: event.clientY, id: event.pointerId };
+});
+
+detailSwipeSurface.addEventListener('pointerup', (event) => {
+  if (!detailSwipeStart || event.pointerId !== detailSwipeStart.id) return;
+  const dx = event.clientX - detailSwipeStart.x;
+  const dy = event.clientY - detailSwipeStart.y;
+  detailSwipeStart = null;
+  if (dx < 40 || dx <= Math.abs(dy) * 1.2) return;
+  detailSwipeSuppressClickUntil = performance.now() + 500;
+  go('home');
+});
+
+detailSwipeSurface.addEventListener('pointercancel', () => {
+  detailSwipeStart = null;
+});
+
+document.addEventListener('click', (event) => {
+  if (performance.now() >= detailSwipeSuppressClickUntil) return;
+  event.preventDefault();
+  event.stopPropagation();
+}, true);
+
 
 $('#new-list-2').addEventListener('click', () => openListSheet(null));
 $('#back-btn').addEventListener('click', () => {
