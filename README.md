@@ -2,6 +2,11 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v4.10.33
+
+- **Switching expanded notes keeps the new note in view** - Tapping another note while a long note is expanded now scrolls the newly expanded card into view after the previous one collapses. Tall notes align their top edge with the viewport instead of scrolling past it.
+- Service worker cache bumped to `workspace-v4.10.33`.
+
 ## What's New in v4.10.32
 
 - **Roomier note paragraphs** - Paragraph spacing in the Notes editor and expanded note cards now uses a full `1em` bottom margin, matching Scrawl's clearer separation between paragraphs.

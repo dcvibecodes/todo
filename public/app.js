@@ -4437,7 +4437,11 @@ function ensureNoteRowVisible(row) {
   const bottom = pageScroll ? document.documentElement.clientHeight - 8 : scrollerRect.bottom - 8;
   const rect = row.getBoundingClientRect();
   if (rect.top >= top && rect.bottom <= bottom) return;
-  const delta = rect.top < top ? rect.top - top : rect.bottom - bottom;
+  // A tall expanded note should keep its top visible rather than scrolling
+  // past it trying to fit the entire card in the viewport.
+  const delta = rect.height > bottom - top || rect.top < top
+    ? rect.top - top
+    : rect.bottom - bottom;
   scroller.scrollTo({
     top: Math.max(0, scroller.scrollTop + delta),
     behavior: MOTION_REDUCED.matches ? 'auto' : 'smooth',
@@ -4504,7 +4508,7 @@ function toggleNoteForRow(row, note) {
   } else {
     if (expandedNoteId) collapseExpandedNote();
     expandedNoteId = id;
-    animateNote(note, true);
+    animateNote(note, true, () => ensureNoteRowVisible(row));
   }
 }
 
