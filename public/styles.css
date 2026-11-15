@@ -768,8 +768,18 @@ body.gate-open {
   flex: none;
 }
 
-.nav-label { flex: 1; font-weight: 500; padding-left: 2px; }
-.nav-row.active .nav-label { font-weight: 600; }
+.nav-label {
+  flex: 1;
+  min-width: 0;
+  padding-left: 2px;
+  font-size: min(calc(var(--card-body-size) + 2px), 19.2px);
+  font-weight: 550;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.nav-row.active .nav-label { font-weight: 550; }
 
 .badge {
   min-width: 20px;
@@ -832,10 +842,13 @@ body.gate-open {
 
 .list-row .list-name {
   flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-weight: 500;
+  font-size: min(calc(var(--card-body-size) + 2px), 19.2px);
+  font-weight: 550;
+  line-height: 1.35;
 }
 
 /* Apple-style list rows: divider between every row and a tall,

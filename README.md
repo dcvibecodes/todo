@@ -2,6 +2,11 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v4.10.27
+
+- **Home labels follow the text slider** - Smart-group names and folder names now use the same size formula and weight as card titles, capped at 19.2 px. A folder name can never be smaller than the title of an item inside it.
+- Service worker cache bumped to `workspace-v4.10.27`.
+
 ## What's New in v4.10.26
 
 - **Expanded cards use maximum text size** - Expanding a Note or Reminder note card immediately switches its body text to the slider maximum (17.2 px) and its title to 19.2 px, while every collapsed card keeps the size selected in Settings. Closing the card returns it to the slider size.
