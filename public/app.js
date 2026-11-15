@@ -1202,8 +1202,19 @@ function viewFolderId(view) {
 }
 
 
-function setTenant(tenant) {
-  const next = ['reminders', 'notes', 'docs'].includes(tenant) ? tenant : 'reminders';
+const TENANTS = ['reminders', 'notes', 'docs'];
+
+function animateTenantContent(direction) {
+  if (!direction || MOTION_REDUCED.matches) return;
+  const content = $('#tenant-content');
+  if (!content) return;
+  content.classList.remove('tenant-swipe-left', 'tenant-swipe-right');
+  void content.offsetWidth;
+  content.classList.add(direction > 0 ? 'tenant-swipe-left' : 'tenant-swipe-right');
+}
+
+function setTenant(tenant, direction = 0) {
+  const next = TENANTS.includes(tenant) ? tenant : 'reminders';
   state.tenant = next;
   localStorage.setItem('todo.tenant', next);
   state.search = '';
@@ -1216,6 +1227,7 @@ function setTenant(tenant) {
     return;
   }
   render();
+  animateTenantContent(direction);
 }
 
 const SHOW_COMPLETED_KEY = 'todo.showCompleted';
@@ -7903,6 +7915,51 @@ $('#tenant-switch').addEventListener('click', (event) => {
   if (!btn) return;
   setTenant(btn.dataset.tenant);
   closeAccountMenu();
+});
+
+// Tenant swipe mirrors the image carousel: release past a horizontal
+// threshold, then animate the new tenant in from the matching side.
+let tenantSwipeStart = null;
+let tenantSwipeSuppressClickUntil = 0;
+const tenantSwipeSurface = $('.sidebar');
+
+function canStartTenantSwipe(target) {
+  if (document.body.dataset.screen !== 'home' || state.view !== 'home') return false;
+  if (state.search || $('#search-form').classList.contains('open')) return false;
+  if ($$('.sheet').some((sheet) => !sheet.hidden)) return false;
+  if (!target) return false;
+  // The tenant bar and smart-view rows are safe gesture surfaces. Folder rows
+  // keep their own left-swipe Delete gesture.
+  if (target.closest('.tenant-switch, .nav-row')) return true;
+  return !target.closest('button, a, input, textarea, select, [contenteditable="true"], .reminder, .list-row, .day-peek, .sidebar-head, .sidebar-foot');
+}
+
+tenantSwipeSurface.addEventListener('pointerdown', (event) => {
+  if (event.pointerType === 'mouse' || !canStartTenantSwipe(event.target)) return;
+  tenantSwipeStart = { x: event.clientX, y: event.clientY, id: event.pointerId };
+});
+
+tenantSwipeSurface.addEventListener('pointerup', (event) => {
+  if (!tenantSwipeStart || event.pointerId !== tenantSwipeStart.id) return;
+  const dx = event.clientX - tenantSwipeStart.x;
+  const dy = event.clientY - tenantSwipeStart.y;
+  tenantSwipeStart = null;
+  if (Math.abs(dx) < 40 || Math.abs(dx) <= Math.abs(dy) * 1.2) return;
+  const direction = dx < 0 ? 1 : -1;
+  const index = TENANTS.indexOf(state.tenant);
+  const next = TENANTS[(index + direction + TENANTS.length) % TENANTS.length];
+  tenantSwipeSuppressClickUntil = performance.now() + 500;
+  setTenant(next, direction);
+});
+
+tenantSwipeSurface.addEventListener('click', (event) => {
+  if (performance.now() >= tenantSwipeSuppressClickUntil) return;
+  event.preventDefault();
+  event.stopPropagation();
+}, true);
+
+tenantSwipeSurface.addEventListener('pointercancel', () => {
+  tenantSwipeStart = null;
 });
 
 

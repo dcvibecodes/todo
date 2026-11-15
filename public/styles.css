@@ -829,6 +829,31 @@ body.gate-open {
   letter-spacing: 0.5px;
 }
 
+.tenant-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+  overflow-x: clip;
+}
+
+.tenant-content.tenant-swipe-left { animation: tenant-swipe-left 0.18s ease-out; }
+.tenant-content.tenant-swipe-right { animation: tenant-swipe-right 0.18s ease-out; }
+
+@keyframes tenant-swipe-left {
+  from { opacity: 0.55; transform: translateX(18px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes tenant-swipe-right {
+  from { opacity: 0.55; transform: translateX(-18px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tenant-content.tenant-swipe-left,
+  .tenant-content.tenant-swipe-right { animation: none; }
+}
+
 .lists { display: flex; flex-direction: column; gap: 1px; }
 
 .list-row .list-dot {
