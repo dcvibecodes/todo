@@ -4726,14 +4726,17 @@ function syncNoteExpanders() {
     const focused = focusedNoteId === id;
     note.classList.toggle('is-expanded', expanded);
     row.classList.toggle('is-note-expanded', expanded);
-    row.classList.toggle('is-note-focused', focused);
-    if (focused) focusedSeen = true;
+    // Measure overflow before applying the short-note focus unclamp, otherwise
+    // a focused card can look non-expandable and lose its height animation.
+    row.classList.remove('is-note-focused');
     if (!expanded) {
       note.style.height = '';
       note.style.overflow = '';
     }
     const expandable = expanded || note.scrollHeight > note.clientHeight + 1;
     row.classList.toggle('has-long-note', expandable);
+    row.classList.toggle('is-note-focused', focused);
+    if (focused) focusedSeen = true;
     if (expandable && expanded) expandedSeen = true;
   }
   if (expandedNoteId && !expandedSeen) expandedNoteId = null;
@@ -8123,6 +8126,13 @@ $('#smart-nav').addEventListener('click', (event) => {
   go(row.dataset.view);
   closeAccountMenu();
 });
+
+document.addEventListener('pointerdown', (event) => {
+  if (event.pointerType === 'mouse' || event.button !== 0) return;
+  const row = event.target.closest('.note-row');
+  if (!row || event.target.closest('a, button, input, textarea, select')) return;
+  focusNoteRow(row);
+}, true);
 
 $('#tenant-switch').addEventListener('click', (event) => {
   const btn = event.target.closest('.tenant-btn');

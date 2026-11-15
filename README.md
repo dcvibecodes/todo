@@ -2,6 +2,13 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v4.10.39
+
+- **Cleaner Text size label** - The reader popover header is now a subtle sentence-case **Text size** label with a soft divider.
+- **Focus starts on touch** - Note cards focus on pointer-down, so the tapped card highlights immediately instead of the card above.
+- **Default-size expansion animates** - Overflow is measured before the short-note focus unclamp, so long notes keep their full 200 ms expand/collapse height animation even when the reader text size equals the default.
+- Service worker cache bumped to `workspace-v4.10.39`.
+
 ## What's New in v4.10.38
 
 - **Short notes can be focused too** - Tapping any note card now brings it into focus, even when it is too short to expand. Aa appears above the FAB without replacing it; the + button stays available.
