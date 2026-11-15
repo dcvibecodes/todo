@@ -1661,7 +1661,9 @@ html.deleting-row #content { overflow-anchor: none; }
 .meta-completed { display: inline-flex; align-items: center; gap: 5px; }
 .meta-completed .ic { width: 12px; height: 12px; }
 
-:root { --card-body-size: 11.575pt; }
+:root {
+  --card-body-size: 11.575pt;
+}
 
 .reminder-notes {
   font-size: min(var(--card-body-size), 17.2px);
@@ -1692,8 +1694,12 @@ html.deleting-row #content { overflow-anchor: none; }
   white-space: pre-line;
 }
 
-html body .reminder-notes.is-expanded { font-size: 17.2px; }
-.reminder.is-note-expanded .reminder-title { font-size: 19.2px; }
+html body .reminder-notes.is-expanded {
+  font-size: var(--reader-note-size, min(var(--card-body-size), 17.2px));
+}
+.reminder.is-note-expanded .reminder-title {
+  font-size: calc(var(--reader-note-size, min(var(--card-body-size), 17.2px)) + 2px);
+}
 
 /* Note cards keep a compact two-line preview when collapsed, then swap to the
    full rich body when expanded. The block max-height avoids the line-clamp
@@ -1950,6 +1956,80 @@ body.sheet-open .fab {
 
 @media (prefers-reduced-motion: reduce) {
   .fab, .fab:hover, .fab:active { transition: none; transform: none; }
+}
+
+/* ---------- Expanded-note reader size ---------- */
+
+.reader-size {
+  position: fixed;
+  left: max(20px, calc((100vw - min(54vw, 990px)) / 2 + 20px));
+  bottom: calc(20px + env(safe-area-inset-bottom));
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.reader-size-toggle,
+.reader-size-step {
+  border: 1px solid var(--line);
+  background: var(--elev);
+  color: var(--text);
+  font-family: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.reader-size-toggle {
+  width: 46px;
+  height: 46px;
+  padding: 0;
+  border-radius: 50%;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16), 0 2px 6px rgba(0, 0, 0, 0.1);
+  font-size: 0.95rem;
+}
+
+.reader-size-toggle:hover,
+.reader-size-step:hover { background: var(--fill); }
+
+.reader-size-popover {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--elev);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18);
+}
+
+.reader-size-step {
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border-radius: 8px;
+  font-size: 0.82rem;
+}
+
+.reader-size-step:disabled { opacity: 0.4; cursor: default; }
+
+.reader-size-value {
+  min-width: 54px;
+  color: var(--text-2);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+body.sheet-open .reader-size {
+  opacity: 0;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reader-size-toggle,
+  .reader-size-step { transition: none; }
 }
 
 /* ---------- Sheets ---------- */

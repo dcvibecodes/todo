@@ -134,6 +134,11 @@ const SETTINGS_BODY_KEYS = ['card_body_size'];
 const CARD_BODY_SIZE_DEFAULT = 11.575;
 const CARD_BODY_SIZE_MIN = 10.25;
 const CARD_BODY_SIZE_MAX = 12.9;
+const READER_SIZE_KEY = 'todo.readerNoteSize';
+const READER_SIZE_DEFAULT = 17.2;
+const READER_SIZE_MIN = 12;
+const READER_SIZE_MAX = 28.8;
+const READER_SIZE_STEP = 1.2;
 const RETENTION_ORDER = { '1m': 1, '3m': 3, '6m': 6, '12m': 12, forever: Infinity };
 const RETENTION_DAYS = { '1m': 30, '3m': 90, '6m': 180, '12m': 365 };
 const RETENTION_LABELS = { '1m': '1 month', '3m': '3 months', '6m': '6 months', '12m': '1 year', forever: 'indefinitely' };
@@ -150,6 +155,115 @@ function applyCardBodySize(value) {
   const label = $('#set-card-body-size-value');
   if (label) label.textContent = `${size.toFixed(2).replace(/\.?0+$/, '')} pt`;
   return size;
+}
+
+function normalizedReaderSize(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return READER_SIZE_DEFAULT;
+  return Math.min(READER_SIZE_MAX, Math.max(READER_SIZE_MIN, n));
+}
+
+function storedReaderSize() {
+  const raw = localStorage.getItem(READER_SIZE_KEY);
+  return raw == null || raw === '' ? null : normalizedReaderSize(raw);
+}
+
+function expandedReaderFontSize() {
+  const found = expandedNoteId ? noteForId(expandedNoteId) : null;
+  return found ? parseFloat(getComputedStyle(found.note).fontSize) : null;
+}
+
+function currentReaderSizeForUI() {
+  return storedReaderSize() ?? expandedReaderFontSize() ?? READER_SIZE_DEFAULT;
+}
+
+function updateReaderSizeUI(size) {
+  const label = $('#reader-size-value');
+  if (label) label.textContent = `${size.toFixed(1)} px`;
+  const down = $('#reader-size-down');
+  const up = $('#reader-size-up');
+  if (down) down.disabled = size <= READER_SIZE_MIN;
+  if (up) up.disabled = size >= READER_SIZE_MAX;
+}
+
+function setReaderPopover(open) {
+  const popover = $('#reader-size-popover');
+  const toggle = $('#reader-size-toggle');
+  if (!popover || !toggle) return;
+  popover.hidden = !open;
+  toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+}
+
+function syncReaderControl() {
+  const control = $('#reader-size');
+  if (!control) return;
+  const visible = Boolean(expandedNoteId && noteForId(expandedNoteId));
+  control.hidden = !visible;
+  if (!visible) setReaderPopover(false);
+  else updateReaderSizeUI(currentReaderSizeForUI());
+}
+
+function applyReaderNoteSize(value, animate = false) {
+  const hasValue = value !== null && value !== '' && Number.isFinite(Number(value));
+  const size = hasValue ? normalizedReaderSize(value) : null;
+  const found = expandedNoteId ? noteForId(expandedNoteId) : null;
+  const note = found ? found.note : null;
+  const row = found ? found.row : null;
+  const title = row ? row.querySelector('.reminder-title') : null;
+  let from = 0;
+  let fromFont = '';
+  let fromTitleFont = '';
+  if (note) {
+    note.getAnimations().forEach((animation) => animation.cancel());
+    if (title) title.getAnimations().forEach((animation) => animation.cancel());
+    note.style.height = '';
+    note.style.overflow = '';
+    from = note.getBoundingClientRect().height;
+    fromFont = getComputedStyle(note).fontSize;
+    fromTitleFont = title ? getComputedStyle(title).fontSize : '';
+  }
+  if (hasValue) {
+    document.documentElement.style.setProperty('--reader-note-size', `${size}px`);
+    localStorage.setItem(READER_SIZE_KEY, String(size));
+  } else {
+    document.documentElement.style.removeProperty('--reader-note-size');
+    localStorage.removeItem(READER_SIZE_KEY);
+  }
+  updateReaderSizeUI(size ?? currentReaderSizeForUI());
+  if (!animate || !note || !hasValue || MOTION_REDUCED.matches) return;
+  const to = note.getBoundingClientRect().height;
+  const toFont = getComputedStyle(note).fontSize;
+  const toTitleFont = title ? getComputedStyle(title).fontSize : '';
+  if (Math.abs(to - from) < 1 && fromFont === toFont) return;
+  const duration = 180;
+  const easing = 'ease-out';
+  note.style.overflow = 'hidden';
+  note.style.height = `${from}px`;
+  const heightAnim = note.animate(
+    [{ height: `${from}px` }, { height: `${to}px` }],
+    { duration, easing },
+  );
+  note.animate(
+    [{ fontSize: fromFont }, { fontSize: toFont }],
+    { duration, easing },
+  );
+  if (title && fromTitleFont && toTitleFont && fromTitleFont !== toTitleFont) {
+    title.animate(
+      [{ fontSize: fromTitleFont }, { fontSize: toTitleFont }],
+      { duration, easing },
+    );
+  }
+  const cleanup = () => {
+    note.style.height = '';
+    note.style.overflow = '';
+  };
+  heightAnim.onfinish = cleanup;
+  heightAnim.oncancel = cleanup;
+}
+
+function adjustReaderSize(delta) {
+  const current = storedReaderSize() ?? expandedReaderFontSize() ?? READER_SIZE_DEFAULT;
+  applyReaderNoteSize(current + delta * READER_SIZE_STEP, true);
 }
 
 function listRetention(list) {
@@ -1388,6 +1502,7 @@ function route() {
     : null;
   if (view !== state.view) {
     expandedNoteId = null;
+    syncReaderControl();
   }
   if (view !== state.view) {
     state.showCompleted = typeof view === 'number' ? getShowCompleted(view) : false;
@@ -4460,6 +4575,7 @@ function animateNote(note, expand, onDone) {
   const fromTitleFont = title ? getComputedStyle(title).fontSize : null;
   note.classList.toggle('is-expanded', expand);
   row?.classList.toggle('is-note-expanded', expand);
+  syncReaderControl();
   const to = note.getBoundingClientRect().height;
   const toFont = getComputedStyle(note).fontSize;
   const toTitleFont = title ? getComputedStyle(title).fontSize : null;
@@ -4530,6 +4646,7 @@ function syncNoteExpanders() {
     if (expandable && expanded) expandedSeen = true;
   }
   if (expandedNoteId && !expandedSeen) expandedNoteId = null;
+  syncReaderControl();
 }
 
 function reminderRow(reminder, options = {}) {
@@ -7460,6 +7577,7 @@ function updateSettingsDirty(preserveMessage = false) {
 async function openSettings() {
   closeAccountMenu();
   applyTheme(themePreference, false);
+applyReaderNoteSize(localStorage.getItem(READER_SIZE_KEY), false);
   $('#pw-msg').hidden = true;
   $('#settings-msg').hidden = true;
   $('#username-msg').hidden = true;
@@ -8232,6 +8350,18 @@ $('#search-form').addEventListener('submit', (event) => {
 });
 
 $('#editor-form').addEventListener('submit', saveEditor);
+$('#reader-size-toggle').addEventListener('click', (event) => {
+  event.stopPropagation();
+  setReaderPopover($('#reader-size-popover').hidden);
+});
+$('#reader-size-down').addEventListener('click', () => adjustReaderSize(-1));
+$('#reader-size-up').addEventListener('click', () => adjustReaderSize(1));
+document.addEventListener('click', (event) => {
+  if (!event.target.closest('#reader-size')) setReaderPopover(false);
+});
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') setReaderPopover(false);
+});
 $('#note-form').addEventListener('submit', saveNote);
 $('#n-title').addEventListener('input', autoGrowNoteTitle);
 $('#n-title').addEventListener('keydown', (event) => {
