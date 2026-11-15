@@ -341,10 +341,11 @@ body.gate-open {
   position: absolute;
   inset: 0;
   z-index: 10;
-  display: flex;
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) 36px;
+  column-gap: 8px;
   align-items: center;
-  gap: 8px;
-  padding: 0 2px 0 10px;
+  padding: 0 8px;
   background: var(--surface);
   border-radius: 10px;
   clip-path: inset(0 0 0 100%);
@@ -359,10 +360,10 @@ body.gate-open {
   pointer-events: auto;
 }
 
-.search-overlay-ic { flex: none; width: 16px; height: 16px; color: var(--text-3); }
+.search-overlay-ic { justify-self: center; width: 16px; height: 16px; color: var(--text-3); }
 
 .search-bar-overlay input {
-  flex: 1;
+  width: 100%;
   min-width: 0;
   padding: 8px 10px;
   border: 1px solid var(--line);
@@ -380,7 +381,7 @@ body.gate-open {
 .search-bar-overlay input::-webkit-search-cancel-button { -webkit-appearance: none; }
 
 .search-bar-close {
-  flex: none;
+  justify-self: center;
   width: 28px;
   height: 28px;
   padding: 0;
@@ -1038,6 +1039,18 @@ body.list-dragging .list-grip { cursor: grabbing; }
   gap: 12px;
 }
 .main-head .head-actions { flex: none; }
+.main-head .search-bar-overlay {
+  top: 18px;
+  right: 24px;
+  bottom: auto;
+  left: 24px;
+  height: 40px;
+}
+.sidebar-head .search-bar-overlay {
+  top: 0;
+  bottom: auto;
+  height: 40px;
+}
 
 .back-btn {
   display: none;
@@ -1058,7 +1071,7 @@ body.list-dragging .list-grip { cursor: grabbing; }
   flex: 1;
   min-width: 0;
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 10px;
 }
 
@@ -2992,7 +3005,13 @@ body.sheet-open .sidebar {
 
   .back-btn { order: 1; flex: none; padding: 6px 6px 6px 0; margin-right: 2px; }
   .back-btn span { display: none; }
-  .title-wrap { order: 2; flex-direction: row; align-items: baseline; gap: 8px; }
+  .title-wrap { order: 2; flex-direction: row; align-items: center; gap: 8px; }
+  .main-head .search-bar-overlay {
+    top: calc(14px + env(safe-area-inset-top));
+    right: 18px;
+    left: 18px;
+    height: 40px;
+  }
   .title-wrap h2 { font-size: 1.375rem; }
   .view-count { font-size: 0.8125rem; }
   .head-actions { order: 3; align-self: center; }
@@ -3679,9 +3698,16 @@ body.sheet-open .sidebar {
 }
 
 #note-editor .e-title {
+  display: block;
+  width: 100%;
+  min-height: calc(1.25em + 22px);
   font-size: 1.25rem;
   line-height: 1.25;
   font-weight: 600;
+  resize: none;
+  overflow: hidden;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 #note-editor .note-rich { font-size: 16.33px; }

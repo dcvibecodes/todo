@@ -4293,6 +4293,13 @@ function autoGrowTitle() {
   title.style.height = `${title.scrollHeight}px`;
 }
 
+function autoGrowNoteTitle() {
+  const title = $('#n-title');
+  if (!title) return;
+  title.style.height = 'auto';
+  title.style.height = `${title.scrollHeight + 2}px`;
+}
+
 function autoGrowNotes() {
   const notes = $('#e-notes');
   notes.style.height = 'auto';
@@ -6371,7 +6378,10 @@ function openNoteEditor(id) {
   } : null;
   renderNoteAttachments();
   openSheet('#note-editor');
-  requestAnimationFrame(updateNoteFormatState);
+  requestAnimationFrame(() => {
+    autoGrowNoteTitle();
+    updateNoteFormatState();
+  });
   if (!note) setTimeout(() => $('#n-title').focus(), 80);
 }
 
@@ -8002,6 +8012,12 @@ $('#search-form').addEventListener('submit', (event) => {
 
 $('#editor-form').addEventListener('submit', saveEditor);
 $('#note-form').addEventListener('submit', saveNote);
+$('#n-title').addEventListener('input', autoGrowNoteTitle);
+$('#n-title').addEventListener('keydown', (event) => {
+  if (event.key !== 'Enter') return;
+  event.preventDefault();
+  $('#note-form').requestSubmit();
+});
 $('#n-more-toggle').addEventListener('click', toggleNoteMore);
 $$('.note-format-btn').forEach((button) => {
   button.addEventListener('mousedown', (event) => event.preventDefault());
@@ -8374,6 +8390,7 @@ let noteSyncTimer = null;
 window.addEventListener('resize', () => {
   clearTimeout(noteSyncTimer);
   noteSyncTimer = setTimeout(() => {
+    autoGrowNoteTitle();
     syncNoteExpanders();
     if (dayPeekOpen) syncDayCardHeight($('#day-card'), false);
   }, 120);

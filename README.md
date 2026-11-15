@@ -2,6 +2,13 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v4.10.19
+
+- **Long note titles wrap fully** - The Notes title is now an auto-growing textarea. Long titles wrap onto multiple rows and the field expands to show the full title; Enter still saves rather than inserting a newline.
+- **Identical search overlay on every screen** - Home and folder search bars now share the same width, insets, height and symmetric icon columns. The magnifier and close icons sit at matching distances from the search field.
+- **Folder title alignment** - Folder name and count are centre-aligned with the 3-dot/search/refresh/hamburger icons instead of sitting on a lower baseline.
+- Service worker cache bumped to `workspace-v4.10.19`.
+
 ## What's New in v4.10.18
 
 - **Larger card text range** - The slider is now 10.25–12.25 pt, with 11.25 pt at the centre/default. Card body max is 16.33 px and card title max is 18.33 px. Editors are 16.33 px body and 18.33 px titles (Note title stays 20 px), so card text can never exceed editor text.

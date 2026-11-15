@@ -1,6 +1,6 @@
 {
   "name": "todo",
-  "version": "4.10.18",
+  "version": "4.10.19",
   "description": "A self-hosted workspace for reminders, notes and documents",
   "main": "server.js",
   "scripts": {
