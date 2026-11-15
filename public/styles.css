@@ -1654,6 +1654,9 @@ html.deleting-row #content { overflow-anchor: none; }
   white-space: pre-line;
 }
 
+html body .reminder-notes.is-expanded { font-size: 17.2px; }
+.reminder.is-note-expanded .reminder-title { font-size: 19.2px; }
+
 /* Note cards keep a compact two-line preview when collapsed, then swap to the
    full rich body when expanded. The block max-height avoids the line-clamp
    bug that could paint a trailing inline link outside the clamped area. */

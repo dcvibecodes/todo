@@ -4438,6 +4438,7 @@ function animateNote(note, expand, onDone) {
   note.style.overflow = '';
   const from = note.getBoundingClientRect().height;
   note.classList.toggle('is-expanded', expand);
+  note.closest('.reminder')?.classList.toggle('is-note-expanded', expand);
   const to = note.getBoundingClientRect().height;
   if (MOTION_REDUCED.matches || Math.abs(to - from) < 1) {
     if (onDone) onDone();
@@ -4484,6 +4485,7 @@ function syncNoteExpanders() {
     const id = row.dataset.reminderId;
     const expanded = expandedNoteId === id;
     note.classList.toggle('is-expanded', expanded);
+    row.classList.toggle('is-note-expanded', expanded);
     if (!expanded) {
       note.style.height = '';
       note.style.overflow = '';
