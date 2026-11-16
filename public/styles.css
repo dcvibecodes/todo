@@ -773,13 +773,13 @@ body.gate-open {
   min-width: 0;
   padding-left: 2px;
   font-size: min(calc(var(--card-body-size) + 2px), 19.2px);
-  font-weight: 550;
+  font-weight: 500;
   line-height: 1.35;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.nav-row.active .nav-label { font-weight: 550; }
+.nav-row.active .nav-label { font-weight: 500; }
 
 .badge {
   min-width: 20px;
@@ -872,7 +872,7 @@ body.gate-open {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: min(calc(var(--card-body-size) + 2px), 19.2px);
-  font-weight: 550;
+  font-weight: 500;
   line-height: 1.35;
 }
 
