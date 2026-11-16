@@ -199,6 +199,7 @@ async function init() {
   // bumps this in the same statement that applies the mutation. Scheduler
   // notification bookkeeping never touches it.
   await addReminderColumn('revision', 'revision INTEGER NOT NULL DEFAULT 0');
+  await addReminderColumn('deleted_at', 'deleted_at TEXT');
   // Per-occurrence history for recurring reminders. One row per
   // (reminder, scheduled occurrence): 'completed' | 'skipped' | 'exception'
   // (an occurrence-only edit waiting to fire). UNIQUE keeps history honest.
@@ -289,6 +290,7 @@ async function init() {
     WHERE color LIKE '#%'`);
   await run('CREATE INDEX IF NOT EXISTS idx_reminders_list ON reminders(list_id)');
   await run('CREATE INDEX IF NOT EXISTS idx_reminders_due ON reminders(completed, due_at)');
+  await run('CREATE INDEX IF NOT EXISTS idx_reminders_deleted ON reminders(deleted_at)');
   await run('CREATE INDEX IF NOT EXISTS idx_lists_tenant ON lists(tenant, sort_order)');
   // Notes tenant: notes live in folders and have no schedule or completion.
   await run(`CREATE TABLE IF NOT EXISTS notes (
@@ -307,6 +309,10 @@ async function init() {
   if (!noteColumns.some((column) => column.name === 'body_format')) {
     await run("ALTER TABLE notes ADD COLUMN body_format TEXT NOT NULL DEFAULT 'text'");
   }
+  if (!noteColumns.some((column) => column.name === 'deleted_at')) {
+    await run('ALTER TABLE notes ADD COLUMN deleted_at TEXT');
+  }
+  await run('CREATE INDEX IF NOT EXISTS idx_notes_deleted ON notes(deleted_at)');
   // Every uploaded file: Docs rows themselves (owner_type = 'doc') plus
   // attachments owned by a reminder or a note. `stored_name` is an opaque
   // filename under data/uploads; the original name is display metadata.
@@ -344,6 +350,10 @@ async function init() {
   if (!attachmentColumns.some((column) => column.name === 'description')) {
     await run("ALTER TABLE attachments ADD COLUMN description TEXT NOT NULL DEFAULT ''");
   }
+  if (!attachmentColumns.some((column) => column.name === 'deleted_at')) {
+    await run('ALTER TABLE attachments ADD COLUMN deleted_at TEXT');
+  }
+  await run('CREATE INDEX IF NOT EXISTS idx_attachments_deleted ON attachments(deleted_at)');
   await run('UPDATE attachments SET stored_size = size WHERE stored_size IS NULL');
   await run('UPDATE attachments SET original_size = size WHERE original_size IS NULL');
   await run(`CREATE TABLE IF NOT EXISTS push_subscriptions (

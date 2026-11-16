@@ -670,6 +670,21 @@
   </div>
 
 
+  <div id="trash-sheet" class="sheet" hidden>
+    <div class="sheet-backdrop" data-close></div>
+    <div class="sheet-card trash-card">
+      <header class="sheet-head">
+        <button type="button" class="text-btn" data-close>Close</button>
+        <span>Trash</span>
+        <button type="button" id="trash-empty" class="text-btn strong danger-text" disabled>Empty</button>
+      </header>
+      <div class="sheet-body">
+        <p class="notify-hint" id="trash-hint">Deleted items stay here for 30 days. Restore them or delete them permanently.</p>
+        <div id="trash-list"></div>
+      </div>
+    </div>
+  </div>
+
   <div id="discard-sheet" class="sheet" hidden>
     <div class="sheet-backdrop" data-close></div>
     <div class="sheet-card discard-card">
@@ -1020,6 +1035,11 @@ curl -X PATCH -H "Authorization: Bearer $TOKEN" \
       <span class="foot-ic"><svg class="ic"><use href="#i-storage"/></svg></span>
       <span>Storage</span>
       <span id="account-storage-total" class="storage-total"></span>
+    </button>
+    <button type="button" id="account-trash" class="text-btn">
+      <span class="foot-ic"><svg class="ic"><use href="#i-archive"/></svg></span>
+      <span>Trash</span>
+      <span id="account-trash-count" class="storage-total"></span>
     </button>
     <button type="button" id="account-settings" class="text-btn">
       <span class="foot-ic"><svg class="ic"><use href="#i-settings"/></svg></span>

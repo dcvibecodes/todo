@@ -4718,3 +4718,75 @@ button.link-chip { border: 0; font-family: inherit; cursor: pointer; }
   color: var(--text-2);
   font-variant-numeric: tabular-nums;
 }
+
+
+/* Trash */
+.trash-card { width: min(560px, 100%); }
+.trash-section + .trash-section { margin-top: 18px; }
+.trash-section-title {
+  margin: 0 0 6px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.trash-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+.trash-item:last-child { border-bottom: 0; }
+.trash-icon {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--fill);
+  color: var(--text-2);
+}
+.trash-icon .ic { width: 16px; height: 16px; }
+.trash-main { flex: 1; min-width: 0; }
+.trash-title {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.trash-meta {
+  margin-top: 2px;
+  font-size: 0.72rem;
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.trash-actions { display: flex; align-items: center; gap: 4px; flex: none; }
+.trash-action {
+  min-height: 32px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-2);
+  font-family: inherit;
+  font-size: 0.75rem;
+  font-weight: 550;
+  cursor: pointer;
+}
+.trash-action:hover { background: var(--fill); color: var(--text); }
+.trash-action.danger { color: var(--red); }
+.trash-action.danger:hover { background: color-mix(in srgb, var(--red) 12%, transparent); }
+.trash-empty-state {
+  padding: 28px 8px;
+  text-align: center;
+  color: var(--text-3);
+  font-size: 0.8125rem;
+}
+#account-trash-count { min-width: 18px; }

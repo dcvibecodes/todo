@@ -30,6 +30,7 @@ const LIST_COLORS = new Set(['red', 'rose', 'orange', 'yellow', 'lime', 'green',
 const NOTES_MAX = 50000;
 const NOTE_BODY_MAX = 200000;
 const TENANTS = new Set(['reminders', 'notes', 'docs']);
+const TRASH_RETENTION_DAYS = 30;
 const DOC_FORMAT_REGISTRY = [
   { ext: '.doc', category: 'Word', label: 'Word document', mime: 'application/msword', icon: 'file', signature: 'ole' },
   { ext: '.docx', category: 'Word', label: 'Word document', mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', icon: 'file', signature: 'zip' },
@@ -493,6 +494,23 @@ async function removeStoredFiles(rows) {
   }
 }
 
+async function attachmentIsActive(file) {
+  if (!file) return false;
+  if (file.owner_type === 'doc') {
+    const row = await db.get('SELECT deleted_at FROM attachments WHERE id = ?', [file.id]);
+    return Boolean(row && !row.deleted_at);
+  }
+  if (file.owner_type === 'reminder') {
+    const row = await db.get('SELECT deleted_at FROM reminders WHERE id = ?', [file.owner_id]);
+    return Boolean(row && !row.deleted_at);
+  }
+  if (file.owner_type === 'note') {
+    const row = await db.get('SELECT deleted_at FROM notes WHERE id = ?', [file.owner_id]);
+    return Boolean(row && !row.deleted_at);
+  }
+  return false;
+}
+
 async function folderRow(id, tenant) {
   const folder = await db.get('SELECT id, name, tenant FROM lists WHERE id = ?', [id]);
   if (!folder || folder.tenant !== tenant) return null;
@@ -516,13 +534,28 @@ async function hashUploadedFile(filePath) {
 
 async function storageSnapshot(allowedTenants = null) {
   const [reminderText, noteText, docNames, fileRows, largestRows] = await Promise.all([
-    db.get(`SELECT COALESCE(SUM(LENGTH(CAST(title AS BLOB)) + LENGTH(CAST(notes AS BLOB))), 0) AS bytes FROM reminders`),
-    db.get(`SELECT COALESCE(SUM(LENGTH(CAST(title AS BLOB)) + LENGTH(CAST(body AS BLOB))), 0) AS bytes FROM notes`),
-    db.get(`SELECT COALESCE(SUM(LENGTH(CAST(name AS BLOB))), 0) AS bytes FROM attachments WHERE owner_type = 'doc'`),
-    db.all(`SELECT tenant, COALESCE(SUM(COALESCE(stored_size, size)), 0) AS bytes, COUNT(*) AS files FROM attachments GROUP BY tenant`),
+    db.get(`SELECT COALESCE(SUM(LENGTH(CAST(title AS BLOB)) + LENGTH(CAST(notes AS BLOB))), 0) AS bytes FROM reminders WHERE deleted_at IS NULL`),
+    db.get(`SELECT COALESCE(SUM(LENGTH(CAST(title AS BLOB)) + LENGTH(CAST(body AS BLOB))), 0) AS bytes FROM notes WHERE deleted_at IS NULL`),
+    db.get(`SELECT COALESCE(SUM(LENGTH(CAST(name AS BLOB))), 0) AS bytes FROM attachments WHERE owner_type = 'doc' AND deleted_at IS NULL`),
+    db.all(`SELECT a.tenant, COALESCE(SUM(COALESCE(a.stored_size, a.size)), 0) AS bytes, COUNT(*) AS files
+            FROM attachments a
+            LEFT JOIN reminders r ON a.owner_type = 'reminder' AND r.id = a.owner_id
+            LEFT JOIN notes n ON a.owner_type = 'note' AND n.id = a.owner_id
+            WHERE a.deleted_at IS NULL
+              AND ((a.owner_type = 'doc')
+                OR (a.owner_type = 'reminder' AND r.deleted_at IS NULL)
+                OR (a.owner_type = 'note' AND n.deleted_at IS NULL))
+            GROUP BY a.tenant`),
     db.all(`SELECT a.id, a.tenant, a.owner_type, a.owner_id, a.name, COALESCE(a.stored_size, a.size) AS size, a.mime,
                    l.name AS folder_name
-            FROM attachments a LEFT JOIN lists l ON l.id = a.folder_id
+            FROM attachments a
+            LEFT JOIN lists l ON l.id = a.folder_id
+            LEFT JOIN reminders r ON a.owner_type = 'reminder' AND r.id = a.owner_id
+            LEFT JOIN notes n ON a.owner_type = 'note' AND n.id = a.owner_id
+            WHERE a.deleted_at IS NULL
+              AND ((a.owner_type = 'doc')
+                OR (a.owner_type = 'reminder' AND r.deleted_at IS NULL)
+                OR (a.owner_type = 'note' AND n.deleted_at IS NULL))
             ORDER BY COALESCE(a.stored_size, a.size) DESC, a.id DESC LIMIT 20`),
   ]);
   const files = { reminders: 0, notes: 0, docs: 0 };
@@ -760,7 +793,7 @@ async function purgeCompletedRetention(listId = null) {
     if (!cutoff) continue;
     const expired = await db.all(
       `SELECT id FROM reminders
-       WHERE list_id = ? AND completed = 1 AND completed_at IS NOT NULL AND completed_at < ?`,
+       WHERE list_id = ? AND deleted_at IS NULL AND completed = 1 AND completed_at IS NOT NULL AND completed_at < ?`,
       [list.id, cutoff]
     );
     for (const reminder of expired) {
@@ -776,12 +809,62 @@ async function purgeCompletedRetention(listId = null) {
     }
     const result = await db.run(
       `DELETE FROM reminders
-       WHERE list_id = ? AND completed = 1 AND completed_at IS NOT NULL AND completed_at < ?`,
+       WHERE list_id = ? AND deleted_at IS NULL AND completed = 1 AND completed_at IS NOT NULL AND completed_at < ?`,
       [list.id, cutoff]
     );
     total += result.changes || 0;
   }
   return total;
+}
+
+function trashExpiry(deletedAt) {
+  const start = new Date(deletedAt || 0).getTime();
+  return new Date(start + TRASH_RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString();
+}
+
+function trashDaysLeft(deletedAt) {
+  const remaining = new Date(trashExpiry(deletedAt)).getTime() - Date.now();
+  return Math.max(0, Math.ceil(remaining / (24 * 60 * 60 * 1000)));
+}
+
+async function purgeTrashItem(type, id) {
+  if (!['reminders', 'notes', 'docs'].includes(type)) return false;
+  if (type === 'docs') {
+    const file = await db.get(
+      "SELECT id, stored_name FROM attachments WHERE id = ? AND owner_type = 'doc' AND deleted_at IS NOT NULL",
+      [id]
+    );
+    if (!file) return false;
+    await removeStoredFiles([file]);
+    await db.run("DELETE FROM attachments WHERE id = ? AND owner_type = 'doc'", [id]);
+    return true;
+  }
+  const table = type === 'reminders' ? 'reminders' : 'notes';
+  const row = await db.get(`SELECT id FROM ${table} WHERE id = ? AND deleted_at IS NOT NULL`, [id]);
+  if (!row) return false;
+  const ownerType = type === 'reminders' ? 'reminder' : 'note';
+  const files = await db.all(
+    'SELECT stored_name FROM attachments WHERE owner_type = ? AND owner_id = ?',
+    [ownerType, id]
+  );
+  await removeStoredFiles(files);
+  await db.run('DELETE FROM attachments WHERE owner_type = ? AND owner_id = ?', [ownerType, id]);
+  await db.run(`DELETE FROM ${table} WHERE id = ?`, [id]);
+  return true;
+}
+
+async function purgeExpiredTrash() {
+  const cutoff = new Date(Date.now() - TRASH_RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  const [reminders, notes, docs] = await Promise.all([
+    db.all('SELECT id FROM reminders WHERE deleted_at IS NOT NULL AND deleted_at < ?', [cutoff]),
+    db.all('SELECT id FROM notes WHERE deleted_at IS NOT NULL AND deleted_at < ?', [cutoff]),
+    db.all("SELECT id FROM attachments WHERE owner_type = 'doc' AND deleted_at IS NOT NULL AND deleted_at < ?", [cutoff]),
+  ]);
+  let purged = 0;
+  for (const row of reminders) if (await purgeTrashItem('reminders', row.id)) purged += 1;
+  for (const row of notes) if (await purgeTrashItem('notes', row.id)) purged += 1;
+  for (const row of docs) if (await purgeTrashItem('docs', row.id)) purged += 1;
+  return purged;
 }
 
 // Only these keys may be written through the settings endpoint. Anything
@@ -1142,7 +1225,7 @@ async function verifyPushAction(reminderId, occurrenceAt, action, sig) {
 // helpers so behavior is identical no matter where the request came from.
 
 async function loadReminder(id) {
-  return db.get('SELECT * FROM reminders WHERE id = ?', [id]);
+  return db.get('SELECT * FROM reminders WHERE id = ? AND deleted_at IS NULL', [id]);
 }
 
 function parseRuleColumn(value) {
@@ -2233,12 +2316,12 @@ async function main() {
     const lists = await db.all('SELECT id, name, color, sort_order, completed_retention, tenant, created_at FROM lists ORDER BY tenant, sort_order, id');
     const reminders = await db.all(`SELECT id, list_id, title, notes, due_at, has_time, completed,
       completed_at, urgent, repeat_rule, time_model, time_zone, snoozed_until,
-      sort_order, created_at, updated_at, revision FROM reminders ORDER BY id`);
+      sort_order, created_at, updated_at, revision FROM reminders WHERE deleted_at IS NULL ORDER BY id`);
     const occurrences = await db.all(
       `SELECT reminder_id, occurrence_at, status, title, notes, list_id, urgent,
          completed_at, created_at FROM reminder_occurrences ORDER BY id`
     );
-    const notes = await db.all('SELECT id, folder_id, title, body, body_format, created_at, updated_at FROM notes ORDER BY id');
+    const notes = await db.all('SELECT id, folder_id, title, body, body_format, created_at, updated_at FROM notes WHERE deleted_at IS NULL ORDER BY id');
     res.json({
       app: 'todo',
       format: 1,
@@ -2402,6 +2485,8 @@ async function main() {
   app.get('/api/reminders/:id/occurrences', async (req, res) => {
     const id = parseId(req.params.id);
     if (!id) return res.status(400).json({ error: 'Invalid item' });
+    const reminder = await db.get('SELECT id FROM reminders WHERE id = ? AND deleted_at IS NULL', [id]);
+    if (!reminder) return res.status(404).json({ error: 'Item not found' });
     const rows = await db.all(
       `SELECT occurrence_at, status, title, notes, completed_at, created_at
        FROM reminder_occurrences WHERE reminder_id = ? ORDER BY occurrence_at DESC LIMIT 25`,
@@ -2755,14 +2840,14 @@ async function main() {
     const lists = await db.all(`
       SELECT l.id, l.name, l.color, l.sort_order, l.completed_retention, l.created_at, l.is_system, l.tenant,
         CASE l.tenant
-          WHEN 'notes' THEN (SELECT COUNT(*) FROM notes n WHERE n.folder_id = l.id)
-          WHEN 'docs' THEN (SELECT COUNT(*) FROM attachments a WHERE a.folder_id = l.id AND a.owner_type = 'doc')
-          ELSE (SELECT COUNT(*) FROM reminders r WHERE r.list_id = l.id AND r.completed = 0)
+          WHEN 'notes' THEN (SELECT COUNT(*) FROM notes n WHERE n.folder_id = l.id AND n.deleted_at IS NULL)
+          WHEN 'docs' THEN (SELECT COUNT(*) FROM attachments a WHERE a.folder_id = l.id AND a.owner_type = 'doc' AND a.deleted_at IS NULL)
+          ELSE (SELECT COUNT(*) FROM reminders r WHERE r.list_id = l.id AND r.completed = 0 AND r.deleted_at IS NULL)
         END AS count,
-        (SELECT COUNT(*) FROM reminders r WHERE r.list_id = l.id AND r.completed = 1)
+        (SELECT COUNT(*) FROM reminders r WHERE r.list_id = l.id AND r.completed = 1 AND r.deleted_at IS NULL)
         AS done_count,
         (SELECT COUNT(*) FROM reminders r WHERE r.list_id = l.id AND r.completed = 1
-           AND r.completed_at IS NOT NULL AND r.completed_at >= ?)
+           AND r.completed_at IS NOT NULL AND r.completed_at >= ? AND r.deleted_at IS NULL)
         AS done_count_30d
       FROM lists l ORDER BY l.tenant, l.sort_order, l.id
     `, [thirtyDayCutoff]);
@@ -2770,27 +2855,34 @@ async function main() {
       SELECT n.id, n.folder_id, n.title, n.body, n.body_format, n.revision, n.created_at, n.updated_at,
              l.name AS folder_name, l.color AS folder_color
       FROM notes n JOIN lists l ON l.id = n.folder_id
+      WHERE n.deleted_at IS NULL
       ORDER BY n.updated_at DESC, n.id DESC
     `);
     const docs = await db.all(`
       SELECT a.id, a.folder_id, a.name, a.description, a.mime, a.size, a.stored_size, a.original_size, a.compression, a.optimization, a.revision, a.created_at,
              l.name AS folder_name, l.color AS folder_color
       FROM attachments a JOIN lists l ON l.id = a.folder_id
-      WHERE a.owner_type = 'doc'
+      WHERE a.owner_type = 'doc' AND a.deleted_at IS NULL
       ORDER BY a.created_at DESC, a.id DESC
     `);
     const attachments = await db.all(`
-      SELECT id, tenant, owner_type, owner_id, folder_id, name, mime, size, stored_size, original_size, compression, optimization, revision, created_at
-      FROM attachments WHERE owner_type IN ('reminder', 'note')
-      ORDER BY id ASC
+      SELECT a.id, a.tenant, a.owner_type, a.owner_id, a.folder_id, a.name, a.mime, a.size,
+             a.stored_size, a.original_size, a.compression, a.optimization, a.revision, a.created_at
+      FROM attachments a
+      LEFT JOIN reminders r ON a.owner_type = 'reminder' AND r.id = a.owner_id
+      LEFT JOIN notes n ON a.owner_type = 'note' AND n.id = a.owner_id
+      WHERE a.owner_type IN ('reminder', 'note')
+        AND ((a.owner_type = 'reminder' AND r.deleted_at IS NULL)
+          OR (a.owner_type = 'note' AND n.deleted_at IS NULL))
+      ORDER BY a.id ASC
     `);
     const reminders = await db.all(`
       SELECT r.* FROM reminders r JOIN lists l ON l.id = r.list_id
-      WHERE r.completed = 0 OR r.completed_at IS NULL OR r.completed_at >=
+      WHERE r.deleted_at IS NULL AND (r.completed = 0 OR r.completed_at IS NULL OR r.completed_at >=
         CASE l.completed_retention
           WHEN '1m' THEN ? WHEN '3m' THEN ? WHEN '6m' THEN ? WHEN '12m' THEN ?
           ELSE '0000-01-01T00:00:00.000Z'
-        END
+        END)
       ORDER BY r.sort_order, r.id
     `, [cutoffs['1m'], cutoffs['3m'], cutoffs['6m'], cutoffs['12m']]);
     await applyOccurrenceOverrides(reminders);
@@ -2858,12 +2950,12 @@ async function main() {
     const [openRows, completedRows, noteRows, docRows, storeEpoch] = await Promise.all([
       includeReminders ? db.all(
         `SELECT r.* FROM reminders r
-         WHERE r.completed = 0
+         WHERE r.completed = 0 AND r.deleted_at IS NULL
          ORDER BY r.sort_order, r.id`
       ) : [],
       includeReminders ? db.all(
         `SELECT r.* FROM reminders r JOIN lists l ON l.id = r.list_id
-         WHERE r.completed = 1 AND (r.completed_at IS NULL OR r.completed_at >=
+         WHERE r.completed = 1 AND r.deleted_at IS NULL AND (r.completed_at IS NULL OR r.completed_at >=
            CASE l.completed_retention
              WHEN '1m' THEN ? WHEN '3m' THEN ? WHEN '6m' THEN ? WHEN '12m' THEN ?
              ELSE '0000-01-01T00:00:00.000Z'
@@ -2875,7 +2967,7 @@ async function main() {
         `SELECT n.id, n.folder_id, n.title, n.body, n.body_format, n.revision, n.created_at, n.updated_at,
                 l.name AS folder_name, l.color AS folder_color
          FROM notes n JOIN lists l ON l.id = n.folder_id
-         WHERE instr(lower(n.title), lower(?)) > 0 OR instr(lower(n.body), lower(?)) > 0
+         WHERE n.deleted_at IS NULL AND (instr(lower(n.title), lower(?)) > 0 OR instr(lower(n.body), lower(?)) > 0)
          ORDER BY n.updated_at DESC, n.id DESC`,
         [query, query]
       ) : [],
@@ -2883,7 +2975,7 @@ async function main() {
         `SELECT a.id, a.folder_id, a.name, a.mime, a.size, a.revision, a.created_at,
                 l.name AS folder_name, l.color AS folder_color
          FROM attachments a JOIN lists l ON l.id = a.folder_id
-         WHERE a.owner_type = 'doc' AND instr(lower(a.name), lower(?)) > 0
+         WHERE a.owner_type = 'doc' AND a.deleted_at IS NULL AND instr(lower(a.name), lower(?)) > 0
          ORDER BY a.created_at DESC, a.id DESC`,
         [query]
       ) : [],
@@ -2923,14 +3015,14 @@ async function main() {
     const lists = await db.all(`
       SELECT l.id, l.name, l.color, l.sort_order, l.completed_retention, l.created_at, l.is_system, l.tenant,
         CASE l.tenant
-          WHEN 'notes' THEN (SELECT COUNT(*) FROM notes n WHERE n.folder_id = l.id)
-          WHEN 'docs' THEN (SELECT COUNT(*) FROM attachments a WHERE a.folder_id = l.id AND a.owner_type = 'doc')
-          ELSE (SELECT COUNT(*) FROM reminders r WHERE r.list_id = l.id AND r.completed = 0)
+          WHEN 'notes' THEN (SELECT COUNT(*) FROM notes n WHERE n.folder_id = l.id AND n.deleted_at IS NULL)
+          WHEN 'docs' THEN (SELECT COUNT(*) FROM attachments a WHERE a.folder_id = l.id AND a.owner_type = 'doc' AND a.deleted_at IS NULL)
+          ELSE (SELECT COUNT(*) FROM reminders r WHERE r.list_id = l.id AND r.completed = 0 AND r.deleted_at IS NULL)
         END AS count,
-        (SELECT COUNT(*) FROM reminders r WHERE r.list_id = l.id AND r.completed = 1)
+        (SELECT COUNT(*) FROM reminders r WHERE r.list_id = l.id AND r.completed = 1 AND r.deleted_at IS NULL)
         AS done_count,
         (SELECT COUNT(*) FROM reminders r WHERE r.list_id = l.id AND r.completed = 1
-           AND r.completed_at IS NOT NULL AND r.completed_at >= ?)
+           AND r.completed_at IS NOT NULL AND r.completed_at >= ? AND r.deleted_at IS NULL)
         AS done_count_30d
       FROM lists l ORDER BY l.tenant, l.sort_order, l.id
     `, [cutoff]);
@@ -2952,11 +3044,11 @@ async function main() {
       // absence from THIS unfiltered response implies deletion; absence
       // from any filtered or limited response means nothing.
       const reminders = await db.all(
-        `SELECT ${REMINDER_COLUMNS} FROM reminders ORDER BY id ASC`
+        `SELECT ${REMINDER_COLUMNS} FROM reminders WHERE deleted_at IS NULL ORDER BY id ASC`
       );
       return res.json({ reminders, complete: true, store_epoch: storeEpoch });
     }
-    const conditions = [];
+    const conditions = ['deleted_at IS NULL'];
     const params = [];
     if (req.query.list_id !== undefined) {
       const listId = parseId(req.query.list_id);
@@ -2994,7 +3086,7 @@ async function main() {
     const id = parseId(req.params.id);
     if (!id) return res.status(400).json({ error: 'Invalid item' });
     const reminder = await db.get(
-      `SELECT ${REMINDER_COLUMNS} FROM reminders WHERE id = ?`, [id]
+      `SELECT ${REMINDER_COLUMNS} FROM reminders WHERE id = ? AND deleted_at IS NULL`, [id]
     );
     if (!reminder) return res.status(404).json({ error: 'Item not found' });
     res.json({ reminder });
@@ -3090,9 +3182,14 @@ async function main() {
     const list = await db.get('SELECT id, is_system, tenant FROM lists WHERE id = ?', [id]);
     if (!list) return res.status(404).json({ error: 'Folder not found' });
     if (list.is_system) return res.status(400).json({ error: 'Unfiled cannot be deleted' });
-    // Remove stored files before the cascade drops their metadata rows.
-    const files = await db.all('SELECT stored_name FROM attachments WHERE folder_id = ?', [id]);
-    await removeStoredFiles(files);
+    const [reminderCount, noteCount, fileCount] = await Promise.all([
+      db.get('SELECT COUNT(*) AS n FROM reminders WHERE list_id = ?', [id]),
+      db.get('SELECT COUNT(*) AS n FROM notes WHERE folder_id = ?', [id]),
+      db.get('SELECT COUNT(*) AS n FROM attachments WHERE folder_id = ?', [id]),
+    ]);
+    if (reminderCount.n || noteCount.n || fileCount.n) {
+      return res.status(409).json({ error: 'Move items out, or permanently delete them from Trash, before deleting this folder' });
+    }
     await db.run('DELETE FROM lists WHERE id = ?', [id]);
     res.json({ ok: true });
   });
@@ -3103,7 +3200,7 @@ async function main() {
   const NOTE_WRITE_FIELDS = ['title', 'body', 'body_format', 'folder_id', 'base_revision', 'base_epoch', 'idempotency_key'];
 
   async function loadNoteRow(id) {
-    return db.get(`SELECT ${NOTE_COLUMNS} FROM notes WHERE id = ?`, [id]);
+    return db.get(`SELECT ${NOTE_COLUMNS} FROM notes WHERE id = ? AND deleted_at IS NULL`, [id]);
   }
 
   function publicAttachment(row) {
@@ -3169,7 +3266,7 @@ async function main() {
   }
 
   app.get('/api/notes', async (req, res) => {
-    const conditions = [];
+    const conditions = ['n.deleted_at IS NULL'];
     const params = [];
     let folderId = null;
     if (req.query.folder_id !== undefined) {
@@ -3331,7 +3428,7 @@ async function main() {
         },
       });
     }
-    const note = await db.get('SELECT id FROM notes WHERE id = ?', [id]);
+    const note = await db.get('SELECT id FROM notes WHERE id = ? AND deleted_at IS NULL', [id]);
     if (!note) return res.status(404).json({ error: 'Note not found' });
     const fields = [];
     const params = [];
@@ -3393,25 +3490,23 @@ async function main() {
           if (note.revision !== req.body.base_revision) {
             return { status: 409, body: { error: 'Note changed since your read', note } };
           }
-          const files = await db.all(
-            "SELECT stored_name FROM attachments WHERE owner_type = 'note' AND owner_id = ?", [id]
+          const now = new Date().toISOString();
+          await db.run(
+            'UPDATE notes SET deleted_at = ?, updated_at = ?, revision = revision + 1 WHERE id = ?',
+            [now, now, id]
           );
-          await removeStoredFiles(files);
-          await db.run("DELETE FROM attachments WHERE owner_type = 'note' AND owner_id = ?", [id]);
-          await db.run('DELETE FROM notes WHERE id = ?', [id]);
-          return { status: 200, body: { ok: true, deleted: true } };
+          return { status: 200, body: { ok: true, deleted: true, trashed: true } };
         },
       });
     }
-    const note = await db.get('SELECT id FROM notes WHERE id = ?', [id]);
+    const note = await db.get('SELECT id FROM notes WHERE id = ? AND deleted_at IS NULL', [id]);
     if (!note) return res.status(404).json({ error: 'Note not found' });
-    const files = await db.all(
-      "SELECT stored_name FROM attachments WHERE owner_type = 'note' AND owner_id = ?", [id]
+    const now = new Date().toISOString();
+    await db.run(
+      'UPDATE notes SET deleted_at = ?, updated_at = ?, revision = revision + 1 WHERE id = ?',
+      [now, now, id]
     );
-    await removeStoredFiles(files);
-    await db.run("DELETE FROM attachments WHERE owner_type = 'note' AND owner_id = ?", [id]);
-    await db.run('DELETE FROM notes WHERE id = ?', [id]);
-    res.json({ ok: true });
+    res.json({ ok: true, deleted: true, trashed: true });
   });
 
   /* ---------------- Attachments and Docs ---------------- */
@@ -3457,7 +3552,7 @@ async function main() {
 
   app.get('/api/reminders/:id/attachments', async (req, res) => {
     const id = parseId(req.params.id);
-    const reminder = id ? await db.get('SELECT id FROM reminders WHERE id = ?', [id]) : null;
+    const reminder = id ? await db.get('SELECT id FROM reminders WHERE id = ? AND deleted_at IS NULL', [id]) : null;
     if (!reminder) return res.status(404).json({ error: 'Item not found' });
     const attachments = await db.all(
       "SELECT id, name, mime, size, stored_size, original_size, compression, optimization, revision, created_at FROM attachments WHERE owner_type = 'reminder' AND owner_id = ? ORDER BY id",
@@ -3468,7 +3563,7 @@ async function main() {
 
   app.get('/api/notes/:id/attachments', async (req, res) => {
     const id = parseId(req.params.id);
-    const note = id ? await db.get('SELECT id FROM notes WHERE id = ?', [id]) : null;
+    const note = id ? await db.get('SELECT id FROM notes WHERE id = ? AND deleted_at IS NULL', [id]) : null;
     if (!note) return res.status(404).json({ error: 'Note not found' });
     const attachments = await db.all(
       "SELECT id, name, mime, size, stored_size, original_size, compression, optimization, revision, created_at FROM attachments WHERE owner_type = 'note' AND owner_id = ? ORDER BY id",
@@ -3489,7 +3584,7 @@ async function main() {
 
   app.post('/api/reminders/:id/attachments', upload.array('files', 10), async (req, res) => {
     const id = parseId(req.params.id);
-    const reminder = id ? await db.get('SELECT id, list_id FROM reminders WHERE id = ?', [id]) : null;
+    const reminder = id ? await db.get('SELECT id, list_id FROM reminders WHERE id = ? AND deleted_at IS NULL', [id]) : null;
     if (!reminder) {
       await removeStoredFiles(req.files);
       return res.status(404).json({ error: 'Item not found' });
@@ -3537,7 +3632,7 @@ async function main() {
 
   app.post('/api/notes/:id/attachments', upload.array('files', 10), async (req, res) => {
     const id = parseId(req.params.id);
-    const note = id ? await db.get('SELECT id, folder_id FROM notes WHERE id = ?', [id]) : null;
+    const note = id ? await db.get('SELECT id, folder_id FROM notes WHERE id = ? AND deleted_at IS NULL', [id]) : null;
     if (!note) {
       await removeStoredFiles(req.files);
       return res.status(404).json({ error: 'Note not found' });
@@ -3648,7 +3743,7 @@ async function main() {
   });
 
   app.get('/api/docs', async (req, res) => {
-    const conditions = ["a.owner_type = 'doc'"];
+    const conditions = ["a.owner_type = 'doc'", 'a.deleted_at IS NULL'];
     const params = [];
     let folderId = null;
     if (req.query.folder_id !== undefined) {
@@ -3694,7 +3789,7 @@ async function main() {
     if (!id) return res.status(400).json({ error: 'Invalid file' });
     const doc = await db.get(
       `SELECT id, folder_id, name, description, mime, size, stored_size, original_size, compression, optimization, revision, created_at
-       FROM attachments WHERE id = ? AND owner_type = 'doc'`, [id]
+       FROM attachments WHERE id = ? AND owner_type = 'doc' AND deleted_at IS NULL`, [id]
     );
     if (!doc) return res.status(404).json({ error: 'File not found' });
     res.json({ doc });
@@ -3703,9 +3798,10 @@ async function main() {
   app.get('/api/files/:id', async (req, res) => {
     const id = parseId(req.params.id);
     const file = id ? await db.get(
-      'SELECT name, stored_name, mime, size, compression, owner_type, owner_id FROM attachments WHERE id = ?', [id]
+      'SELECT id, name, stored_name, mime, size, compression, owner_type, owner_id FROM attachments WHERE id = ?', [id]
     ) : null;
     if (!file) return res.status(404).json({ error: 'File not found' });
+    if (!(await attachmentIsActive(file))) return res.status(404).json({ error: 'File not found' });
     if (req.token) {
       const allowed = file.owner_type === 'reminder'
         || (file.owner_type === 'note' && tokenHas(req.token, 'notes:read'))
@@ -3742,9 +3838,10 @@ async function main() {
   app.get('/api/files/:id/preview', async (req, res) => {
     const id = parseId(req.params.id);
     const file = id ? await db.get(
-      'SELECT name, stored_name, owner_type, owner_id FROM attachments WHERE id = ?', [id]
+      'SELECT id, name, stored_name, owner_type, owner_id FROM attachments WHERE id = ?', [id]
     ) : null;
     if (!file) return res.status(404).json({ error: 'File not found' });
+    if (!(await attachmentIsActive(file))) return res.status(404).json({ error: 'File not found' });
     if (req.token) {
       const allowed = file.owner_type === 'reminder'
         || (file.owner_type === 'note' && tokenHas(req.token, 'notes:read'))
@@ -3780,6 +3877,7 @@ async function main() {
       'SELECT id, name, stored_name, size, stored_size, revision, owner_type, owner_id FROM attachments WHERE id = ?', [id]
     ) : null;
     if (!file) return res.status(404).json({ error: 'File not found' });
+    if (!(await attachmentIsActive(file))) return res.status(404).json({ error: 'File not found' });
     if (req.token) {
       const allowed = file.owner_type === 'reminder'
         || (file.owner_type === 'note' && tokenHas(req.token, 'notes:read'))
@@ -4007,7 +4105,7 @@ async function main() {
         fingerprint: payloadFingerprint(req.body),
         execute: async () => {
           const current = await db.get(
-            "SELECT id, revision FROM attachments WHERE id = ? AND owner_type = 'doc'", [id]
+            "SELECT id, revision FROM attachments WHERE id = ? AND owner_type = 'doc' AND deleted_at IS NULL", [id]
           );
           if (!current) return { status: 404, body: { error: 'File not found' } };
           if ((await getStoreEpoch()) !== req.body.base_epoch) {
@@ -4016,13 +4114,137 @@ async function main() {
           if (current.revision !== req.body.base_revision) {
             return { status: 409, body: { error: 'File changed since your read' } };
           }
-          await deleteAttachmentRow(id);
-          return { status: 200, body: { ok: true, deleted: true } };
+          await db.run(
+            "UPDATE attachments SET deleted_at = ?, revision = revision + 1 WHERE id = ? AND owner_type = 'doc'",
+            [new Date().toISOString(), id]
+          );
+          return { status: 200, body: { ok: true, deleted: true, trashed: true } };
         },
       });
     }
-    await deleteAttachmentRow(id);
+    const current = await db.get(
+      "SELECT id FROM attachments WHERE id = ? AND owner_type = 'doc' AND deleted_at IS NULL", [id]
+    );
+    if (!current) return res.status(404).json({ error: 'File not found' });
+    await db.run(
+      "UPDATE attachments SET deleted_at = ?, revision = revision + 1 WHERE id = ? AND owner_type = 'doc'",
+      [new Date().toISOString(), id]
+    );
+    res.json({ ok: true, deleted: true, trashed: true });
+  });
+
+  /* ---------------- Trash ---------------- */
+
+  app.get('/api/trash', async (req, res) => {
+    if (req.token) return denyToken(res);
+    const reminders = await db.all(`
+      SELECT r.id, r.title, r.deleted_at, l.name AS folder_name,
+        (SELECT COALESCE(SUM(COALESCE(a.stored_size, a.size)), 0)
+           FROM attachments a WHERE a.owner_type = 'reminder' AND a.owner_id = r.id) AS size,
+        (SELECT COUNT(*) FROM attachments a
+           WHERE a.owner_type = 'reminder' AND a.owner_id = r.id) AS attachment_count
+      FROM reminders r LEFT JOIN lists l ON l.id = r.list_id
+      WHERE r.deleted_at IS NOT NULL
+      ORDER BY r.deleted_at DESC, r.id DESC
+    `);
+    const notes = await db.all(`
+      SELECT n.id, n.title, n.deleted_at, l.name AS folder_name,
+        (SELECT COALESCE(SUM(COALESCE(a.stored_size, a.size)), 0)
+           FROM attachments a WHERE a.owner_type = 'note' AND a.owner_id = n.id) AS size,
+        (SELECT COUNT(*) FROM attachments a
+           WHERE a.owner_type = 'note' AND a.owner_id = n.id) AS attachment_count
+      FROM notes n LEFT JOIN lists l ON l.id = n.folder_id
+      WHERE n.deleted_at IS NOT NULL
+      ORDER BY n.deleted_at DESC, n.id DESC
+    `);
+    const docs = await db.all(`
+      SELECT a.id, a.name AS title, a.deleted_at, l.name AS folder_name,
+        COALESCE(a.stored_size, a.size) AS size, 0 AS attachment_count
+      FROM attachments a LEFT JOIN lists l ON l.id = a.folder_id
+      WHERE a.owner_type = 'doc' AND a.deleted_at IS NOT NULL
+      ORDER BY a.deleted_at DESC, a.id DESC
+    `);
+    const items = [
+      ...reminders.map((row) => ({ ...row, type: 'reminders' })),
+      ...notes.map((row) => ({ ...row, type: 'notes' })),
+      ...docs.map((row) => ({ ...row, type: 'docs' })),
+    ].map((row) => ({
+      type: row.type,
+      id: row.id,
+      title: row.title,
+      folder_name: row.folder_name || 'Unfiled',
+      deleted_at: row.deleted_at,
+      expires_at: trashExpiry(row.deleted_at),
+      days_left: trashDaysLeft(row.deleted_at),
+      size: Number(row.size) || 0,
+      attachment_count: Number(row.attachment_count) || 0,
+    })).sort((a, b) => String(b.deleted_at).localeCompare(String(a.deleted_at)));
+    res.json({
+      items,
+      counts: {
+        reminders: reminders.length,
+        notes: notes.length,
+        docs: docs.length,
+      },
+      total_size: items.reduce((sum, item) => sum + item.size, 0),
+      retention_days: TRASH_RETENTION_DAYS,
+    });
+  });
+
+  app.post('/api/trash/:type/:id/restore', async (req, res) => {
+    if (req.token) return denyToken(res);
+    const type = String(req.params.type);
+    const id = parseId(req.params.id);
+    if (!id || !['reminders', 'notes', 'docs'].includes(type)) {
+      return res.status(400).json({ error: 'Invalid trash item' });
+    }
+    const tenant = type === 'reminders' ? 'reminders' : type === 'notes' ? 'notes' : 'docs';
+    const table = type === 'docs' ? 'attachments' : type;
+    const idColumn = type === 'reminders' ? 'list_id' : 'folder_id';
+    const row = await db.get(
+      `SELECT id, ${idColumn} AS folder_id, deleted_at FROM ${table}
+       WHERE id = ? AND deleted_at IS NOT NULL ${type === 'docs' ? "AND owner_type = 'doc'" : ''}`,
+      [id]
+    );
+    if (!row) return res.status(404).json({ error: 'Trash item not found' });
+    let folderId = row.folder_id;
+    const folder = folderId ? await db.get('SELECT id FROM lists WHERE id = ? AND tenant = ?', [folderId, tenant]) : null;
+    if (!folder) {
+      const fallback = await db.get('SELECT id FROM lists WHERE tenant = ? AND is_system = 1 LIMIT 1', [tenant]);
+      if (!fallback) return res.status(409).json({ error: 'No folder available to restore into' });
+      folderId = fallback.id;
+    }
+    const now = new Date().toISOString();
+    await db.run(
+      `UPDATE ${table} SET deleted_at = NULL, ${idColumn} = ?, revision = revision + 1
+       ${type === 'docs' ? '' : ', updated_at = ?'} WHERE id = ?`,
+      type === 'docs' ? [folderId, id] : [folderId, now, id]
+    );
+    res.json({ ok: true, restored: true });
+  });
+
+  app.delete('/api/trash/:type/:id', async (req, res) => {
+    if (req.token) return denyToken(res);
+    const type = String(req.params.type);
+    const id = parseId(req.params.id);
+    if (!id || !['reminders', 'notes', 'docs'].includes(type)) {
+      return res.status(400).json({ error: 'Invalid trash item' });
+    }
+    const purged = await purgeTrashItem(type, id);
+    if (!purged) return res.status(404).json({ error: 'Trash item not found' });
     res.json({ ok: true });
+  });
+
+  app.post('/api/trash/empty', async (req, res) => {
+    if (req.token) return denyToken(res);
+    const reminders = await db.all('SELECT id FROM reminders WHERE deleted_at IS NOT NULL');
+    const notes = await db.all('SELECT id FROM notes WHERE deleted_at IS NOT NULL');
+    const docs = await db.all("SELECT id FROM attachments WHERE owner_type = 'doc' AND deleted_at IS NOT NULL");
+    let purged = 0;
+    for (const row of reminders) if (await purgeTrashItem('reminders', row.id)) purged += 1;
+    for (const row of notes) if (await purgeTrashItem('notes', row.id)) purged += 1;
+    for (const row of docs) if (await purgeTrashItem('docs', row.id)) purged += 1;
+    res.json({ ok: true, purged });
   });
 
   app.get('/api/storage', async (req, res) => {
@@ -4726,14 +4948,14 @@ async function main() {
   app.delete('/api/reminders/:id', async (req, res) => {
     const id = parseId(req.params.id);
     if (!id) return res.status(400).json({ error: 'Invalid item' });
-    const files = await db.all(
-      "SELECT stored_name FROM attachments WHERE owner_type = 'reminder' AND owner_id = ?", [id]
+    const reminder = await db.get('SELECT id FROM reminders WHERE id = ? AND deleted_at IS NULL', [id]);
+    if (!reminder) return res.status(404).json({ error: 'Item not found' });
+    const now = new Date().toISOString();
+    await db.run(
+      'UPDATE reminders SET deleted_at = ?, updated_at = ?, revision = revision + 1 WHERE id = ?',
+      [now, now, id]
     );
-    const result = await db.run('DELETE FROM reminders WHERE id = ?', [id]);
-    if (!result.changes) return res.status(404).json({ error: 'Item not found' });
-    await removeStoredFiles(files);
-    await db.run("DELETE FROM attachments WHERE owner_type = 'reminder' AND owner_id = ?", [id]);
-    res.json({ ok: true });
+    res.json({ ok: true, deleted: true, trashed: true });
   });
 
   app.post('/api/push/subscribe', async (req, res) => {
@@ -4859,7 +5081,7 @@ async function main() {
         SELECT r.id, r.title, r.notes, r.list_id, r.due_at, r.notified_at,
                r.last_push_at, r.push_count, r.revision, l.name AS list_name
         FROM reminders r JOIN lists l ON l.id = r.list_id
-        WHERE r.completed = 0 AND r.due_at IS NOT NULL
+        WHERE r.completed = 0 AND r.deleted_at IS NULL AND r.due_at IS NOT NULL
           AND COALESCE(r.snoozed_until, r.due_at) <= ?
           AND COALESCE(r.snoozed_until, r.due_at) >= ?
         ORDER BY COALESCE(r.snoozed_until, r.due_at) LIMIT 50
@@ -4890,7 +5112,7 @@ async function main() {
         ? new Date(new Date(recurrence.wallToInstant(badgeZone, { y: badgeWall.y, mo: badgeWall.mo, d: badgeWall.d, h: 23, mi: 59 })).getTime() + 59999).toISOString()
         : new Date(nowMs + 24 * 3600 * 1000).toISOString();
       const badgeRow = await db.get(
-        'SELECT COUNT(*) AS n FROM reminders WHERE completed = 0 AND due_at IS NOT NULL AND due_at <= ? AND (snoozed_until IS NULL OR snoozed_until <= ?)',
+        'SELECT COUNT(*) AS n FROM reminders WHERE completed = 0 AND deleted_at IS NULL AND due_at IS NOT NULL AND due_at <= ? AND (snoozed_until IS NULL OR snoozed_until <= ?)',
         [badgeEnd, now]
       );
       const badgeCount = badgeRow ? badgeRow.n : 0;
@@ -4951,6 +5173,13 @@ async function main() {
   });
   purgeOldCompleted();
   setInterval(purgeOldCompleted, 24 * 60 * 60 * 1000);
+  const purgeOldTrash = () => purgeExpiredTrash().then((count) => {
+    if (count) console.log(`Trash purge removed ${count} item(s)`);
+  }).catch((err) => {
+    console.error('Trash purge failed:', err.message);
+  });
+  purgeOldTrash();
+  setInterval(purgeOldTrash, 24 * 60 * 60 * 1000);
 }
 
 main().catch((err) => {

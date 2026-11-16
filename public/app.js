@@ -1988,6 +1988,144 @@ async function refreshAccountStorage() {
   } catch { /* keep the cached total */ }
 }
 
+let trashEmptyArmed = false;
+let trashEmptyTimer = null;
+
+function resetTrashEmpty() {
+  trashEmptyArmed = false;
+  clearTimeout(trashEmptyTimer);
+  const button = $('#trash-empty');
+  if (button) button.textContent = 'Empty';
+}
+
+async function loadTrash() {
+  const list = $('#trash-list');
+  const hint = $('#trash-hint');
+  const emptyButton = $('#trash-empty');
+  if (!list || !hint) return;
+  try {
+    const data = await api('/api/trash');
+    const count = (data.items || []).length;
+    const countNode = $('#account-trash-count');
+    if (countNode) countNode.textContent = count ? String(count) : '';
+    if (emptyButton) emptyButton.disabled = !count;
+    hint.textContent = count
+      ? `Deleted items stay here for ${data.retention_days || 30} days. Restore them or delete them permanently.`
+      : 'Trash is empty. Deleted items stay here for 30 days.';
+    list.replaceChildren();
+    if (!count) {
+      list.append(el('div', { class: 'trash-empty-state', text: 'Nothing in Trash' }));
+      return;
+    }
+    const groups = [
+      ['reminders', 'Reminders'],
+      ['notes', 'Notes'],
+      ['docs', 'Docs'],
+    ];
+    for (const [type, label] of groups) {
+      const items = data.items.filter((item) => item.type === type);
+      if (!items.length) continue;
+      const section = el('section', { class: 'trash-section' }, [
+        el('h3', { class: 'trash-section-title', text: label }),
+      ]);
+      for (const item of items) section.append(trashRow(item));
+      list.append(section);
+    }
+  } catch (err) {
+    hint.textContent = err.message;
+    list.replaceChildren();
+  }
+}
+
+async function undoTrash(type, id) {
+  try {
+    await api(`/api/trash/${type}/${id}/restore`, { method: 'POST' });
+    state.storage = null;
+    await loadState();
+    render();
+    toast('Restored');
+  } catch (err) {
+    toast(err.message);
+  }
+}
+
+function trashRow(item) {
+  const icon = item.type === 'docs'
+    ? docIconForName(item.title)
+    : item.type === 'notes' ? 'note' : 'all';
+  const size = item.size ? ` · ${formatBytes(item.size)}` : '';
+  const attachments = item.attachment_count
+    ? ` · ${item.attachment_count} file${item.attachment_count === 1 ? '' : 's'}`
+    : '';
+  const meta = `${item.folder_name} · Deleted ${formatRecordDate(item.deleted_at)} · ${item.days_left} day${item.days_left === 1 ? '' : 's'} left${size}${attachments}`;
+  const restore = el('button', {
+    type: 'button',
+    class: 'trash-action',
+    text: 'Restore',
+    onclick: async () => {
+      restore.disabled = true;
+      try {
+        await api(`/api/trash/${item.type}/${item.id}/restore`, { method: 'POST' });
+        state.storage = null;
+        await loadState();
+        render();
+        await loadTrash();
+        toast('Restored');
+      } catch (err) {
+        restore.disabled = false;
+        toast(err.message);
+      }
+    },
+  });
+  const remove = el('button', {
+    type: 'button',
+    class: 'trash-action danger',
+    text: 'Delete',
+    onclick: async () => {
+      if (remove.dataset.confirm !== '1') {
+        remove.dataset.confirm = '1';
+        remove.textContent = 'Confirm?';
+        clearTimeout(remove._confirmTimer);
+        remove._confirmTimer = setTimeout(() => {
+          remove.dataset.confirm = '';
+          remove.textContent = 'Delete';
+        }, INLINE_CONFIRM_MS);
+        return;
+      }
+      clearTimeout(remove._confirmTimer);
+      remove.disabled = true;
+      try {
+        await api(`/api/trash/${item.type}/${item.id}`, { method: 'DELETE' });
+        state.storage = null;
+        await loadState();
+        render();
+        await loadTrash();
+        toast('Deleted permanently');
+      } catch (err) {
+        remove.disabled = false;
+        remove.dataset.confirm = '';
+        remove.textContent = 'Delete';
+        toast(err.message);
+      }
+    },
+  });
+  return el('div', { class: 'trash-item' }, [
+    el('span', { class: 'trash-icon', html: ICON(icon, 'ic') }),
+    el('div', { class: 'trash-main' }, [
+      el('div', { class: 'trash-title', text: item.title }),
+      el('div', { class: 'trash-meta', text: meta, title: meta }),
+    ]),
+    el('div', { class: 'trash-actions' }, [restore, remove]),
+  ]);
+}
+
+async function openTrashSheet() {
+  closeAccountMenu();
+  resetTrashEmpty();
+  openSheet('#trash-sheet');
+  await loadTrash();
+}
+
 function toggleAccountMenu() {
   const menu = getAccountMenu();
   if (!menu) return;
@@ -4176,7 +4314,7 @@ function updateTenantViewCount(kind) {
   setPulseText($('#view-count'), items.length ? String(items.length) : '');
 }
 
-function deleteTenantRowInline({ row, button, request, removeLocal, noun }) {
+function deleteTenantRowInline({ row, button, request, removeLocal, noun, undo }) {
   if (!row || row.dataset.deleting) return;
   row.dataset.deleting = '1';
   const scroller = screenScroller();
@@ -4204,12 +4342,12 @@ function deleteTenantRowInline({ row, button, request, removeLocal, noun }) {
       state.storage = null;
       if (!searchAtStart && !state.search && state.view === viewAtStart && row.isConnected) {
         removeLocal();
-        toast(`${noun} deleted`);
+        toast(`${noun} moved to Trash`, undo ? 'Undo' : null, undo);
       } else {
         await loadState();
         render();
         restoreScroll();
-        toast(`${noun} deleted`);
+        toast(`${noun} moved to Trash`, undo ? 'Undo' : null, undo);
       }
     } catch (err) {
       if (row.isConnected) {
@@ -4246,6 +4384,7 @@ async function handleNoteDelete(note, button) {
     noun: 'Note',
     request: () => api('/api/notes/' + note.id, { method: 'DELETE' }),
     removeLocal: () => removeNoteLocally(note, row),
+    undo: () => undoTrash('notes', note.id),
   });
 }
 
@@ -4263,6 +4402,7 @@ async function handleDocDelete(doc, button) {
     noun: 'File',
     request: () => api('/api/docs/' + doc.id, { method: 'DELETE' }),
     removeLocal: () => removeDocLocally(doc, row),
+    undo: () => undoTrash('docs', doc.id),
   });
 }
 
@@ -5215,13 +5355,13 @@ function deleteReminderInline(reminder, row) {
       state.storage = null;
       if (canUpdateLocally()) {
         removeReminderLocally(reminder, row);
-        toast('Item deleted');
+        toast('Item moved to Trash', 'Undo', () => undoTrash('reminders', reminder.id));
       } else {
         await loadState();
         requestRowAnimation();
         render();
         restoreScroll();
-        toast('Item deleted');
+        toast('Item moved to Trash', 'Undo', () => undoTrash('reminders', reminder.id));
       }
     } catch (err) {
       if (canUpdateLocally()) {
@@ -6312,6 +6452,7 @@ async function deleteReminder() {
     await loadState();
     requestRowAnimation();
     render();
+    toast('Item moved to Trash', 'Undo', () => undoTrash('reminders', id));
   } catch (err) {
     toast(err.message);
   }
@@ -6834,6 +6975,7 @@ function resetNoteDelete() {
 
 async function deleteNoteFromEditor() {
   if (!state.noteEditingId) return;
+  const id = state.noteEditingId;
   const button = $('#n-delete');
   if (!noteDeleteArmed) {
     noteDeleteArmed = true;
@@ -6844,13 +6986,13 @@ async function deleteNoteFromEditor() {
   }
   resetNoteDelete();
   try {
-    await api('/api/notes/' + state.noteEditingId, { method: 'DELETE' });
+    await api('/api/notes/' + id, { method: 'DELETE' });
     state.storage = null;
     closeSheet('#note-editor');
     state.noteEditingId = null;
     await loadState();
     render();
-    toast('Note deleted');
+    toast('Note moved to Trash', 'Undo', () => undoTrash('notes', id));
   } catch (err) {
     toast(err.message);
   }
@@ -7001,7 +7143,7 @@ async function deleteList() {
     $('#l-delete').textContent = 'Confirm?';
     $('#l-delete').setAttribute('aria-label', 'Confirm delete folder');
     const warn = $('#l-delete-warn');
-    warn.textContent = 'This also deletes every item in this folder.';
+    warn.textContent = 'Only empty folders can be deleted. Move items out, or permanently delete them from Trash, first.';
     warn.hidden = false;
     warn.scrollIntoView({
       block: 'nearest',
@@ -8299,8 +8441,32 @@ $('#account-storage').addEventListener('click', async () => {
   const summary = $('#storage-summary');
   if (summary) summary.scrollIntoView({ block: 'center', behavior: MOTION_REDUCED.matches ? 'auto' : 'smooth' });
 });
+$('#account-trash').addEventListener('click', () => { openTrashSheet(); });
 $('#account-settings').addEventListener('click', () => { closeAccountMenu(); openSettings(); });
 $('#account-logout').addEventListener('click', () => { closeAccountMenu(); logout(); });
+$('#trash-empty').addEventListener('click', async () => {
+  const button = $('#trash-empty');
+  if (!trashEmptyArmed) {
+    trashEmptyArmed = true;
+    button.textContent = 'Confirm empty?';
+    clearTimeout(trashEmptyTimer);
+    trashEmptyTimer = setTimeout(resetTrashEmpty, INLINE_CONFIRM_MS);
+    return;
+  }
+  resetTrashEmpty();
+  button.disabled = true;
+  try {
+    await api('/api/trash/empty', { method: 'POST' });
+    state.storage = null;
+    await loadState();
+    render();
+    await loadTrash();
+    toast('Trash emptied');
+  } catch (err) {
+    button.disabled = false;
+    toast(err.message);
+  }
+});
 document.addEventListener('click', (event) => {
   const menu = getAccountMenu();
   if (!menu || menu.hidden) return;

@@ -2,6 +2,12 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v4.11.1
+
+- **Trash** - Deleting a Reminder, Note or Doc now moves it to Trash for 30 days instead of deleting it immediately. Restore items, delete them permanently, or empty Trash from the account menu. Delete toasts include Undo. Files remain on disk until permanent deletion.
+- **Safer folder deletion** - Non-empty folders can no longer be deleted, so folder deletion cannot bypass Trash or remove files by cascade.
+- Service worker cache bumped to `workspace-v4.11.1`.
+
 ## What's New in v4.11.0
 
 - **PDF preview** - PDF files now open in a full-screen viewer with page navigation, zoom, and download. PDFs in Docs and PDF attachments on Notes/Reminders use the same self-hosted PDF.js viewer. Office files remain download-only.
