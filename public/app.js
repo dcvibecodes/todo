@@ -2275,10 +2275,7 @@ async function loadTrash() {
       ? `Deleted items stay here for ${data.retention_days || 30} days. Restore them or delete them permanently.`
       : 'Trash is empty. Deleted items stay here for 30 days.';
     list.replaceChildren();
-    if (!count) {
-      list.append(el('div', { class: 'trash-empty-state', text: 'Nothing in Trash' }));
-      return;
-    }
+    if (!count) return;
     const groups = [
       ['reminders', 'Reminders'],
       ['notes', 'Notes'],

@@ -2,6 +2,11 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v4.12.4
+
+- **Cleaner empty Trash** - Removed the redundant centred “Nothing in Trash” line; the Trash hint now stands on its own when empty.
+- Service worker cache bumped to `workspace-v4.12.4`.
+
 ## What's New in v4.12.3
 
 - **Selection row no longer shifts** - Sort/Order and the selection toolbar now share the exact same fixed height and box model. Select and Cancel also use the same 44 px button box, so the row and the table below stay in place when Select is tapped.
