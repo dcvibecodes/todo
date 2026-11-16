@@ -2,6 +2,11 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v4.11.3
+
+- **Reminders multi-select delete** - Reminders folders, Today, Scheduled, Flagged, All and Completed now support the same Select/long-press flow. The completion circle is replaced by a selection check while selecting; row focus, note expansion, swipe and row tools are disabled. Bulk delete moves items to Trash and offers Undo.
+- Service worker cache bumped to `workspace-v4.11.3`.
+
 ## What's New in v4.11.2
 
 - **Multi-select for Notes and Docs** - Use the new **Select** action in the Sort/Order bar or long-press a row. Tap rows to select, use Select all, then delete the batch. Bulk delete moves everything to Trash and the toast offers Undo. Selection is limited to folders/lists in this release; search results stay single-action.

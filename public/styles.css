@@ -4842,7 +4842,9 @@ button.link-chip { border: 0; font-family: inherit; cursor: pointer; }
 .selection-check .ic { width: 11px; height: 11px; }
 body.selection-mode .selection-check { display: grid; }
 body.selection-mode .note-row .swipe-content,
-body.selection-mode .doc-row .swipe-content { padding-left: 48px; }
+body.selection-mode .doc-row .swipe-content,
+body.selection-mode .reminder .swipe-content { padding-left: 48px; }
+body.selection-mode .reminder .check { display: none; }
 body.selection-mode .row-tools,
 body.selection-mode .row-actions,
 body.selection-mode .doc-download { display: none; }

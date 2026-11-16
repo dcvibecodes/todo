@@ -1972,6 +1972,9 @@ let selectionDeleteTimer = null;
 function selectionTypeForView(view = state.view) {
   if (view === 'notes' || String(view).startsWith('notes-folder-')) return 'notes';
   if (view === 'docs' || String(view).startsWith('docs-folder-')) return 'docs';
+  if (typeof view === 'number' || ['today', 'scheduled', 'all', 'flagged', 'completed'].includes(view)) {
+    return 'reminders';
+  }
   return null;
 }
 
@@ -1983,6 +1986,7 @@ function selectionIdForRow(row, type) {
   if (!row) return null;
   if (type === 'notes') return row.dataset.noteId ? String(row.dataset.noteId) : null;
   if (type === 'docs') return row.dataset.docId ? String(row.dataset.docId) : null;
+  if (type === 'reminders') return row.dataset.reminderId ? String(row.dataset.reminderId) : null;
   return null;
 }
 
@@ -2116,7 +2120,7 @@ async function deleteSelection() {
     state.storage = null;
     await loadState();
     render();
-    const noun = type === 'notes' ? 'Note' : 'File';
+    const noun = type === 'notes' ? 'Note' : type === 'docs' ? 'File' : 'Item';
     const count = result.deleted || ids.length;
     toast(`${count} ${noun}${count === 1 ? '' : 's'} moved to Trash`, 'Undo', () => undoTrashMany(type, ids));
   } catch (err) {
@@ -5341,17 +5345,25 @@ function reminderRow(reminder, options = {}) {
   // Flag it so the check can centre; any extra line keeps the check on the title.
   const titleOnly = meta.childElementCount === 0 && !reminder.notes;
 
-  return el('div', {
+  const row = el('div', {
     class: 'reminder' + (reminder.completed ? ' done' : '') + (titleOnly ? ' reminder--single' : '')
       + (state.justAddedId === reminder.id ? ' entering' : ''),
     style: { '--c': color },
     'data-reminder-id': reminder.id,
     onclick: (event) => {
       // A swipe or scroll that just ended must not select/expand a note.
-      if (Date.now() - lastSwipeEnd < 400) return;
-      if (Date.now() - lastNoteScrollAt < 250) return;
       if (event.target.closest('a, button, input, textarea, select')) return;
       const row = event.currentTarget;
+      if (row.dataset.selectionSuppress) {
+        delete row.dataset.selectionSuppress;
+        return;
+      }
+      if (state.selection.active) {
+        toggleSelection('reminders', reminder.id);
+        return;
+      }
+      if (Date.now() - lastSwipeEnd < 400) return;
+      if (Date.now() - lastNoteScrollAt < 250) return;
       // Tapping a parked row closes the reveal; it never opens the editor.
       if (row.classList.contains('swipe-open')) {
         resetSwipe(row);
@@ -5363,6 +5375,9 @@ function reminderRow(reminder, options = {}) {
       toggleNoteForRow(row, note);
     },
   }, [background, content]);
+  row.append(el('span', { class: 'selection-check', 'aria-hidden': 'true', html: ICON('check', 'ic') }));
+  attachSelectionLongPress(row, 'reminders', reminder.id);
+  return row;
 }
 
 function resetRowDelete(button) {
