@@ -2353,6 +2353,8 @@ function trashRow(item) {
       }
       clearTimeout(remove._confirmTimer);
       remove.disabled = true;
+      const row = remove.closest('.trash-item');
+      if (row) row.remove();
       try {
         await api(`/api/trash/${item.type}/${item.id}`, { method: 'DELETE' });
         state.storage = null;
@@ -2361,9 +2363,7 @@ function trashRow(item) {
         await loadTrash();
         toast('Deleted permanently');
       } catch (err) {
-        remove.disabled = false;
-        remove.dataset.confirm = '';
-        remove.textContent = 'Delete';
+        await loadTrash();
         toast(err.message);
       }
     },
