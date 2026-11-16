@@ -2,6 +2,13 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v4.12.1
+
+- **Stable selection toolbar** - The selection toolbar now occupies the same height and margins as Sort/Order, and its count matches the sort-label typography, so the list does not move when Select is tapped.
+- **One-row selection actions** - Complete, Uncomplete and Delete stay on one row; the duplicate bottom count is removed and the bar sizes to its content within the viewport.
+- **Selection clears on navigation** - Opening another folder, going Home, changing tenant, searching, or using Back now clears selection and resets the count.
+- Service worker cache bumped to `workspace-v4.12.1`.
+
 ## What's New in v4.12.0
 
 - **Bulk complete / uncomplete for Reminders** - Reminders selection now shows separate Complete and Uncomplete actions. Complete applies to open selected items; Uncomplete applies to completed selected items. Recurring items show an in-app warning and advance once each. Mixed selections are supported.

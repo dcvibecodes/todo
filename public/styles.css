@@ -4811,16 +4811,26 @@ button.link-chip { border: 0; font-family: inherit; cursor: pointer; }
 .selection-bar {
   display: flex;
   align-items: center;
+  flex-wrap: nowrap;
   gap: 10px;
-  margin: 6px 24px 15px;
-  min-height: 34px;
+  margin: 6px 24px 0;
+  padding: 0 0 15px;
+  min-height: 59px;
+  box-sizing: border-box;
 }
 .selection-count {
   flex: 1;
   min-width: 0;
-  color: var(--text-2);
-  font-size: 0.8125rem;
-  font-weight: 550;
+  color: var(--text-3);
+  font-size: 0.75rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.selection-bar .text-btn {
+  flex: none;
+  min-height: 44px;
+  font-size: 0.75rem;
+  white-space: nowrap;
 }
 
 .selection-check {
@@ -4868,23 +4878,19 @@ body.selection-mode .fab { display: none; }
   transform: translateX(-50%);
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  min-width: min(320px, calc(100vw - 36px));
-  padding: 8px 10px 8px 14px;
+  flex-wrap: nowrap;
+  gap: 6px;
+  width: max-content;
+  max-width: calc(100vw - 16px);
+  padding: 8px 10px;
   border: 1px solid var(--line);
-  border-radius: 18px;
+  border-radius: 999px;
   background: var(--elev);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
 }
 .selection-actions[hidden] { display: none; }
-#selection-actions-count {
-  flex: 1 0 100%;
-  color: var(--text-2);
-  font-size: 0.75rem;
-  font-weight: 550;
-}
 .selection-action {
+  flex: none;
   min-height: 34px;
   padding: 0 12px;
   border: 1px solid var(--line);
@@ -4894,13 +4900,15 @@ body.selection-mode .fab { display: none; }
   font-family: inherit;
   font-size: 0.8125rem;
   font-weight: 550;
+  white-space: nowrap;
   cursor: pointer;
 }
 .selection-action:hover { background: var(--fill); color: var(--text); }
 .selection-action:disabled { opacity: 0.4; cursor: default; }
 .selection-delete {
+  flex: none;
   min-height: 34px;
-  padding: 0 16px;
+  padding: 0 14px;
   border: 0;
   border-radius: 999px;
   background: var(--red);
@@ -4908,10 +4916,11 @@ body.selection-mode .fab { display: none; }
   font-family: inherit;
   font-size: 0.8125rem;
   font-weight: 600;
+  white-space: nowrap;
   cursor: pointer;
 }
 .selection-delete:disabled { opacity: 0.4; cursor: default; }
 
 @media (max-width: 899px) {
-  .selection-bar { margin: 6px 18px 15px; }
+  .selection-bar { margin: 6px 18px 0; }
 }

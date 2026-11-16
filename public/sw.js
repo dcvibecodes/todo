@@ -1,6 +1,6 @@
 'use strict';
 
-const CACHE = 'workspace-v4.12.0';
+const CACHE = 'workspace-v4.12.1';
 const ASSETS = [
   '/',
   '/index.html',

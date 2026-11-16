@@ -1144,6 +1144,8 @@ function initPullToRefresh() {
 /* ---------------- Routing ---------------- */
 
 function go(view) {
+  const target = viewKeyForPath(view);
+  if (state.selection.active && target !== state.view) exitSelection();
   const hash = '#/' + view;
   programmaticHash = hash;
   programmaticUntil = performance.now() + 500;
@@ -1225,6 +1227,7 @@ function animateTenantContent(direction) {
 }
 
 function setTenant(tenant, direction = 0) {
+  exitSelection();
   const next = TENANTS.includes(tenant) ? tenant : 'reminders';
   state.tenant = next;
   localStorage.setItem('todo.tenant', next);
@@ -1369,6 +1372,7 @@ function route() {
   const fromHistoryBack = historyBackHash !== null && historyBackHash === location.hash;
   historyBackHash = null;
   const view = parseRoute();
+  if (state.selection.active && view !== state.view) exitSelection();
   // Clear search before deciding whether this navigation can slide. Previously
   // the search was cleared after canSlide was computed, so leaving search
   // results always took the fallback animation.
@@ -2023,15 +2027,15 @@ function syncSelectionUI() {
   if (actions) actions.hidden = !active;
   if (!active) {
     document.body.classList.remove('selection-mode');
+    const countNode = $('#selection-count');
+    if (countNode) countNode.textContent = '0 selected';
     resetSelectionDelete();
     return;
   }
   document.body.classList.add('selection-mode');
   const count = state.selection.ids.size;
   const countNode = $('#selection-count');
-  const actionCount = $('#selection-actions-count');
   if (countNode) countNode.textContent = `${count} selected`;
-  if (actionCount) actionCount.textContent = `${count} selected`;
   const deleteButton = $('#selection-delete');
   if (deleteButton) deleteButton.disabled = !count;
   const completeButton = $('#selection-complete');
@@ -2046,8 +2050,8 @@ function syncSelectionUI() {
     uncompleteButton.hidden = state.selection.type !== 'reminders';
     completeButton.disabled = !openCount;
     uncompleteButton.disabled = !doneCount;
-    completeButton.textContent = openCount ? `Complete (${openCount})` : 'Complete';
-    uncompleteButton.textContent = doneCount ? `Uncomplete (${doneCount})` : 'Uncomplete';
+    completeButton.textContent = 'Complete';
+    uncompleteButton.textContent = 'Uncomplete';
   }
   const all = $$('#content .reminder').map((row) => selectionIdForRow(row, state.selection.type)).filter(Boolean);
   const allSelected = all.length > 0 && all.every((id) => state.selection.ids.has(id));
@@ -8878,6 +8882,7 @@ async function runSearch(query) {
 }
 
 function setSearch(value, source) {
+  if (state.selection.active) exitSelection();
   const wasSearching = Boolean(state.search);
   state.search = value.trim();
   if (Boolean(state.search) !== wasSearching) {
