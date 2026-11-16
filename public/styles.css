@@ -1140,8 +1140,8 @@ body.list-dragging .list-grip { cursor: grabbing; }
   gap: 5px 12px;
   width: auto;
   max-width: 100%;
-  margin: 12px 24px 0;
-  padding: 0;
+  margin: 6px 24px 0;
+  padding: 0 0 10px;
   font-size: 0.75rem;
   color: var(--text-3);
 }
@@ -2950,7 +2950,7 @@ body.sheet-open .sidebar {
   #menu-btn { display: grid; }
   #sidebar-menu-btn { display: grid; }
 
-  .sort-bar { margin: 12px 24px 0; }
+  .sort-bar { margin: 6px 24px 0; }
 
   .account-menu {
     right: max(12px, calc((100vw - min(54vw, 990px)) / 2 + 12px));
@@ -3092,7 +3092,7 @@ body.sheet-open .sidebar {
   .swipe-act.del .ic { display: none; }
 
   .sort-bar {
-    margin: 12px 18px 0;
+    margin: 6px 18px 0;
     flex-wrap: nowrap;
     gap: 4px;
   }
@@ -3364,11 +3364,11 @@ body.sheet-open .sidebar {
   }
 
   .reminder.completing .check {
-    animation: check-pop 0.18s ease-out;
+    animation: check-pop 0.144s ease-out;
   }
 
   .reminder.uncompleting .check {
-    animation: check-unpop 0.18s ease-out;
+    animation: check-unpop 0.144s ease-out;
   }
 
   .reminder.completing .check::before,
@@ -3379,7 +3379,7 @@ body.sheet-open .sidebar {
     border-radius: 50%;
     border: 1.5px solid var(--c);
     pointer-events: none;
-    animation: check-halo 0.32s ease-out;
+    animation: check-halo 0.256s ease-out;
   }
 }
 

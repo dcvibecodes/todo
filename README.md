@@ -2,6 +2,13 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v4.10.48
+
+- **3x longer pull-to-refresh** - On touch phones, refresh now needs about **240 px of finger travel** (168 effective threshold at 0.7 resistance), up from about 80 px. The 270 px drag cap keeps the new threshold reachable and the pill still tracks the pull.
+- **20% shorter completion feedback** - The completion hold, check pop/unpop, halo and completion row slide are all 20% faster. Other row moves, delete, enter and screen transitions keep their original timing.
+- **Sort / Order spacing** - The Sort/Order row moves up 6 px and now reserves 10 px below itself, so cards scrolled underneath no longer touch the controls. Applies on web, tablet and phone.
+- Service worker cache bumped to `workspace-v4.10.48`.
+
 ## What's New in v4.10.47
 
 - **Device-specific card text size** - The Appearance slider now saves to `localStorage['todo.cardBodySize']` on the current device instead of syncing through server settings. New devices fall back to the server value; Save keeps the device value and Cancel restores the previous one.

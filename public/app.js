@@ -950,8 +950,8 @@ function pageScroller() {
 function screenScroller() {
   return PAGE_SCROLL_MEDIA.matches ? pageScroller() : $('#content');
 }
-const PULL_THRESHOLD = 56;
-const PULL_MAX = 90;
+const PULL_THRESHOLD = 168;
+const PULL_MAX = 270;
 const PULL_RESISTANCE = 0.7;
 const PULL_MIN_SPIN = 500;
 const PULL_START_OFFSET = -36;
@@ -1836,10 +1836,14 @@ function setPulseText(node, text) {
 }
 
 let animateNextRender = false;
+let animateNextRowScale = 1;
 let animateNextSidebar = false;
 let flipWindowTimer = null;
 
-function requestRowAnimation() { animateNextRender = true; }
+function requestRowAnimation(durationScale = 1) {
+  animateNextRender = true;
+  animateNextRowScale = durationScale;
+}
 function requestListAnimation() { animateNextSidebar = true; }
 
 function beginFlipWindow() {
@@ -1863,7 +1867,7 @@ function captureRects(selector, key) {
   return map;
 }
 
-function animateRowRects(before) {
+function animateRowRects(before, durationScale = 1) {
   if (!before || !before.size || MOTION_REDUCED.matches) return;
   let animated = false;
   for (const node of $$('#content .reminder[data-reminder-id]')) {
@@ -1876,7 +1880,7 @@ function animateRowRects(before) {
       if (rect.bottom < 0 || rect.top > window.innerHeight) continue;
       node.animate(
         [{ opacity: 0, transform: 'translateY(6px)' }, { opacity: 1, transform: 'none' }],
-        { duration: 180, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' },
+        { duration: 180 * durationScale, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' },
       );
       animated = true;
       continue;
@@ -1889,7 +1893,7 @@ function animateRowRects(before) {
     node.classList.add('flip-moving');
     const anim = node.animate(
       [{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'none' }],
-      { duration: 220, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' },
+      { duration: 220 * durationScale, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' },
     );
     const cleanup = () => node.classList.remove('flip-moving');
     anim.onfinish = cleanup;
@@ -1935,11 +1939,13 @@ function render() {
   const flip = animateNextRender
     ? captureRects('#content .reminder[data-reminder-id]', (node) => node.dataset.reminderId)
     : null;
+  const flipScale = animateNextRowScale;
   animateNextRender = false;
+  animateNextRowScale = 1;
   renderSidebar();
   renderMain();
   updateBadge();
-  if (flip) animateRowRects(flip);
+  if (flip) animateRowRects(flip, flipScale);
   state.justAddedId = null;
 }
 
@@ -5051,8 +5057,8 @@ function escapeHtml(value) {
 const completingInFlight = new Set();
 
 // Keep the check feedback on screen long enough to finish before the row moves
-// (the halo runs for 0.32s, with a little buffer).
-const TOGGLE_FEEDBACK_MS = 340;
+// (the halo runs for 0.256s, with a little buffer).
+const TOGGLE_FEEDBACK_MS = 272;
 
 async function toggleCompleted(reminder, row) {
   // Optimistic feedback only: the check fills/unfills while the request is
@@ -5072,7 +5078,7 @@ async function toggleCompleted(reminder, row) {
       if (remaining > 0) await new Promise((resolve) => setTimeout(resolve, remaining));
     }
     await loadState();
-    requestRowAnimation();
+    requestRowAnimation(0.8);
     render();
     if (result && result.advanced && result.nextDue) {
       const next = new Date(result.nextDue);
