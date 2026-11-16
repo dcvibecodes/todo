@@ -60,6 +60,10 @@
       <circle cx="10.5" cy="10.5" r="6" fill="none" stroke="currentColor" stroke-width="1.9"/>
       <path d="M15 15l5 5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>
     </symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24">
+      <path d="M2.5 12s3.4-6.5 9.5-6.5 9.5 6.5 9.5 6.5-3.4 6.5-9.5 6.5S2.5 12 2.5 12z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+      <circle cx="12" cy="12" r="2.8" fill="none" stroke="currentColor" stroke-width="1.8"/>
+    </symbol>
     <symbol id="i-bell" viewBox="0 0 24 24">
       <path d="M6 16.5V11a6 6 0 1112 0v5.5l1.5 2.5h-15L6 16.5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
       <path d="M10 20a2.2 2.2 0 004 0" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
@@ -657,6 +661,7 @@
         </div>
         <p id="doc-storage" class="doc-storage"></p>
         <div class="doc-actions">
+          <button type="button" id="doc-sheet-preview" class="secondary-btn" hidden><svg class="ic"><use href="#i-eye"/></svg><span>Preview PDF</span></button>
           <button type="button" id="doc-sheet-share" class="secondary-btn" hidden><svg class="ic"><use href="#i-share"/></svg><span>Share file</span></button>
           <a id="doc-sheet-download" class="secondary-btn" href="#" download><svg class="ic"><use href="#i-download"/></svg><span>Download</span></a>
         </div>
@@ -710,6 +715,36 @@
         <button type="button" id="image-next" class="image-nav image-nav-next" aria-label="Next image" hidden>
           <svg class="ic"><use href="#i-chevron"/></svg>
         </button>
+      </div>
+    </div>
+  </div>
+
+  <div id="pdf-sheet" class="sheet" hidden>
+    <div class="sheet-backdrop" data-close></div>
+    <div class="pdf-viewer">
+      <header class="pdf-viewer-head">
+        <span id="pdf-viewer-title"></span>
+        <button type="button" class="text-btn strong" data-close>Done</button>
+      </header>
+      <div class="pdf-toolbar">
+        <button type="button" id="pdf-prev" class="pdf-tool" aria-label="Previous page" disabled>
+          <svg class="ic"><use href="#i-back"/></svg>
+        </button>
+        <span id="pdf-viewer-count" class="pdf-viewer-count">1 / 1</span>
+        <button type="button" id="pdf-next" class="pdf-tool" aria-label="Next page" disabled>
+          <svg class="ic"><use href="#i-chevron"/></svg>
+        </button>
+        <span class="pdf-toolbar-spacer"></span>
+        <button type="button" id="pdf-zoom-out" class="pdf-tool" aria-label="Zoom out">−</button>
+        <span id="pdf-zoom-label" class="pdf-zoom-label">100%</span>
+        <button type="button" id="pdf-zoom-in" class="pdf-tool" aria-label="Zoom in">+</button>
+        <a id="pdf-download" class="pdf-tool" href="#" download aria-label="Download PDF">
+          <svg class="ic"><use href="#i-download"/></svg>
+        </a>
+      </div>
+      <div id="pdf-viewer-body" class="pdf-viewer-body">
+        <p id="pdf-viewer-status" class="pdf-viewer-status" aria-live="polite">Loading&hellip;</p>
+        <canvas id="pdf-viewer-canvas" hidden></canvas>
       </div>
     </div>
   </div>
@@ -1015,6 +1050,7 @@ curl -X PATCH -H "Authorization: Bearer $TOKEN" \
   <div id="live" class="visually-hidden" role="status" aria-live="polite"></div>
 
   <script src="/fuzzy-search.js"></script>
+  <script src="/vendor/pdfjs/pdf.min.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>

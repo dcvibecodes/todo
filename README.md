@@ -2,6 +2,11 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v4.11.0
+
+- **PDF preview** - PDF files now open in a full-screen viewer with page navigation, zoom, and download. PDFs in Docs and PDF attachments on Notes/Reminders use the same self-hosted PDF.js viewer. Office files remain download-only.
+- Service worker cache bumped to `workspace-v4.11.0`.
+
 ## What's New in v4.10.51
 
 - **Calmer folder hierarchy** - Folder names and smart-view labels now use weight **500** instead of 550. Tenant tabs and section labels stay at 600, and card titles stay at 550, so repeated navigation no longer reads as a wall of bold text. No functionality changes.

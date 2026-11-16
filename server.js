@@ -73,6 +73,10 @@ const PREVIEW_IMAGE_FORMATS = new Map([
 function previewImageFormatForName(name) {
   return PREVIEW_IMAGE_FORMATS.get(path.extname(String(name || '')).toLowerCase()) || null;
 }
+
+function isPreviewablePdfName(name) {
+  return path.extname(String(name || '')).toLowerCase() === '.pdf';
+}
 const UPLOAD_DIR = path.join(db.DATA_DIR, 'uploads');
 const THUMBNAIL_DIR = path.join(db.DATA_DIR, 'thumbnails');
 const UPLOAD_MAX_BYTES = 25 * 1024 * 1024;
@@ -3747,8 +3751,9 @@ async function main() {
         || (file.owner_type === 'doc' && tokenHas(req.token, 'docs:read'));
       if (!allowed) return denyToken(res);
     }
-    const format = previewImageFormatForName(file.name);
-    if (!format) return res.status(415).json({ error: 'Preview is only available for image files' });
+    const format = previewImageFormatForName(file.name)
+      || (isPreviewablePdfName(file.name) ? { mime: 'application/pdf', signature: 'pdf' } : null);
+    if (!format) return res.status(415).json({ error: 'Preview is only available for images and PDFs' });
     const full = path.join(UPLOAD_DIR, file.stored_name);
     let matches = true;
     try {

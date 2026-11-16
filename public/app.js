@@ -2,6 +2,10 @@
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selector));
+
+if (window.pdfjsLib) {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = '/vendor/pdfjs/pdf.worker.min.js';
+}
 const ICON = (name, cls = 'ic') => `<svg class="${cls}"><use href="#i-${name}"/></svg>`;
 
 
@@ -3508,6 +3512,12 @@ function openDocSheet(doc) {
     previewImg.removeAttribute('src');
     preview.onclick = null;
   }
+  const pdfButton = $('#doc-sheet-preview');
+  const pdfPreviewable = isPreviewablePdf(doc.name);
+  pdfButton.hidden = !pdfPreviewable;
+  pdfButton.onclick = pdfPreviewable
+    ? () => openPdfPreview({ id: doc.id, name: $('#doc-name').value.trim() || doc.name })
+    : null;
   const select = $('#doc-folder');
   select.replaceChildren();
   for (const folder of foldersFor('docs')) {
@@ -3629,6 +3639,10 @@ function isPreviewableImage(name) {
   return PREVIEW_IMAGE_EXTENSIONS.has(ext);
 }
 
+function isPreviewablePdf(name) {
+  return '.' + String(name || '').split('.').pop().toLowerCase() === '.pdf';
+}
+
 const IMAGE_CACHE_MAX_BYTES = 24 * 1024 * 1024;
 const IMAGE_CACHE_MAX_ITEMS = 12;
 const imageFullCache = new Map();
@@ -3637,6 +3651,7 @@ let imageCacheBytes = 0;
 let imageGallery = [];
 let imageIndex = 0;
 let imageSwipeStart = null;
+let pdfViewer = null;
 
 function imageCacheKey(file) {
   return `${file.id}:${file.revision || 0}:${file.stored_size || file.size || 0}`;
@@ -3802,7 +3817,179 @@ function stepImage(delta) {
   renderImageViewer(delta);
 }
 
+function pdfViewerElements() {
+  return {
+    title: $('#pdf-viewer-title'),
+    count: $('#pdf-viewer-count'),
+    status: $('#pdf-viewer-status'),
+    canvas: $('#pdf-viewer-canvas'),
+    body: $('#pdf-viewer-body'),
+    prev: $('#pdf-prev'),
+    next: $('#pdf-next'),
+    zoomOut: $('#pdf-zoom-out'),
+    zoomIn: $('#pdf-zoom-in'),
+    zoomLabel: $('#pdf-zoom-label'),
+    download: $('#pdf-download'),
+  };
+}
+
+function closePdfViewer() {
+  const viewer = pdfViewer;
+  pdfViewer = null;
+  if (!viewer) return;
+  if (viewer.renderTask) {
+    try { viewer.renderTask.cancel(); } catch { /* ignore */ }
+  }
+  if (viewer.pdf) {
+    try { viewer.pdf.destroy(); } catch { /* ignore */ }
+  }
+}
+
+function syncPdfToolbar() {
+  const { count, prev, next, zoomLabel, zoomOut, zoomIn } = pdfViewerElements();
+  if (!pdfViewer) return;
+  const pages = pdfViewer.pdf ? pdfViewer.pdf.numPages : 0;
+  if (count) count.textContent = pages ? `${pdfViewer.page} / ${pages}` : '— / —';
+  if (prev) prev.disabled = !pdfViewer.pdf || pdfViewer.page <= 1;
+  if (next) next.disabled = !pdfViewer.pdf || pdfViewer.page >= pages;
+  if (zoomLabel) zoomLabel.textContent = `${Math.round(pdfViewer.zoom * 100)}%`;
+  if (zoomOut) zoomOut.disabled = pdfViewer.zoom <= 0.5;
+  if (zoomIn) zoomIn.disabled = pdfViewer.zoom >= 4;
+}
+
+async function renderPdfPage() {
+  const viewer = pdfViewer;
+  if (!viewer || !viewer.pdf) return;
+  const { canvas, body, status } = pdfViewerElements();
+  if (!canvas || !body || !status) return;
+  if (viewer.renderTask) {
+    try { viewer.renderTask.cancel(); } catch { /* ignore */ }
+    viewer.renderTask = null;
+  }
+  try {
+    const page = await viewer.pdf.getPage(viewer.page);
+    if (pdfViewer !== viewer) return;
+    const base = page.getViewport({ scale: 1 });
+    const available = Math.max(240, body.clientWidth - 32);
+    const scale = (available / base.width) * viewer.zoom;
+    const viewport = page.getViewport({ scale });
+    const ratio = Math.min(2, window.devicePixelRatio || 1);
+    canvas.width = Math.max(1, Math.floor(viewport.width * ratio));
+    canvas.height = Math.max(1, Math.floor(viewport.height * ratio));
+    canvas.style.width = `${Math.floor(viewport.width)}px`;
+    canvas.style.height = `${Math.floor(viewport.height)}px`;
+    const ctx = canvas.getContext('2d', { alpha: false });
+    const task = page.render({
+      canvasContext: ctx,
+      viewport,
+      transform: ratio !== 1 ? [ratio, 0, 0, ratio, 0, 0] : null,
+    });
+    viewer.renderTask = task;
+    await task.promise;
+    if (pdfViewer !== viewer) return;
+    viewer.renderTask = null;
+    canvas.hidden = false;
+    status.hidden = true;
+    syncPdfToolbar();
+  } catch (err) {
+    if (pdfViewer !== viewer) return;
+    if (err && err.name === 'RenderingCancelledException') return;
+    if (status) {
+      status.textContent = 'Preview unavailable';
+      status.hidden = false;
+    }
+    if (canvas) canvas.hidden = true;
+  }
+}
+
+async function openPdfPreview(file) {
+  if (!file || !file.id) return;
+  if (!window.pdfjsLib) {
+    toast('PDF preview is unavailable');
+    return;
+  }
+  const { title, count, status, canvas, download, body } = pdfViewerElements();
+  closePdfViewer();
+  const viewer = {
+    file,
+    pdf: null,
+    page: 1,
+    zoom: 1,
+    renderTask: null,
+  };
+  pdfViewer = viewer;
+  if (title) title.textContent = file.name || 'PDF';
+  if (count) count.textContent = '— / —';
+  if (status) { status.textContent = 'Loading…'; status.hidden = false; }
+  if (canvas) canvas.hidden = true;
+  if (download) {
+    download.href = '/api/files/' + file.id;
+    download.setAttribute('download', file.name || 'document.pdf');
+    download.setAttribute('aria-label', `Download ${file.name || 'PDF'}`);
+  }
+  syncPdfToolbar();
+  openSheet('#pdf-sheet');
+  try {
+    const res = await fetch('/api/files/' + file.id + '/preview', { credentials: 'same-origin' });
+    if (!res.ok) {
+      let data = {};
+      try { data = await res.json(); } catch { /* ignore */ }
+      throw new Error(data.error || `Could not load PDF (HTTP ${res.status})`);
+    }
+    const data = await res.arrayBuffer();
+    if (pdfViewer !== viewer) return;
+    const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(data) }).promise;
+    if (pdfViewer !== viewer) {
+      try { pdf.destroy(); } catch { /* ignore */ }
+      return;
+    }
+    viewer.pdf = pdf;
+    viewer.page = 1;
+    syncPdfToolbar();
+    await renderPdfPage();
+    if (body) body.scrollTop = 0;
+  } catch (err) {
+    if (pdfViewer !== viewer) return;
+    if (status) {
+      status.textContent = err.message || 'Preview unavailable';
+      status.hidden = false;
+    }
+    if (canvas) canvas.hidden = true;
+  }
+}
+
+function stepPdfPage(delta) {
+  if (!pdfViewer || !pdfViewer.pdf) return;
+  const next = pdfViewer.page + delta;
+  if (next < 1 || next > pdfViewer.pdf.numPages) return;
+  pdfViewer.page = next;
+  syncPdfToolbar();
+  renderPdfPage();
+}
+
+function zoomPdf(delta) {
+  if (!pdfViewer) return;
+  const next = Math.min(4, Math.max(0.5, Math.round((pdfViewer.zoom + delta) * 100) / 100));
+  if (next === pdfViewer.zoom) return;
+  pdfViewer.zoom = next;
+  syncPdfToolbar();
+  renderPdfPage();
+}
+
 function fileChip(file) {
+  if (isPreviewablePdf(file.name)) {
+    return el('button', {
+      type: 'button',
+      class: 'link-chip',
+      title: `Preview ${file.name}`,
+      'aria-label': `Preview ${file.name}`,
+      onclick: (event) => {
+        event.stopPropagation();
+        openPdfPreview(file);
+      },
+      html: `${ICON('eye', 'ic')}<span class="link-domain">${escapeHtml(file.name)}</span>`,
+    });
+  }
   return el('a', {
     class: 'link-chip',
     href: '/api/files/' + file.id,
@@ -5645,8 +5832,10 @@ function toggleEditorMore() {
 
 function attachmentRow(file, onRemove, gallery = null) {
   const row = el('div', { class: 'attach-item' });
-  const previewable = Boolean(file.id) && isPreviewableImage(file.name);
-  const icon = previewable ? docIconForName(file.name) : 'files';
+  const previewImage = Boolean(file.id) && isPreviewableImage(file.name);
+  const previewPdf = Boolean(file.id) && isPreviewablePdf(file.name);
+  const previewable = previewImage || previewPdf;
+  const icon = previewImage || previewPdf ? docIconForName(file.name) : 'files';
   if (previewable) {
     row.append(el('button', {
       type: 'button',
@@ -5655,7 +5844,8 @@ function attachmentRow(file, onRemove, gallery = null) {
       'aria-label': `Preview ${file.name}`,
       onclick: (event) => {
         event.stopPropagation();
-        openImagePreview(file, gallery);
+        if (previewPdf) openPdfPreview(file);
+        else openImagePreview(file, gallery);
       },
     }, [
       el('span', { html: ICON(icon, 'ic') }),
@@ -7055,6 +7245,7 @@ function finishSheetClose(sheet) {
   sheetCloseTimers.delete(sheet);
   closingSheets.delete(sheet);
   if (sheet.id === 'image-sheet') clearImageCache();
+  if (sheet.id === 'pdf-sheet') closePdfViewer();
   if (sheet.id === 'discard-sheet') pendingDiscard = null;
   sheet.hidden = true;
   sheet.classList.remove('is-visible');
@@ -7126,6 +7317,7 @@ function closeTopSheetInPlace() {
     }
     if (sheet.id === 'settings-sheet') revertSettingsPreview();
     if (sheet.id === 'image-sheet') clearImageCache();
+    if (sheet.id === 'pdf-sheet') closePdfViewer();
     if (sheet.id === 'discard-sheet') pendingDiscard = null;
     const timer = sheetCloseTimers.get(sheet);
     if (timer) clearTimeout(timer);
@@ -8356,6 +8548,13 @@ $('#doc-folder').addEventListener('change', () => { syncDocFolderVisual(); syncD
 $('#doc-name').addEventListener('input', syncDocSheetInfo);
 $('#image-prev').addEventListener('click', () => stepImage(-1));
 $('#image-next').addEventListener('click', () => stepImage(1));
+$('#pdf-prev').addEventListener('click', () => stepPdfPage(-1));
+$('#pdf-next').addEventListener('click', () => stepPdfPage(1));
+$('#pdf-zoom-out').addEventListener('click', () => zoomPdf(-0.25));
+$('#pdf-zoom-in').addEventListener('click', () => zoomPdf(0.25));
+window.addEventListener('resize', () => {
+  if (pdfViewer && !$('#pdf-sheet').hidden) renderPdfPage();
+});
 const imageViewerBody = $('.image-viewer-body');
 imageViewerBody.addEventListener('pointerdown', (event) => {
   if (event.pointerType !== 'touch' || event.target.closest('button')) return;
@@ -8371,9 +8570,14 @@ imageViewerBody.addEventListener('pointerup', (event) => {
 });
 imageViewerBody.addEventListener('pointercancel', () => { imageSwipeStart = null; });
 document.addEventListener('keydown', (event) => {
-  if ($('#image-sheet').hidden) return;
-  if (event.key === 'ArrowLeft') { event.preventDefault(); stepImage(-1); }
-  if (event.key === 'ArrowRight') { event.preventDefault(); stepImage(1); }
+  if (!$('#image-sheet').hidden) {
+    if (event.key === 'ArrowLeft') { event.preventDefault(); stepImage(-1); }
+    if (event.key === 'ArrowRight') { event.preventDefault(); stepImage(1); }
+  }
+  if (!$('#pdf-sheet').hidden) {
+    if (event.key === 'ArrowLeft') { event.preventDefault(); stepPdfPage(-1); }
+    if (event.key === 'ArrowRight') { event.preventDefault(); stepPdfPage(1); }
+  }
 });
 $('#doc-description').addEventListener('input', () => { syncDocDescriptionCount(); syncDocSave(); });
 $('#doc-image-preview-img').addEventListener('error', () => {
