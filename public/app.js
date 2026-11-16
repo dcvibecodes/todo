@@ -5057,8 +5057,8 @@ function escapeHtml(value) {
 const completingInFlight = new Set();
 
 // Keep the check feedback on screen long enough to finish before the row moves
-// (the halo runs for 0.256s, with a little buffer).
-const TOGGLE_FEEDBACK_MS = 272;
+// (the halo runs for 0.23s, with a little buffer).
+const TOGGLE_FEEDBACK_MS = 245;
 
 async function toggleCompleted(reminder, row) {
   // Optimistic feedback only: the check fills/unfills while the request is
@@ -5078,7 +5078,7 @@ async function toggleCompleted(reminder, row) {
       if (remaining > 0) await new Promise((resolve) => setTimeout(resolve, remaining));
     }
     await loadState();
-    requestRowAnimation(0.8);
+    requestRowAnimation(0.72);
     render();
     if (result && result.advanced && result.nextDue) {
       const next = new Date(result.nextDue);

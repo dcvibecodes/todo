@@ -2,6 +2,12 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v4.10.49
+
+- **More room below Sort / Order** - The row's bottom spacing grows from 10 px to 15 px, keeping scrolled cards clear of the controls.
+- **Completion feedback another 10% shorter** - On top of v4.10.48, the hold drops to 245 ms, check pop/unpop to 130 ms, halo to 230 ms, and the completion row slide to 158 ms (130 ms for entering rows). Other moves and transitions are unchanged.
+- Service worker cache bumped to `workspace-v4.10.49`.
+
 ## What's New in v4.10.48
 
 - **3x longer pull-to-refresh** - On touch phones, refresh now needs about **240 px of finger travel** (168 effective threshold at 0.7 resistance), up from about 80 px. The 270 px drag cap keeps the new threshold reachable and the pill still tracks the pull.

@@ -1141,7 +1141,7 @@ body.list-dragging .list-grip { cursor: grabbing; }
   width: auto;
   max-width: 100%;
   margin: 6px 24px 0;
-  padding: 0 0 10px;
+  padding: 0 0 15px;
   font-size: 0.75rem;
   color: var(--text-3);
 }
@@ -3364,11 +3364,11 @@ body.sheet-open .sidebar {
   }
 
   .reminder.completing .check {
-    animation: check-pop 0.144s ease-out;
+    animation: check-pop 0.13s ease-out;
   }
 
   .reminder.uncompleting .check {
-    animation: check-unpop 0.144s ease-out;
+    animation: check-unpop 0.13s ease-out;
   }
 
   .reminder.completing .check::before,
@@ -3379,7 +3379,7 @@ body.sheet-open .sidebar {
     border-radius: 50%;
     border: 1.5px solid var(--c);
     pointer-events: none;
-    animation: check-halo 0.256s ease-out;
+    animation: check-halo 0.23s ease-out;
   }
 }
 
