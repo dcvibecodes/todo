@@ -335,6 +335,12 @@
           <svg class="ic" aria-hidden="true"><use href="#i-check"/></svg>
           <span id="sort-completed-count">0</span>
         </button>
+        <button type="button" id="select-toggle" class="sort-select-btn" hidden>Select</button>
+      </div>
+      <div id="selection-bar" class="selection-bar" hidden>
+        <span id="selection-count" class="selection-count">0 selected</span>
+        <button type="button" id="selection-all" class="text-btn">Select all</button>
+        <button type="button" id="selection-cancel" class="text-btn strong">Cancel</button>
       </div>
       </div>
 
@@ -344,6 +350,10 @@
     <button id="fab-add" class="fab" aria-label="New Item" title="New Item">
       <svg class="ic"><use href="#i-plus"/></svg>
     </button>
+    <div id="selection-actions" class="selection-actions" hidden>
+      <span id="selection-actions-count"></span>
+      <button type="button" id="selection-delete" class="selection-delete">Delete</button>
+    </div>
   </div>
 
   <div id="editor" class="sheet" hidden>

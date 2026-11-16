@@ -4135,6 +4135,28 @@ async function main() {
 
   /* ---------------- Trash ---------------- */
 
+  app.post('/api/bulk/delete', async (req, res) => {
+    if (req.token) return denyToken(res);
+    const type = String(req.body.type || '');
+    const ids = Array.isArray(req.body.ids) ? req.body.ids.map(parseId).filter(Boolean) : [];
+    if (!['notes', 'docs'].includes(type)) return res.status(400).json({ error: 'Invalid bulk type' });
+    if (!ids.length || ids.length > 200) return res.status(400).json({ error: 'Choose 1 to 200 items' });
+    const now = new Date().toISOString();
+    const placeholders = ids.map(() => '?').join(', ');
+    const result = type === 'notes'
+      ? await db.run(
+        `UPDATE notes SET deleted_at = ?, updated_at = ?, revision = revision + 1
+         WHERE id IN (${placeholders}) AND deleted_at IS NULL`,
+        [now, now, ...ids]
+      )
+      : await db.run(
+        `UPDATE attachments SET deleted_at = ?, revision = revision + 1
+         WHERE id IN (${placeholders}) AND owner_type = 'doc' AND deleted_at IS NULL`,
+        [now, ...ids]
+      );
+    res.json({ ok: true, deleted: result.changes || 0 });
+  });
+
   app.get('/api/trash', async (req, res) => {
     if (req.token) return denyToken(res);
     const reminders = await db.all(`

@@ -2,6 +2,11 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v4.11.2
+
+- **Multi-select for Notes and Docs** - Use the new **Select** action in the Sort/Order bar or long-press a row. Tap rows to select, use Select all, then delete the batch. Bulk delete moves everything to Trash and the toast offers Undo. Selection is limited to folders/lists in this release; search results stay single-action.
+- Service worker cache bumped to `workspace-v4.11.2`.
+
 ## What's New in v4.11.1
 
 - **Trash** - Deleting a Reminder, Note or Doc now moves it to Trash for 30 days instead of deleting it immediately. Restore items, delete them permanently, or empty Trash from the account menu. Delete toasts include Undo. Files remain on disk until permanent deletion.

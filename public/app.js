@@ -42,6 +42,7 @@ const state = {
   searchSeq: 0,
   searchQuery: '',
   searchKeepNavigation: false,
+  selection: { active: false, type: null, ids: new Set() },
   showCompleted: false,
   editingId: null,
   editingListId: null,
@@ -1960,7 +1961,196 @@ function render() {
   renderMain();
   updateBadge();
   if (flip) animateRowRects(flip, flipScale);
+  if (state.selection.active) applySelectionClasses();
+  syncSelectionUI();
   state.justAddedId = null;
+}
+
+let selectionDeleteArmed = false;
+let selectionDeleteTimer = null;
+
+function selectionTypeForView(view = state.view) {
+  if (view === 'notes' || String(view).startsWith('notes-folder-')) return 'notes';
+  if (view === 'docs' || String(view).startsWith('docs-folder-')) return 'docs';
+  return null;
+}
+
+function selectionAvailable() {
+  return !state.search && Boolean(selectionTypeForView());
+}
+
+function selectionIdForRow(row, type) {
+  if (!row) return null;
+  if (type === 'notes') return row.dataset.noteId ? String(row.dataset.noteId) : null;
+  if (type === 'docs') return row.dataset.docId ? String(row.dataset.docId) : null;
+  return null;
+}
+
+function applySelectionClasses() {
+  if (!state.selection.active) return;
+  const type = state.selection.type;
+  for (const row of $$('#content .reminder')) {
+    const id = selectionIdForRow(row, type);
+    if (!id) continue;
+    const selected = state.selection.ids.has(id);
+    row.classList.toggle('is-selected', selected);
+    row.setAttribute('aria-selected', selected ? 'true' : 'false');
+  }
+}
+
+function resetSelectionDelete() {
+  selectionDeleteArmed = false;
+  clearTimeout(selectionDeleteTimer);
+  const button = $('#selection-delete');
+  if (button) button.textContent = 'Delete';
+}
+
+function syncSelectionUI() {
+  const active = state.selection.active;
+  const available = selectionAvailable();
+  const sortBar = $('#sort-bar');
+  const select = $('#select-toggle');
+  const bar = $('#selection-bar');
+  const actions = $('#selection-actions');
+  if (sortBar) sortBar.hidden = state.view === 'home' || Boolean(state.search) || active;
+  if (select) select.hidden = !available || active;
+  if (bar) bar.hidden = !active;
+  if (actions) actions.hidden = !active;
+  if (!active) {
+    document.body.classList.remove('selection-mode');
+    resetSelectionDelete();
+    return;
+  }
+  document.body.classList.add('selection-mode');
+  const count = state.selection.ids.size;
+  const countNode = $('#selection-count');
+  const actionCount = $('#selection-actions-count');
+  if (countNode) countNode.textContent = `${count} selected`;
+  if (actionCount) actionCount.textContent = `${count} selected`;
+  const deleteButton = $('#selection-delete');
+  if (deleteButton) deleteButton.disabled = !count;
+  const all = $$('#content .reminder').map((row) => selectionIdForRow(row, state.selection.type)).filter(Boolean);
+  const allSelected = all.length > 0 && all.every((id) => state.selection.ids.has(id));
+  const allButton = $('#selection-all');
+  if (allButton) allButton.textContent = allSelected ? 'Clear all' : 'Select all';
+  applySelectionClasses();
+}
+
+function enterSelection(type, id = null) {
+  state.selection.active = true;
+  state.selection.type = type;
+  if (id) state.selection.ids.add(String(id));
+  syncSelectionUI();
+}
+
+function exitSelection() {
+  if (!state.selection.active) return;
+  state.selection.active = false;
+  state.selection.type = null;
+  state.selection.ids.clear();
+  document.body.classList.remove('selection-mode');
+  for (const row of $$('#content .reminder')) {
+    row.classList.remove('is-selected');
+    row.removeAttribute('aria-selected');
+  }
+  resetSelectionDelete();
+  syncSelectionUI();
+}
+
+function toggleSelection(type, id) {
+  if (!state.selection.active || state.selection.type !== type) {
+    state.selection.active = true;
+    state.selection.type = type;
+    state.selection.ids.clear();
+  }
+  const key = String(id);
+  if (state.selection.ids.has(key)) state.selection.ids.delete(key);
+  else state.selection.ids.add(key);
+  resetSelectionDelete();
+  syncSelectionUI();
+}
+
+function selectAllVisible() {
+  if (!state.selection.active) return;
+  const ids = $$('#content .reminder')
+    .map((row) => selectionIdForRow(row, state.selection.type))
+    .filter(Boolean);
+  const allSelected = ids.length && ids.every((id) => state.selection.ids.has(id));
+  state.selection.ids = new Set(allSelected ? [] : ids);
+  resetSelectionDelete();
+  syncSelectionUI();
+}
+
+async function undoTrashMany(type, ids) {
+  try {
+    for (const id of ids) {
+      await api(`/api/trash/${type}/${id}/restore`, { method: 'POST' });
+    }
+    state.storage = null;
+    await loadState();
+    render();
+    toast('Restored');
+  } catch (err) {
+    toast(err.message);
+  }
+}
+
+async function deleteSelection() {
+  if (!state.selection.active) return;
+  const type = state.selection.type;
+  const ids = Array.from(state.selection.ids);
+  if (!ids.length) return;
+  const button = $('#selection-delete');
+  if (!selectionDeleteArmed) {
+    selectionDeleteArmed = true;
+    button.textContent = `Confirm delete ${ids.length}?`;
+    clearTimeout(selectionDeleteTimer);
+    selectionDeleteTimer = setTimeout(resetSelectionDelete, INLINE_CONFIRM_MS);
+    return;
+  }
+  resetSelectionDelete();
+  button.disabled = true;
+  try {
+    const result = await api('/api/bulk/delete', { method: 'POST', body: { type, ids: ids.map(Number) } });
+    exitSelection();
+    state.storage = null;
+    await loadState();
+    render();
+    const noun = type === 'notes' ? 'Note' : 'File';
+    const count = result.deleted || ids.length;
+    toast(`${count} ${noun}${count === 1 ? '' : 's'} moved to Trash`, 'Undo', () => undoTrashMany(type, ids));
+  } catch (err) {
+    button.disabled = false;
+    toast(err.message);
+  }
+}
+
+function attachSelectionLongPress(row, type, id) {
+  let timer = null;
+  let start = null;
+  const clear = () => {
+    clearTimeout(timer);
+    timer = null;
+    start = null;
+  };
+  row.addEventListener('pointerdown', (event) => {
+    if (state.selection.active || event.pointerType === 'mouse') return;
+    if (event.target.closest('a, button, input, textarea, select, .attachment-thumbs')) return;
+    start = { x: event.clientX, y: event.clientY };
+    timer = setTimeout(() => {
+      timer = null;
+      if (!start) return;
+      enterSelection(type, id);
+      row.dataset.selectionSuppress = '1';
+      setTimeout(() => { delete row.dataset.selectionSuppress; }, 700);
+    }, 500);
+  });
+  row.addEventListener('pointermove', (event) => {
+    if (!start) return;
+    if (Math.hypot(event.clientX - start.x, event.clientY - start.y) > 8) clear();
+  });
+  row.addEventListener('pointerup', clear);
+  row.addEventListener('pointercancel', clear);
 }
 
 function getAccountMenu() {
@@ -3388,7 +3578,7 @@ function noteRow(note, options = {}) {
     onclick: (event) => { event.stopPropagation(); handleNoteDelete(note, event.currentTarget); },
   });
   const tools = el('div', { class: 'row-tools' }, [copy, edit, remove]);
-  return swipeRow({
+  const row = swipeRow({
     class: 'note-row',
     color: folder ? colorVar(folder.color) : colorVar('gray'),
     data: { 'data-note-id': note.id, 'data-reminder-id': 'note-' + note.id },
@@ -3397,6 +3587,14 @@ function noteRow(note, options = {}) {
     onClick: (event) => {
       const row = event.currentTarget;
       if (event.target.closest('a, button, input, textarea, select')) return;
+      if (row.dataset.selectionSuppress) {
+        delete row.dataset.selectionSuppress;
+        return;
+      }
+      if (state.selection.active) {
+        toggleSelection('notes', note.id);
+        return;
+      }
       if (Date.now() - lastSwipeEnd < 400) return;
       if (row.classList.contains('swipe-open')) {
         resetSwipe(row);
@@ -3408,6 +3606,9 @@ function noteRow(note, options = {}) {
     },
     content: [body, tools],
   });
+  row.append(el('span', { class: 'selection-check', 'aria-hidden': 'true', html: ICON('check', 'ic') }));
+  attachSelectionLongPress(row, 'notes', note.id);
+  return row;
 }
 
 function docRow(doc, options = {}) {
@@ -3461,15 +3662,26 @@ function docRow(doc, options = {}) {
     onDelete: (button) => handleDocDelete(doc, button),
     onClick: (event) => {
       if (event.target.closest('a, button, input, textarea, select')) return;
+      const row = event.currentTarget;
+      if (row.dataset.selectionSuppress) {
+        delete row.dataset.selectionSuppress;
+        return;
+      }
+      if (state.selection.active) {
+        toggleSelection('docs', doc.id);
+        return;
+      }
       if (Date.now() - lastSwipeEnd < 400 || Date.now() - lastDocDragEnd < 400) return;
-      if (event.currentTarget.classList.contains('swipe-open')) {
-        resetSwipe(event.currentTarget);
+      if (row.classList.contains('swipe-open')) {
+        resetSwipe(row);
         return;
       }
       openDocSheet(doc);
     },
     content: [body, side, tools],
   });
+  row.append(el('span', { class: 'selection-check', 'aria-hidden': 'true', html: ICON('check', 'ic') }));
+  attachSelectionLongPress(row, 'docs', doc.id);
   makeDocDraggable(row, doc);
   return row;
 }
@@ -3478,7 +3690,7 @@ function makeDocDraggable(row, doc) {
   if (!window.matchMedia('(pointer: fine)').matches) return;
   row.draggable = true;
   row.addEventListener('dragstart', (event) => {
-    if (event.target.closest('a, button, input, textarea, select')) {
+    if (state.selection.active || event.target.closest('a, button, input, textarea, select')) {
       event.preventDefault();
       return;
     }
@@ -7560,6 +7772,7 @@ function releaseSwipePointer(current) {
 }
 
 $('#content').addEventListener('pointerdown', (event) => {
+  if (state.selection.active) return;
   // Swipe-to-reveal is a touch gesture. On the web, the × is the delete path.
   if (event.pointerType === 'mouse') {
     mouseDrag = event.button === 0 ? { x: event.clientX, y: event.clientY } : null;
@@ -8608,6 +8821,13 @@ $$('.search-open-btn').forEach((button) => {
 });
 $('#search-close').addEventListener('click', () => closeSearchOverlay(true));
 $('#main-search-close').addEventListener('click', () => closeSearchOverlay(true));
+$('#select-toggle').addEventListener('click', () => {
+  const type = selectionTypeForView();
+  if (type) enterSelection(type);
+});
+$('#selection-all').addEventListener('click', selectAllVisible);
+$('#selection-cancel').addEventListener('click', exitSelection);
+$('#selection-delete').addEventListener('click', deleteSelection);
 
 $('#main-search-form').addEventListener('submit', (event) => {
   event.preventDefault();
@@ -8736,6 +8956,7 @@ imageViewerBody.addEventListener('pointerup', (event) => {
 });
 imageViewerBody.addEventListener('pointercancel', () => { imageSwipeStart = null; });
 document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && state.selection.active) exitSelection();
   if (!$('#image-sheet').hidden) {
     if (event.key === 'ArrowLeft') { event.preventDefault(); stepImage(-1); }
     if (event.key === 'ArrowRight') { event.preventDefault(); stepImage(1); }
