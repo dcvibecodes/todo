@@ -772,7 +772,7 @@ body.gate-open {
   flex: 1;
   min-width: 0;
   padding-left: 2px;
-  font-size: min(calc(var(--card-body-size) + 2px), 18px);
+  font-size: min(calc(var(--card-body-size) + 2px), 19.2px);
   font-weight: 550;
   line-height: 1.35;
   overflow: hidden;
@@ -871,7 +871,7 @@ body.gate-open {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: min(calc(var(--card-body-size) + 2px), 18px);
+  font-size: min(calc(var(--card-body-size) + 2px), 19.2px);
   font-weight: 550;
   line-height: 1.35;
 }
@@ -1140,7 +1140,7 @@ body.list-dragging .list-grip { cursor: grabbing; }
   gap: 5px 12px;
   width: auto;
   max-width: 100%;
-  margin: 8px 24px 10px;
+  margin: 12px 24px 0;
   padding: 0;
   font-size: 0.75rem;
   color: var(--text-3);
@@ -1603,7 +1603,7 @@ html.deleting-row #content { overflow-anchor: none; }
 .reminder-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 
 .reminder-title {
-  font-size: min(calc(var(--card-body-size) + 2px), 18px);
+  font-size: min(calc(var(--card-body-size) + 2px), 19.2px);
   font-weight: 550;
   line-height: 1.35;
   overflow-wrap: anywhere;
@@ -1661,12 +1661,10 @@ html.deleting-row #content { overflow-anchor: none; }
 .meta-completed { display: inline-flex; align-items: center; gap: 5px; }
 .meta-completed .ic { width: 12px; height: 12px; }
 
-:root {
-  --card-body-size: 10.125pt;
-}
+:root { --card-body-size: 11.575pt; }
 
 .reminder-notes {
-  font-size: min(var(--card-body-size), 16px);
+  font-size: min(var(--card-body-size), 17.2px);
   line-height: 1.4;
   color: var(--text-2);
   display: -webkit-box;
@@ -1694,21 +1692,8 @@ html.deleting-row #content { overflow-anchor: none; }
   white-space: pre-line;
 }
 
-html body .reminder-notes.is-expanded,
-.reminder.is-note-focused .reminder-notes {
-  font-size: var(--reader-note-size, min(var(--card-body-size), 16px));
-}
-.reminder.is-note-expanded .reminder-title,
-.reminder.is-note-focused .reminder-title {
-  font-size: calc(var(--reader-note-size, min(var(--card-body-size), 16px)) + 2px);
-}
-
-.reminder.is-note-focused:not(.has-long-note) .reminder-notes {
-  -webkit-line-clamp: unset;
-  max-height: none;
-  overflow: visible;
-}
-
+html body .reminder-notes.is-expanded { font-size: 17.2px; }
+.reminder.is-note-expanded .reminder-title { font-size: 19.2px; }
 
 /* Note cards keep a compact two-line preview when collapsed, then swap to the
    full rich body when expanded. The block max-height avoids the line-clamp
@@ -1761,7 +1746,7 @@ html body .reminder-notes.is-expanded,
    past the hard max-height and clip it mid-line. */
 .note-row .reminder-note-preview .note-md-heading {
   margin: 0;
-  line-height: calc(min(var(--card-body-size), 16px) * 1.4);
+  line-height: calc(min(var(--card-body-size), 17.2px) * 1.4);
 }
 .note-row .reminder-note-preview ul,
 .note-row .reminder-note-preview ol { margin: 0; }
@@ -1967,134 +1952,6 @@ body.sheet-open .fab {
   .fab, .fab:hover, .fab:active { transition: none; transform: none; }
 }
 
-/* ---------- Expanded-note reader size ---------- */
-
-.reader-size {
-  position: fixed;
-  right: max(33.5px, calc((100vw - min(54vw, 990px)) / 2 + 33.5px));
-  bottom: calc(96px + env(safe-area-inset-bottom));
-  left: auto;
-  z-index: 40;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-}
-
-.reader-size-toggle,
-.reader-size-step,
-.reader-size-default {
-  border: 1px solid var(--line);
-  background: var(--elev);
-  color: var(--text);
-  font-family: inherit;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.reader-size-toggle {
-  width: 45px;
-  height: 45px;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  background: var(--accent);
-  color: var(--accent-contrast);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18), 0 2px 6px rgba(0, 0, 0, 0.12);
-  font-size: 0.9rem;
-  transition: background 0.15s, transform 0.15s, box-shadow 0.15s, opacity 0.15s;
-}
-
-.reader-size-toggle:hover {
-  background: var(--accent-hover);
-  transform: translateY(-1px);
-  box-shadow: 0 11px 28px rgba(0, 0, 0, 0.2), 0 3px 7px rgba(0, 0, 0, 0.14);
-}
-
-.reader-size-toggle:active { transform: scale(0.95); }
-
-.reader-size-step:hover,
-.reader-size-default:hover { background: var(--fill); color: var(--text); }
-
-
-.reader-size-popover {
-  position: absolute;
-  right: 0;
-  bottom: calc(100% + 8px);
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 4px;
-  width: 160px;
-  padding: 6px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--elev);
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18);
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-  transform: translateY(8px) scale(0.96);
-  transform-origin: bottom right;
-  transition: opacity 0.16s ease, transform 0.18s ease, visibility 0.18s ease;
-}
-
-.reader-size-popover.open {
-  opacity: 1;
-  visibility: visible;
-  pointer-events: auto;
-  transform: none;
-}
-
-.reader-size-step {
-  width: 100%;
-  height: 38px;
-  padding: 0;
-  border-radius: 8px;
-  font-size: 0.82rem;
-}
-
-.reader-size-step:disabled,
-.reader-size-default:disabled { opacity: 0.4; cursor: default; }
-
-.reader-size-default {
-  width: 100%;
-  height: 38px;
-  padding: 0 10px;
-  border-radius: 8px;
-  font-size: 0.72rem;
-}
-
-.reader-size-title {
-  margin: 0 2px 2px;
-  padding: 1px 2px 6px;
-  border-bottom: 1px solid var(--line-soft);
-  color: var(--text-2);
-  font-size: 0.7rem;
-  font-weight: 500;
-  letter-spacing: 0;
-  text-transform: none;
-}
-
-.reader-size-value {
-  width: 100%;
-  padding: 2px 0;
-  color: var(--text-2);
-  font-size: 0.75rem;
-  font-variant-numeric: tabular-nums;
-  text-align: center;
-}
-
-body.sheet-open .reader-size {
-  opacity: 0;
-  pointer-events: none;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .reader-size-toggle,
-  .reader-size-step,
-  .reader-size-popover { transition: none; }
-}
-
 /* ---------- Sheets ---------- */
 
 .sheet {
@@ -2271,7 +2128,7 @@ body.sheet-open .sidebar {
 }
 
 #editor .e-title {
-  font-size: 18px;
+  font-size: 19.2px;
   font-weight: 550;
   line-height: 1.35;
   min-height: 64px;
@@ -2289,7 +2146,7 @@ body.sheet-open .sidebar {
 #editor .e-notes {
   min-height: 48px;
   max-height: 30dvh;
-  font-size: 16px;
+  font-size: 17.2px;
   resize: none;
   overflow-y: auto;
 }
@@ -3093,7 +2950,7 @@ body.sheet-open .sidebar {
   #menu-btn { display: grid; }
   #sidebar-menu-btn { display: grid; }
 
-  .sort-bar { margin: 8px 24px 10px; }
+  .sort-bar { margin: 12px 24px 0; }
 
   .account-menu {
     right: max(12px, calc((100vw - min(54vw, 990px)) / 2 + 12px));
@@ -3101,10 +2958,6 @@ body.sheet-open .sidebar {
 
   .fab {
     right: max(28px, calc((100vw - min(54vw, 990px)) / 2 + 28px));
-  }
-
-  .reader-size {
-    right: max(33.5px, calc((100vw - min(54vw, 990px)) / 2 + 33.5px));
   }
 
   .content {
@@ -3122,8 +2975,8 @@ body.sheet-open .sidebar {
 [data-density="compact"] .swipe-content { min-height: 0; padding: 8px 12px; gap: 10px; }
 [data-density="compact"] .reminder-due { font-size: 0.7rem; }
 [data-density="compact"] .reminder-meta { font-size: 0.7rem; gap: 8px; }
-[data-density="compact"] .reminder-notes { font-size: min(calc(var(--card-body-size) - 0.75pt), 16px); }
-[data-density="compact"] .reminder-title { font-size: min(calc(var(--card-body-size) - 0.75pt + 2px), 18px); }
+[data-density="compact"] .reminder-notes { font-size: min(calc(var(--card-body-size) - 0.75pt), 17.2px); }
+[data-density="compact"] .reminder-title { font-size: min(calc(var(--card-body-size) - 0.75pt + 2px), 19.2px); }
 [data-density="compact"] .check { width: 16px; height: 16px; }
 [data-density="compact"] .check .ic { width: 9px; height: 9px; }
 [data-density="compact"] .content { padding-top: 10px; }
@@ -3170,7 +3023,7 @@ body.sheet-open .sidebar {
 
   /* The main header already owns that top padding, so the wrapper only
      supplies the pinned surface. */
-  .main-top { padding-top: 0; padding-bottom: 10px; }
+  .main-top { padding-top: 0; }
 
   .sidebar .sidebar-foot { display: none; }
 
@@ -3239,7 +3092,7 @@ body.sheet-open .sidebar {
   .swipe-act.del .ic { display: none; }
 
   .sort-bar {
-    margin: 8px 18px 0;
+    margin: 12px 18px 0;
     flex-wrap: nowrap;
     gap: 4px;
   }
@@ -3260,11 +3113,6 @@ body.sheet-open .sidebar {
   .fab {
     right: 20px;
     bottom: calc(20px + env(safe-area-inset-bottom));
-  }
-
-  .reader-size {
-    right: 25.5px;
-    bottom: calc(88px + env(safe-area-inset-bottom));
   }
 
 
@@ -3585,7 +3433,7 @@ body.sheet-open .sidebar {
   background: transparent;
   color: var(--text-2);
   font-family: inherit;
-  font-size: min(calc(var(--card-body-size) + 2px), 18px);
+  font-size: 0.8125rem;
   font-weight: 600;
   cursor: pointer;
 }
@@ -3657,7 +3505,7 @@ body.sheet-open .sidebar {
 .doc-download { text-decoration: none; }
 
 .doc-row .reminder-title {
-  font-size: min(calc(var(--card-body-size) + 2px), 18px);
+  font-size: min(calc(var(--card-body-size) + 2px), 19.2px);
   line-height: 1.35;
 }
 
@@ -3681,7 +3529,7 @@ body.sheet-open .sidebar {
   background: transparent;
   color: var(--text);
   font-family: inherit;
-  font-size: 18px;
+  font-size: 1.0625rem;
   font-weight: 400;
   line-height: 1.35;
   resize: none;
@@ -3896,7 +3744,7 @@ body.sheet-open .sidebar {
   display: block;
   width: 100%;
   min-height: calc(1.25em + 22px);
-  font-size: 18px;
+  font-size: 1.25rem;
   line-height: 1.25;
   font-weight: 600;
   resize: none;
@@ -3905,7 +3753,7 @@ body.sheet-open .sidebar {
   overflow-wrap: anywhere;
 }
 
-#note-editor .note-rich { font-size: 16px; }
+#note-editor .note-rich { font-size: 17.2px; }
 
 #note-editor .note-body {
   min-height: 45dvh;
@@ -3917,7 +3765,7 @@ body.sheet-open .sidebar {
   #note-editor .sheet-card { width: 100%; }
   /* iOS auto-zooms any focused field below 16px. Keep the editor body and
      link field at 16px so tapping never changes the viewport scale. */
-  #note-editor .note-rich { font-size: 16px; }
+  #note-editor .note-rich { font-size: 17.2px; }
   #note-editor #note-link-url { font-size: 16px; }
 }
 
@@ -4103,13 +3951,13 @@ body.sheet-open .sidebar {
     font-size: 16px !important;
   }
 
-  html body #editor .e-title { font-size: 18px !important; }
-  html body #editor .e-notes { font-size: 16px !important; }
-  html body #doc-name { font-size: 18px !important; }
-  html body #doc-description { font-size: 16px !important; }
-  html body #note-editor .note-rich { font-size: 16px !important; }
+  html body #editor .e-title { font-size: 19.2px !important; }
+  html body #editor .e-notes { font-size: 17.2px !important; }
+  html body #doc-name { font-size: 19.2px !important; }
+  html body #doc-description { font-size: 17.2px !important; }
+  html body #note-editor .note-rich { font-size: 17.2px !important; }
   html body #note-editor .e-title {
-    font-size: 18px !important;
+    font-size: 19.2px !important;
   }
   /* Sort/Order values use the notes-preview size, not title size. */
   html body .sort-control select {
@@ -4411,7 +4259,7 @@ button.link-chip { border: 0; font-family: inherit; cursor: pointer; }
   overflow: hidden;
   white-space: pre-line;
   color: var(--text-2);
-  font-size: min(var(--card-body-size), 16px);
+  font-size: min(var(--card-body-size), 17.2px);
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
@@ -4425,7 +4273,7 @@ button.link-chip { border: 0; font-family: inherit; cursor: pointer; }
   border-radius: var(--radius-sm);
   background: var(--elev);
   color: var(--text);
-  font-size: 16px;
+  font-size: 17.2px;
   line-height: 1.4;
   resize: vertical;
 }
@@ -4744,6 +4592,3 @@ button.link-chip { border: 0; font-family: inherit; cursor: pointer; }
   color: var(--text-2);
   font-variant-numeric: tabular-nums;
 }
-
-/* Touch/desktop focus uses the same quiet background as hover, no border. */
-.reminder.is-note-focused .swipe-content { background: var(--elev); }

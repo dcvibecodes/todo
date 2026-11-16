@@ -131,15 +131,9 @@ const LIST_PROGRESS_MODES = ['bar', 'ring', 'off'];
 const LIST_PROGRESS_RANGES = ['all', '30d'];
 const SETTINGS_PROGRESS_KEYS = ['list_progress', 'list_progress_range'];
 const SETTINGS_BODY_KEYS = ['card_body_size'];
-const CARD_BODY_SIZE_KEY = 'todo.cardBodySize';
-const CARD_BODY_SIZE_DEFAULT = 10.125;
-const CARD_BODY_SIZE_MIN = 9;
-const CARD_BODY_SIZE_MAX = 11.25;
-const READER_SIZE_KEY = 'todo.readerNoteSize';
-const READER_SIZE_DEFAULT = 16;
-const READER_SIZE_MIN = 12;
-const READER_SIZE_MAX = 28.8;
-const READER_SIZE_STEP = 1.2;
+const CARD_BODY_SIZE_DEFAULT = 11.575;
+const CARD_BODY_SIZE_MIN = 10.25;
+const CARD_BODY_SIZE_MAX = 12.9;
 const RETENTION_ORDER = { '1m': 1, '3m': 3, '6m': 6, '12m': 12, forever: Infinity };
 const RETENTION_DAYS = { '1m': 30, '3m': 90, '6m': 180, '12m': 365 };
 const RETENTION_LABELS = { '1m': '1 month', '3m': '3 months', '6m': '6 months', '12m': '1 year', forever: 'indefinitely' };
@@ -150,155 +144,12 @@ function normalizedCardBodySize(value) {
   return Math.min(CARD_BODY_SIZE_MAX, Math.max(CARD_BODY_SIZE_MIN, n));
 }
 
-function storedCardBodySize() {
-  const raw = localStorage.getItem(CARD_BODY_SIZE_KEY);
-  return raw == null || raw === '' ? null : normalizedCardBodySize(raw);
-}
-
-function deviceCardBodySize(fallback) {
-  return storedCardBodySize() ?? normalizedCardBodySize(fallback);
-}
-
-function applyCardBodySize(value, persist = false) {
+function applyCardBodySize(value) {
   const size = normalizedCardBodySize(value);
   document.documentElement.style.setProperty('--card-body-size', `${size}pt`);
   const label = $('#set-card-body-size-value');
   if (label) label.textContent = `${size.toFixed(2).replace(/\.?0+$/, '')} pt`;
-  if (persist) localStorage.setItem(CARD_BODY_SIZE_KEY, String(size));
   return size;
-}
-
-function normalizedReaderSize(value) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return READER_SIZE_DEFAULT;
-  return Math.min(READER_SIZE_MAX, Math.max(READER_SIZE_MIN, n));
-}
-
-function storedReaderSize() {
-  const raw = localStorage.getItem(READER_SIZE_KEY);
-  return raw == null || raw === '' ? null : normalizedReaderSize(raw);
-}
-
-function activeReaderNoteId() {
-  return focusedNoteId || expandedNoteId;
-}
-
-function expandedReaderFontSize() {
-  const id = activeReaderNoteId();
-  const row = id ? cardForId(id) : null;
-  if (!row) return null;
-  const note = row.querySelector('.reminder-notes');
-  if (note) return parseFloat(getComputedStyle(note).fontSize);
-  const title = row.querySelector('.reminder-title');
-  return title ? parseFloat(getComputedStyle(title).fontSize) - 2 : null;
-}
-
-function currentReaderSizeForUI() {
-  return storedReaderSize() ?? expandedReaderFontSize() ?? READER_SIZE_DEFAULT;
-}
-
-function updateReaderSizeUI(size) {
-  const label = $('#reader-size-value');
-  if (label) label.textContent = `${size.toFixed(1)} px`;
-  const down = $('#reader-size-down');
-  const up = $('#reader-size-up');
-  const reset = $('#reader-size-default');
-  if (down) down.disabled = size <= READER_SIZE_MIN;
-  if (up) up.disabled = size >= READER_SIZE_MAX;
-  if (reset) reset.disabled = storedReaderSize() == null;
-}
-
-function setReaderPopover(open) {
-  const popover = $('#reader-size-popover');
-  const toggle = $('#reader-size-toggle');
-  if (!popover || !toggle) return;
-  popover.classList.toggle('open', open);
-  popover.setAttribute('aria-hidden', open ? 'false' : 'true');
-  popover.inert = !open;
-  toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
-}
-
-function syncReaderControl() {
-  const control = $('#reader-size');
-  if (!control) return;
-  const id = activeReaderNoteId();
-  const visible = Boolean(id && cardForId(id));
-  control.hidden = !visible;
-  if (!visible) setReaderPopover(false);
-  else updateReaderSizeUI(currentReaderSizeForUI());
-}
-
-function applyReaderNoteSize(value, animate = false) {
-  const hasValue = value !== null && value !== '' && Number.isFinite(Number(value));
-  const size = hasValue ? normalizedReaderSize(value) : null;
-  const id = activeReaderNoteId();
-  const row = id ? cardForId(id) : null;
-  const note = row ? row.querySelector('.reminder-notes') : null;
-  const title = row ? row.querySelector('.reminder-title') : null;
-  let from = 0;
-  let fromFont = '';
-  let fromTitleFont = '';
-  if (note) {
-    note.getAnimations().forEach((animation) => animation.cancel());
-    note.style.height = '';
-    note.style.overflow = '';
-    from = note.getBoundingClientRect().height;
-    fromFont = getComputedStyle(note).fontSize;
-  }
-  if (title) {
-    title.getAnimations().forEach((animation) => animation.cancel());
-    fromTitleFont = getComputedStyle(title).fontSize;
-  }
-  if (hasValue) {
-    document.documentElement.style.setProperty('--reader-note-size', `${size}px`);
-    localStorage.setItem(READER_SIZE_KEY, String(size));
-  } else {
-    document.documentElement.style.removeProperty('--reader-note-size');
-    localStorage.removeItem(READER_SIZE_KEY);
-  }
-  updateReaderSizeUI(size ?? currentReaderSizeForUI());
-  if (!animate || MOTION_REDUCED.matches) return;
-  const to = note ? note.getBoundingClientRect().height : 0;
-  const toFont = note ? getComputedStyle(note).fontSize : '';
-  const toTitleFont = title ? getComputedStyle(title).fontSize : '';
-  const noteChanged = Boolean(note && (Math.abs(to - from) >= 1 || fromFont !== toFont));
-  const titleChanged = Boolean(title && fromTitleFont && toTitleFont && fromTitleFont !== toTitleFont);
-  if (!noteChanged && !titleChanged) return;
-  const duration = 180;
-  const easing = 'ease-out';
-  let heightAnim = null;
-  if (note && noteChanged) {
-    note.style.overflow = 'hidden';
-    note.style.height = `${from}px`;
-    heightAnim = note.animate(
-      [{ height: `${from}px` }, { height: `${to}px` }],
-      { duration, easing },
-    );
-    note.animate(
-      [{ fontSize: fromFont }, { fontSize: toFont }],
-      { duration, easing },
-    );
-  }
-  if (titleChanged) {
-    title.animate(
-      [{ fontSize: fromTitleFont }, { fontSize: toTitleFont }],
-      { duration, easing },
-    );
-  }
-  const cleanup = () => {
-    if (!note) return;
-    note.style.height = '';
-    note.style.overflow = '';
-  };
-  if (heightAnim) {
-    heightAnim.onfinish = cleanup;
-    heightAnim.oncancel = cleanup;
-  }
-}
-
-function adjustReaderSize(delta) {
-  const current = storedReaderSize() ?? expandedReaderFontSize() ?? READER_SIZE_DEFAULT;
-  applyReaderNoteSize(current + delta * READER_SIZE_STEP, true);
 }
 
 function listRetention(list) {
@@ -1036,7 +887,7 @@ async function loadState() {
   state.attachments = data.attachments || [];
   applyDocsFormatUI();
   state.settings = data.settings || {};
-  applyCardBodySize(deviceCardBodySize(state.settings.card_body_size));
+  applyCardBodySize(state.settings.card_body_size);
   await syncListProgressWithServer();
   await syncSortWithServer();
   if (state.lastListId && !listById(state.lastListId)) {
@@ -1093,8 +944,8 @@ function pageScroller() {
 function screenScroller() {
   return PAGE_SCROLL_MEDIA.matches ? pageScroller() : $('#content');
 }
-const PULL_THRESHOLD = 112;
-const PULL_MAX = 180;
+const PULL_THRESHOLD = 56;
+const PULL_MAX = 90;
 const PULL_RESISTANCE = 0.7;
 const PULL_MIN_SPIN = 500;
 const PULL_START_OFFSET = -36;
@@ -1537,8 +1388,6 @@ function route() {
     : null;
   if (view !== state.view) {
     expandedNoteId = null;
-    focusedNoteId = null;
-    syncReaderControl();
   }
   if (view !== state.view) {
     state.showCompleted = typeof view === 'number' ? getShowCompleted(view) : false;
@@ -3389,7 +3238,6 @@ function noteRow(note, options = {}) {
         resetSwipe(row);
         return;
       }
-      if (!cardTapAllowsExpansion(row)) return;
       if (!row.classList.contains('has-long-note')) return;
       const noteEl = row.querySelector('.reminder-notes');
       if (noteEl) toggleNoteForRow(row, noteEl);
@@ -4557,18 +4405,7 @@ async function rescheduleRow(reminder, date) {
 }
 
 let expandedNoteId = null;
-let focusedNoteId = null;
-let focusGestureId = null;
 let lastNoteScrollAt = 0;
-
-function cardForId(id) {
-  let fallback = null;
-  for (const row of $$(`.reminder[data-reminder-id="${id}"]`)) {
-    if (row.getClientRects().length) return row;
-    fallback = fallback || row;
-  }
-  return fallback;
-}
 
 function noteForId(id) {
   let fallback = null;
@@ -4623,7 +4460,6 @@ function animateNote(note, expand, onDone) {
   const fromTitleFont = title ? getComputedStyle(title).fontSize : null;
   note.classList.toggle('is-expanded', expand);
   row?.classList.toggle('is-note-expanded', expand);
-  syncReaderControl();
   const to = note.getBoundingClientRect().height;
   const toFont = getComputedStyle(note).fontSize;
   const toTitleFont = title ? getComputedStyle(title).fontSize : null;
@@ -4664,111 +4500,6 @@ function collapseExpandedNote() {
   if (found) animateNote(found.note, false);
 }
 
-function animateNoteFocus(row, focus, onDone) {
-  if (!row) { if (onDone) onDone(); return; }
-  const note = row.querySelector('.reminder-notes');
-  const title = row.querySelector('.reminder-title');
-  if (!note && !title) { if (onDone) onDone(); return; }
-  let from = 0;
-  let fromFont = '';
-  let fromTitleFont = '';
-  if (note) {
-    note.getAnimations().forEach((animation) => animation.cancel());
-    note.style.height = '';
-    note.style.overflow = '';
-    from = note.getBoundingClientRect().height;
-    fromFont = getComputedStyle(note).fontSize;
-  }
-  if (title) {
-    title.getAnimations().forEach((animation) => animation.cancel());
-    fromTitleFont = getComputedStyle(title).fontSize;
-  }
-  row.classList.toggle('is-note-focused', focus);
-  const to = note ? note.getBoundingClientRect().height : 0;
-  const toFont = note ? getComputedStyle(note).fontSize : '';
-  const toTitleFont = title ? getComputedStyle(title).fontSize : '';
-  const noteChanged = Boolean(note && (Math.abs(to - from) >= 1 || fromFont !== toFont));
-  const titleChanged = Boolean(title && fromTitleFont && toTitleFont && fromTitleFont !== toTitleFont);
-  if (MOTION_REDUCED.matches || (!noteChanged && !titleChanged)) {
-    if (onDone) onDone();
-    return;
-  }
-  const duration = 200;
-  const easing = 'ease-out';
-  let heightAnim = null;
-  if (note && noteChanged) {
-    note.style.overflow = 'hidden';
-    note.style.height = `${from}px`;
-    heightAnim = note.animate(
-      [{ height: `${from}px` }, { height: `${to}px` }],
-      { duration, easing },
-    );
-    note.animate(
-      [{ fontSize: fromFont }, { fontSize: toFont }],
-      { duration, easing },
-    );
-  }
-  if (titleChanged) {
-    title.animate(
-      [{ fontSize: fromTitleFont }, { fontSize: toTitleFont }],
-      { duration, easing },
-    );
-  }
-  const cleanup = () => {
-    if (!note) return;
-    note.style.height = '';
-    note.style.overflow = '';
-  };
-  if (heightAnim) {
-    heightAnim.onfinish = () => { cleanup(); if (onDone) onDone(); };
-    heightAnim.oncancel = cleanup;
-  } else if (onDone) {
-    onDone();
-  }
-}
-
-function focusNoteRow(row) {
-  if (!row) return false;
-  const id = row.dataset.reminderId;
-  if (focusedNoteId === id) return false;
-  if (focusedNoteId) {
-    const previous = cardForId(focusedNoteId);
-    if (previous) animateNoteFocus(previous, false);
-  }
-  const note = row.querySelector('.reminder-notes');
-  row.classList.remove('is-note-focused');
-  if (note) {
-    const expandable = note.classList.contains('is-expanded')
-      || note.scrollHeight > note.clientHeight + 1;
-    row.classList.toggle('has-long-note', expandable);
-  }
-  focusedNoteId = id;
-  animateNoteFocus(row, true);
-  if (expandedNoteId && expandedNoteId !== id) collapseExpandedNote();
-  syncReaderControl();
-  return true;
-}
-
-function cardTapAllowsExpansion(row) {
-  const id = row.dataset.reminderId;
-  if (focusGestureId) {
-    const justFocused = focusGestureId === id;
-    focusGestureId = null;
-    if (justFocused) return false;
-  }
-  const wasFocused = focusedNoteId === id;
-  focusNoteRow(row);
-  return wasFocused;
-}
-
-function clearNoteFocus() {
-  if (!focusedNoteId) return;
-  const previous = cardForId(focusedNoteId);
-  focusedNoteId = null;
-  if (previous) animateNoteFocus(previous, false);
-  syncReaderControl();
-}
-
 function toggleNoteForRow(row, note) {
   const id = row.dataset.reminderId;
   if (expandedNoteId === id) {
@@ -4783,34 +4514,22 @@ function toggleNoteForRow(row, note) {
 
 function syncNoteExpanders() {
   let expandedSeen = false;
-  let focusedSeen = false;
   for (const note of $$('.reminder-notes')) {
     const row = note.closest('.reminder');
     if (!row) continue;
     const id = row.dataset.reminderId;
     const expanded = expandedNoteId === id;
-    const focused = focusedNoteId === id;
     note.classList.toggle('is-expanded', expanded);
     row.classList.toggle('is-note-expanded', expanded);
-    // Measure overflow before applying the short-note focus unclamp, otherwise
-    // a focused card can look non-expandable and lose its height animation.
-    row.classList.remove('is-note-focused');
     if (!expanded) {
       note.style.height = '';
       note.style.overflow = '';
     }
     const expandable = expanded || note.scrollHeight > note.clientHeight + 1;
     row.classList.toggle('has-long-note', expandable);
-    row.classList.toggle('is-note-focused', focused);
-    if (focused) focusedSeen = true;
     if (expandable && expanded) expandedSeen = true;
   }
   if (expandedNoteId && !expandedSeen) expandedNoteId = null;
-  if (focusedNoteId && !focusedSeen && !cardForId(focusedNoteId)) focusedNoteId = null;
-  $$('.reminder').forEach((row) => {
-    row.classList.toggle('is-note-focused', row.dataset.reminderId === focusedNoteId);
-  });
-  syncReaderControl();
 }
 
 function reminderRow(reminder, options = {}) {
@@ -5077,9 +4796,9 @@ function reminderRow(reminder, options = {}) {
         resetSwipe(row);
         return;
       }
-      if (!cardTapAllowsExpansion(row)) return;
+      if (!row.classList.contains('has-long-note')) return;
       const note = row.querySelector('.reminder-notes');
-      if (!note || !row.classList.contains('has-long-note')) return;
+      if (!note) return;
       toggleNoteForRow(row, note);
     },
   }, [background, content]);
@@ -7741,7 +7460,6 @@ function updateSettingsDirty(preserveMessage = false) {
 async function openSettings() {
   closeAccountMenu();
   applyTheme(themePreference, false);
-applyReaderNoteSize(localStorage.getItem(READER_SIZE_KEY), false);
   $('#pw-msg').hidden = true;
   $('#settings-msg').hidden = true;
   $('#username-msg').hidden = true;
@@ -7754,9 +7472,8 @@ applyReaderNoteSize(localStorage.getItem(READER_SIZE_KEY), false);
   }
   const s = state.settings;
   $('#set-density').value = localStorage.getItem(DENSITY_KEY) === 'compact' ? 'compact' : 'comfortable';
-  const cardBodySize = deviceCardBodySize(s.card_body_size);
-  $('#set-card-body-size').value = String(cardBodySize);
-  applyCardBodySize(cardBodySize);
+  $('#set-card-body-size').value = String(normalizedCardBodySize(s.card_body_size));
+  applyCardBodySize(s.card_body_size);
   $('#set-default-model').value = ['floating', 'anchored'].includes(s.default_time_model)
     ? s.default_time_model : 'floating';
   renderSettingsZones(s.default_time_zone || '');
@@ -7807,8 +7524,7 @@ async function saveAppSettings() {
   const bodySizeChanged = changed(SETTINGS_BODY_KEYS);
   const appearanceDirty = appearanceIsDirty();
   const sortChanged = sortIsDirty();
-  const serverChanged = defaultsChanged || notifyChanged || progressChanged || uploadChanged;
-  if (!serverChanged && !bodySizeChanged && !appearanceDirty && !sortChanged) return;
+  if (!defaultsChanged && !notifyChanged && !progressChanged && !uploadChanged && !bodySizeChanged && !appearanceDirty && !sortChanged) return;
 
   const saveBtn = $('#settings-save');
   const startedAt = Date.now();
@@ -7818,13 +7534,11 @@ async function saveAppSettings() {
   $('#settings-sheet').setAttribute('aria-busy', 'true');
   try {
     let message = '';
-    if (serverChanged) {
+    if (defaultsChanged || notifyChanged || progressChanged || uploadChanged || bodySizeChanged) {
       try {
-        const serverSettings = { ...current };
-        delete serverSettings.card_body_size;
         const result = await api('/api/settings', {
           method: 'POST',
-          body: { settings: serverSettings },
+          body: { settings: current },
         });
         state.settings = result.settings || state.settings;
         settingsSnapshot = current;
@@ -7838,6 +7552,8 @@ async function saveAppSettings() {
           message = 'Saved. Applies to new items only — existing items were not changed.';
         } else if (uploadChanged) {
           message = 'Saved. Upload optimization applies to new uploads only.';
+        } else if (bodySizeChanged) {
+          message = 'Saved — card text size applies to all tenants.';
         } else {
           message = 'Saved — folder progress now follows you on all devices.';
         }
@@ -7846,13 +7562,6 @@ async function saveAppSettings() {
         settingsMessage(err.message);
         return;
       }
-    }
-    if (bodySizeChanged) {
-      applyCardBodySize(current.card_body_size, true);
-      settingsSnapshot = current;
-      message = message
-        ? `${message} Card text size applies to this device.`
-        : 'Saved — card text size applies to this device.';
     }
     if (sortChanged) {
       const sort = sortValues();
@@ -8189,7 +7898,6 @@ async function changePassword(event) {
 }
 
 applyTheme(themePreference, false);
-applyReaderNoteSize(localStorage.getItem(READER_SIZE_KEY), false);
 darkQuery.addEventListener('change', () => {
   if (themePreference === 'auto') applyTheme('auto', false);
 });
@@ -8205,15 +7913,6 @@ $('#smart-nav').addEventListener('click', (event) => {
   go(row.dataset.view);
   closeAccountMenu();
 });
-
-document.addEventListener('pointerdown', (event) => {
-  if (event.button !== 0) return;
-  focusGestureId = null;
-  const row = event.target.closest('.reminder');
-  if (!row || row.classList.contains('doc-row')) return;
-  if (event.target.closest('a, button, input, textarea, select')) return;
-  if (focusNoteRow(row)) focusGestureId = row.dataset.reminderId;
-}, true);
 
 $('#tenant-switch').addEventListener('click', (event) => {
   const btn = event.target.closest('.tenant-btn');
@@ -8533,20 +8232,6 @@ $('#search-form').addEventListener('submit', (event) => {
 });
 
 $('#editor-form').addEventListener('submit', saveEditor);
-$('#reader-size-toggle').addEventListener('click', (event) => {
-  event.stopPropagation();
-  setReaderPopover(!$('#reader-size-popover').classList.contains('open'));
-});
-$('#reader-size-down').addEventListener('click', () => adjustReaderSize(-1));
-$('#reader-size-up').addEventListener('click', () => adjustReaderSize(1));
-$('#reader-size-default').addEventListener('click', () => applyReaderNoteSize(null, true));
-document.addEventListener('click', (event) => {
-  if (!event.target.closest('#reader-size')) setReaderPopover(false);
-  if (focusedNoteId && !event.target.closest('.reminder, #reader-size')) clearNoteFocus();
-});
-document.addEventListener('keydown', (event) => {
-  if (event.key === 'Escape') setReaderPopover(false);
-});
 $('#note-form').addEventListener('submit', saveNote);
 $('#n-title').addEventListener('input', autoGrowNoteTitle);
 $('#n-title').addEventListener('keydown', (event) => {
