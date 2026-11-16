@@ -2,6 +2,11 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v4.10.50
+
+- **Search keeps focus after the first letter** - Typing in the Home search bar now moves to the all-tenant results screen without closing the search overlay or dropping the keyboard. The detail search box takes over with the query and cursor intact, so the rest of the word can be typed normally.
+- Service worker cache bumped to `workspace-v4.10.50`.
+
 ## What's New in v4.10.49
 
 - **More room below Sort / Order** - The row's bottom spacing grows from 10 px to 15 px, keeping scrolled cards clear of the controls.

@@ -1364,7 +1364,6 @@ function route() {
   const fromHistoryBack = historyBackHash !== null && historyBackHash === location.hash;
   historyBackHash = null;
   const view = parseRoute();
-  if (view !== 'home') setSearchOverlay(false);
   // Clear search before deciding whether this navigation can slide. Previously
   // the search was cleared after canSlide was computed, so leaving search
   // results always took the fallback animation.
@@ -1378,6 +1377,7 @@ function route() {
       setSearchOverlay(false);
     }
   }
+  if (view !== 'home' && !state.search) setSearchOverlay(false);
   const previousView = state.view;
   const previousScreen = document.body.dataset.screen;
   if (PAGE_SCROLL_MEDIA.matches && previousScreen) {
@@ -1427,9 +1427,19 @@ function route() {
       );
     }
   }
-  if (searching) {
-    // The old screen (and its search box) may now be hidden; keep focus on a
-    // visible search box so the keyboard stays up.
+  if (state.search && view !== 'home') {
+    // The Home -> search-results transition must keep the destination search
+    // box open and focused, otherwise the first typed character closes the
+    // keyboard and the user cannot finish the query.
+    setSearchOverlay(true);
+    const input = $('#main-search');
+    if (input) {
+      if (!input.value) input.value = state.search;
+      try { input.focus({ preventScroll: true }); } catch { input.focus(); }
+      try { input.setSelectionRange(input.value.length, input.value.length); } catch { /* ignore */ }
+    }
+  } else if (searching) {
+    // Keep focus on a visible search box when the active one is hidden.
     let target = document.activeElement;
     if (!target || target.offsetParent === null) {
       target = $('#main-search').offsetParent ? $('#main-search') : $('#search');
