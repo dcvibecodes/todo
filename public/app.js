@@ -1968,6 +1968,7 @@ function render() {
 
 let selectionDeleteArmed = false;
 let selectionDeleteTimer = null;
+let pendingBulkCompletion = null;
 
 function selectionTypeForView(view = state.view) {
   if (view === 'notes' || String(view).startsWith('notes-folder-')) return 'notes';
@@ -2033,6 +2034,21 @@ function syncSelectionUI() {
   if (actionCount) actionCount.textContent = `${count} selected`;
   const deleteButton = $('#selection-delete');
   if (deleteButton) deleteButton.disabled = !count;
+  const completeButton = $('#selection-complete');
+  const uncompleteButton = $('#selection-uncomplete');
+  if (completeButton && uncompleteButton) {
+    const reminderItems = state.selection.type === 'reminders'
+      ? Array.from(state.selection.ids).map((id) => findReminder(Number(id))).filter(Boolean)
+      : [];
+    const openCount = reminderItems.filter((item) => !item.completed).length;
+    const doneCount = reminderItems.filter((item) => item.completed).length;
+    completeButton.hidden = state.selection.type !== 'reminders';
+    uncompleteButton.hidden = state.selection.type !== 'reminders';
+    completeButton.disabled = !openCount;
+    uncompleteButton.disabled = !doneCount;
+    completeButton.textContent = openCount ? `Complete (${openCount})` : 'Complete';
+    uncompleteButton.textContent = doneCount ? `Uncomplete (${doneCount})` : 'Uncomplete';
+  }
   const all = $$('#content .reminder').map((row) => selectionIdForRow(row, state.selection.type)).filter(Boolean);
   const allSelected = all.length > 0 && all.every((id) => state.selection.ids.has(id));
   const allButton = $('#selection-all');
@@ -2127,6 +2143,54 @@ async function deleteSelection() {
     button.disabled = false;
     toast(err.message);
   }
+}
+
+function selectedReminderItems(completed = null) {
+  return Array.from(state.selection.ids)
+    .map((id) => findReminder(Number(id)))
+    .filter((item) => item && (completed === null || Boolean(item.completed) === completed));
+}
+
+async function runBulkCompletion(ids, completed) {
+  if (!ids.length) return;
+  try {
+    const result = await api('/api/bulk/reminders/complete', {
+      method: 'POST',
+      body: { ids, completed },
+    });
+    exitSelection();
+    state.storage = null;
+    await loadState();
+    requestRowAnimation(0.72);
+    render();
+    const parts = [];
+    if (result.completed) parts.push(`${result.completed} ${completed ? 'completed' : 'uncompleted'}`);
+    if (result.advanced) parts.push(`${result.advanced} advanced`);
+    if (result.skipped) parts.push(`${result.skipped} skipped`);
+    if (result.failed && result.failed.length) parts.push(`${result.failed.length} failed`);
+    toast(parts.length ? parts.join(' · ') : 'Nothing changed');
+  } catch (err) {
+    toast(err.message);
+  }
+}
+
+function selectionComplete() {
+  const items = selectedReminderItems(false);
+  if (!items.length) return;
+  const ids = items.map((item) => item.id);
+  if (items.some((item) => isRecurringReminder(item))) {
+    pendingBulkCompletion = { ids, completed: true };
+    $('#bulk-complete-text').textContent = `${items.filter((item) => isRecurringReminder(item)).length} selected recurring item${items.filter((item) => isRecurringReminder(item)).length === 1 ? '' : 's'} will advance to the next occurrence. Continue?`;
+    openSheet('#bulk-complete-sheet');
+    return;
+  }
+  runBulkCompletion(ids, true);
+}
+
+function selectionUncomplete() {
+  const items = selectedReminderItems(true);
+  if (!items.length) return;
+  runBulkCompletion(items.map((item) => item.id), false);
 }
 
 function attachSelectionLongPress(row, type, id) {
@@ -7615,6 +7679,7 @@ function finishSheetClose(sheet) {
   closingSheets.delete(sheet);
   if (sheet.id === 'image-sheet') clearImageCache();
   if (sheet.id === 'pdf-sheet') closePdfViewer();
+  if (sheet.id === 'bulk-complete-sheet') pendingBulkCompletion = null;
   if (sheet.id === 'discard-sheet') pendingDiscard = null;
   sheet.hidden = true;
   sheet.classList.remove('is-visible');
@@ -7687,6 +7752,7 @@ function closeTopSheetInPlace() {
     if (sheet.id === 'settings-sheet') revertSettingsPreview();
     if (sheet.id === 'image-sheet') clearImageCache();
     if (sheet.id === 'pdf-sheet') closePdfViewer();
+    if (sheet.id === 'bulk-complete-sheet') pendingBulkCompletion = null;
     if (sheet.id === 'discard-sheet') pendingDiscard = null;
     const timer = sheetCloseTimers.get(sheet);
     if (timer) clearTimeout(timer);
@@ -8843,6 +8909,14 @@ $('#select-toggle').addEventListener('click', () => {
 $('#selection-all').addEventListener('click', selectAllVisible);
 $('#selection-cancel').addEventListener('click', exitSelection);
 $('#selection-delete').addEventListener('click', deleteSelection);
+$('#selection-complete').addEventListener('click', selectionComplete);
+$('#selection-uncomplete').addEventListener('click', selectionUncomplete);
+$('#bulk-complete-confirm').addEventListener('click', () => {
+  const pending = pendingBulkCompletion;
+  pendingBulkCompletion = null;
+  closeSheet('#bulk-complete-sheet');
+  if (pending) runBulkCompletion(pending.ids, pending.completed);
+});
 
 $('#main-search-form').addEventListener('submit', (event) => {
   event.preventDefault();

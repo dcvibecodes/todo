@@ -4135,6 +4135,41 @@ async function main() {
 
   /* ---------------- Trash ---------------- */
 
+  app.post('/api/bulk/reminders/complete', async (req, res) => {
+    if (req.token) return denyToken(res);
+    const ids = Array.isArray(req.body.ids) ? req.body.ids.map(parseId).filter(Boolean) : [];
+    const completed = Boolean(req.body.completed);
+    if (!ids.length || ids.length > 200) return res.status(400).json({ error: 'Choose 1 to 200 items' });
+    let completedCount = 0;
+    let advancedCount = 0;
+    let skipped = 0;
+    const failed = [];
+    for (const id of ids) {
+      try {
+        const current = await db.get('SELECT * FROM reminders WHERE id = ? AND deleted_at IS NULL', [id]);
+        if (!current) { skipped += 1; continue; }
+        if (completed) {
+          if (current.completed) { skipped += 1; continue; }
+          const result = await completeReminder(id);
+          if (result.advanced) advancedCount += 1;
+          if (result.alreadyDone) skipped += 1;
+          else completedCount += 1;
+        } else {
+          const rule = parseRuleColumn(current.repeat_rule);
+          if (recurrence.isRecurringRule(rule) || !current.completed) { skipped += 1; continue; }
+          await db.run(
+            'UPDATE reminders SET completed = 0, completed_at = NULL, updated_at = ?, revision = revision + 1 WHERE id = ?',
+            [new Date().toISOString(), id]
+          );
+          completedCount += 1;
+        }
+      } catch (err) {
+        failed.push({ id, error: err.message || 'Failed' });
+      }
+    }
+    res.json({ ok: true, completed: completedCount, advanced: advancedCount, skipped, failed });
+  });
+
   app.post('/api/bulk/delete', async (req, res) => {
     if (req.token) return denyToken(res);
     const type = String(req.body.type || '');

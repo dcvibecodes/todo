@@ -352,6 +352,8 @@
     </button>
     <div id="selection-actions" class="selection-actions" hidden>
       <span id="selection-actions-count"></span>
+      <button type="button" id="selection-complete" class="selection-action" hidden>Complete</button>
+      <button type="button" id="selection-uncomplete" class="selection-action" hidden>Uncomplete</button>
       <button type="button" id="selection-delete" class="selection-delete">Delete</button>
     </div>
   </div>
@@ -679,6 +681,20 @@
     </form>
   </div>
 
+
+  <div id="bulk-complete-sheet" class="sheet" hidden>
+    <div class="sheet-backdrop" data-close></div>
+    <div class="sheet-card discard-card">
+      <header class="sheet-head">
+        <button type="button" class="text-btn" data-close>Cancel</button>
+        <span>Complete recurring items</span>
+        <button type="button" class="text-btn strong" id="bulk-complete-confirm">Complete</button>
+      </header>
+      <div class="sheet-body">
+        <p class="notify-hint" id="bulk-complete-text"></p>
+      </div>
+    </div>
+  </div>
 
   <div id="trash-sheet" class="sheet" hidden>
     <div class="sheet-backdrop" data-close></div>

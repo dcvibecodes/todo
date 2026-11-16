@@ -4868,21 +4868,36 @@ body.selection-mode .fab { display: none; }
   transform: translateX(-50%);
   display: flex;
   align-items: center;
-  gap: 12px;
+  flex-wrap: wrap;
+  gap: 8px;
   min-width: min(320px, calc(100vw - 36px));
   padding: 8px 10px 8px 14px;
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: 18px;
   background: var(--elev);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
 }
 .selection-actions[hidden] { display: none; }
 #selection-actions-count {
-  flex: 1;
+  flex: 1 0 100%;
   color: var(--text-2);
-  font-size: 0.8125rem;
+  font-size: 0.75rem;
   font-weight: 550;
 }
+.selection-action {
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-2);
+  font-family: inherit;
+  font-size: 0.8125rem;
+  font-weight: 550;
+  cursor: pointer;
+}
+.selection-action:hover { background: var(--fill); color: var(--text); }
+.selection-action:disabled { opacity: 0.4; cursor: default; }
 .selection-delete {
   min-height: 34px;
   padding: 0 16px;
