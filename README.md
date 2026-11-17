@@ -2,6 +2,12 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v4.12.7
+
+- **Trash header polish** - The Trash title is absolutely centred on the sheet, independent of the Close/Empty widths, and the body starts 8 px below the header divider for a tighter hint/list layout.
+- **Selection marker position** - The round selection marker is vertically centred in every row again, while the completion control stays a square beside the title line.
+- Service worker cache bumped to `workspace-v4.12.7`.
+
 ## What's New in v4.12.6
 
 - **Bulk delete removes rows immediately** - Confirming a bulk selection delete removes the selected rows before the request finishes, so they never reappear unselected while the state reloads. A failed request restores them.

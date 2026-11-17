@@ -2030,6 +2030,15 @@ body.sheet-open .sidebar {
 .sheet-head #settings-save,
 .sheet-head #list-save { min-width: 64px; justify-content: flex-end; }
 .sheet-head #trash-empty { min-width: 112px; justify-content: flex-end; white-space: nowrap; }
+.trash-card .sheet-head > span {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  white-space: nowrap;
+  pointer-events: none;
+}
+#trash-sheet .sheet-body { padding-top: 8px; }
 
 .sheet-body {
   padding: 16px 18px calc(20px + env(safe-area-inset-bottom));
@@ -4841,10 +4850,11 @@ button.link-chip { border: 0; font-family: inherit; cursor: pointer; }
   display: none;
   position: absolute;
   left: 14px;
-  top: 15px;
+  top: 50%;
   z-index: 4;
   width: 20px;
   height: 20px;
+  transform: translateY(-50%);
   place-items: center;
   border: 1.5px solid var(--text-3);
   border-radius: 50%;
@@ -4854,8 +4864,6 @@ button.link-chip { border: 0; font-family: inherit; cursor: pointer; }
 }
 .selection-check .ic { width: 11px; height: 11px; }
 body.selection-mode .selection-check { display: grid; }
-.doc-row .selection-check,
-.reminder--single .selection-check { top: 50%; transform: translateY(-50%); }
 body.selection-mode .note-row .swipe-content,
 body.selection-mode .doc-row .swipe-content,
 body.selection-mode .reminder .swipe-content { padding-left: 48px; }
@@ -4930,5 +4938,4 @@ body.selection-mode .fab { display: none; }
 
 @media (max-width: 899px) {
   .selection-bar { margin: 6px 18px 0; }
-  .selection-check { top: 14px; }
 }
