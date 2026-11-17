@@ -1624,7 +1624,7 @@ html.deleting-row #content { overflow-anchor: none; }
 .reminder-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 
 .reminder-title {
-  font-size: 0.9375rem;
+  font-size: 0.96875rem;
   font-weight: 550;
   line-height: 1.35;
   overflow-wrap: anywhere;
@@ -1685,7 +1685,7 @@ html.deleting-row #content { overflow-anchor: none; }
 :root { --card-body-size: 11.575pt; }
 
 .reminder-notes {
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   line-height: 1.4;
   color: var(--text-2);
   display: -webkit-box;
@@ -1769,7 +1769,7 @@ html body .reminder.is-note-expanded .reminder-title {
    past the hard max-height and clip it mid-line. */
 .note-row .reminder-note-preview .note-md-heading {
   margin: 0;
-  line-height: calc(0.75rem * 1.4);
+  line-height: calc(0.8125rem * 1.4);
 }
 .note-row .reminder-note-preview ul,
 .note-row .reminder-note-preview ol { margin: 0; }
@@ -3008,9 +3008,9 @@ body.sheet-open .sidebar {
 [data-density="compact"] .swipe-content { min-height: 0; padding: 8px 12px; gap: 10px; }
 [data-density="compact"] .reminder-due { font-size: 0.7rem; }
 [data-density="compact"] .reminder-meta { font-size: 0.7rem; gap: 8px; }
-[data-density="compact"] .reminder-notes { font-size: 0.6875rem; }
-[data-density="compact"] .reminder-title { font-size: 0.875rem; }
-[data-density="compact"] .note-row .reminder-note-preview .note-md-heading { line-height: calc(0.6875rem * 1.4); }
+[data-density="compact"] .reminder-notes { font-size: 0.75rem; }
+[data-density="compact"] .reminder-title { font-size: 0.90625rem; }
+[data-density="compact"] .note-row .reminder-note-preview .note-md-heading { line-height: calc(0.75rem * 1.4); }
 [data-density="compact"] .check { width: 16px; height: 16px; }
 [data-density="compact"] .check .ic { width: 9px; height: 9px; }
 [data-density="compact"] .content { padding-top: 10px; }
@@ -3539,7 +3539,7 @@ body.sheet-open .sidebar {
 .doc-download { text-decoration: none; }
 
 .doc-row .reminder-title {
-  font-size: 0.9375rem;
+  font-size: 0.96875rem;
   line-height: 1.35;
 }
 
@@ -4419,7 +4419,7 @@ button.link-chip { border: 0; font-family: inherit; cursor: pointer; }
   overflow: hidden;
   white-space: pre-line;
   color: var(--text-2);
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
