@@ -772,7 +772,7 @@ body.gate-open {
   flex: 1;
   min-width: 0;
   padding-left: 2px;
-  font-size: min(calc(var(--card-body-size) + 2px), 19.2px);
+  font-size: 1rem;
   font-weight: 500;
   line-height: 1.35;
   overflow: hidden;
@@ -871,7 +871,7 @@ body.gate-open {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: min(calc(var(--card-body-size) + 2px), 19.2px);
+  font-size: 1rem;
   font-weight: 500;
   line-height: 1.35;
 }
@@ -1624,7 +1624,7 @@ html.deleting-row #content { overflow-anchor: none; }
 .reminder-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 
 .reminder-title {
-  font-size: min(calc(var(--card-body-size) + 2px), 19.2px);
+  font-size: 0.9375rem;
   font-weight: 550;
   line-height: 1.35;
   overflow-wrap: anywhere;
@@ -1685,7 +1685,7 @@ html.deleting-row #content { overflow-anchor: none; }
 :root { --card-body-size: 11.575pt; }
 
 .reminder-notes {
-  font-size: min(var(--card-body-size), 17.2px);
+  font-size: 0.75rem;
   line-height: 1.4;
   color: var(--text-2);
   display: -webkit-box;
@@ -1713,8 +1713,10 @@ html.deleting-row #content { overflow-anchor: none; }
   white-space: pre-line;
 }
 
-html body .reminder-notes.is-expanded { font-size: 17.2px; }
-.reminder.is-note-expanded .reminder-title { font-size: 19.2px; }
+html body .reminder-notes.is-expanded { font-size: min(var(--card-body-size), 17.2px); }
+html body .reminder.is-note-expanded .reminder-title {
+  font-size: min(calc(var(--card-body-size) + 2px), 19.2px);
+}
 
 /* Note cards keep a compact two-line preview when collapsed, then swap to the
    full rich body when expanded. The block max-height avoids the line-clamp
@@ -1767,7 +1769,7 @@ html body .reminder-notes.is-expanded { font-size: 17.2px; }
    past the hard max-height and clip it mid-line. */
 .note-row .reminder-note-preview .note-md-heading {
   margin: 0;
-  line-height: calc(min(var(--card-body-size), 17.2px) * 1.4);
+  line-height: calc(0.75rem * 1.4);
 }
 .note-row .reminder-note-preview ul,
 .note-row .reminder-note-preview ol { margin: 0; }
@@ -3006,8 +3008,9 @@ body.sheet-open .sidebar {
 [data-density="compact"] .swipe-content { min-height: 0; padding: 8px 12px; gap: 10px; }
 [data-density="compact"] .reminder-due { font-size: 0.7rem; }
 [data-density="compact"] .reminder-meta { font-size: 0.7rem; gap: 8px; }
-[data-density="compact"] .reminder-notes { font-size: min(calc(var(--card-body-size) - 0.75pt), 17.2px); }
-[data-density="compact"] .reminder-title { font-size: min(calc(var(--card-body-size) - 0.75pt + 2px), 19.2px); }
+[data-density="compact"] .reminder-notes { font-size: 0.6875rem; }
+[data-density="compact"] .reminder-title { font-size: 0.875rem; }
+[data-density="compact"] .note-row .reminder-note-preview .note-md-heading { line-height: calc(0.6875rem * 1.4); }
 [data-density="compact"] .check { width: 16px; height: 16px; }
 [data-density="compact"] .check .ic { width: 9px; height: 9px; }
 [data-density="compact"] .content { padding-top: 10px; }
@@ -3536,7 +3539,7 @@ body.sheet-open .sidebar {
 .doc-download { text-decoration: none; }
 
 .doc-row .reminder-title {
-  font-size: min(calc(var(--card-body-size) + 2px), 19.2px);
+  font-size: 0.9375rem;
   line-height: 1.35;
 }
 
@@ -4416,7 +4419,7 @@ button.link-chip { border: 0; font-family: inherit; cursor: pointer; }
   overflow: hidden;
   white-space: pre-line;
   color: var(--text-2);
-  font-size: min(var(--card-body-size), 17.2px);
+  font-size: 0.75rem;
   line-height: 1.35;
   overflow-wrap: anywhere;
 }

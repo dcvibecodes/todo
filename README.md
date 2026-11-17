@@ -2,6 +2,14 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v4.14.0
+
+- **Original card text restored** - Collapsed Reminders/Notes/Docs cards use the original 15 px title and 12 px body; folder and smart-view labels return to 16 px.
+- **Slider applies only to expanded cards** - An expanded card uses the selected slider size for its body, with the title 2 px larger. The range, default and step are unchanged.
+- **Edit screens keep maximum size** - The editors remain at 19.2 px title / 17.2 px body, matching the slider maximum.
+- **Compact density preserved** - Compact collapsed cards use 14 px titles / 11 px bodies; expanded cards still follow the slider.
+- Service worker cache bumped to `workspace-v4.14.0`.
+
 ## What's New in v4.13.0
 
 - **Auto-hiding Sort/Select row** - On detail screens, scrolling deeper into the cards collapses the 52 px Sort/Select row after about 24 px. Scrolling back up about 80 px, or reaching the top, restores it. The folder header stays visible.
