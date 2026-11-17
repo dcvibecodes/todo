@@ -2,6 +2,14 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v4.12.6
+
+- **Bulk delete removes rows immediately** - Confirming a bulk selection delete removes the selected rows before the request finishes, so they never reappear unselected while the state reloads. A failed request restores them.
+- **Square completion control** - The reminder completion control is now a rounded square, visually distinct from the round selection marker. Both sit in the same left column and use the same vertical alignment rules.
+- **Stable Trash header** - The Empty button reserves space for “Confirm empty?”, so the Trash title and Close button no longer shift.
+- **Clearer permanent delete** - The Trash per-item confirm now says **Delete permanently**.
+- Service worker cache bumped to `workspace-v4.12.6`.
+
 ## What's New in v4.12.5
 
 - **Instant Trash deletion feedback** - Confirming permanent deletion removes the Trash row immediately, matching the delete behaviour elsewhere in the app. The API and app refresh continue in the background; a failed request restores the row.

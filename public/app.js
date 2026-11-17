@@ -2134,9 +2134,15 @@ async function deleteSelection() {
   }
   resetSelectionDelete();
   button.disabled = true;
+  const rows = $$('#content .reminder.is-selected');
+  const groups = new Set(rows.map((row) => row.closest('.reminder-group')).filter(Boolean));
+  rows.forEach((row) => row.remove());
+  groups.forEach((group) => {
+    if (!group.querySelector('.reminder')) group.remove();
+  });
+  exitSelection();
   try {
     const result = await api('/api/bulk/delete', { method: 'POST', body: { type, ids: ids.map(Number) } });
-    exitSelection();
     state.storage = null;
     await loadState();
     render();
@@ -2144,7 +2150,8 @@ async function deleteSelection() {
     const count = result.deleted || ids.length;
     toast(`${count} ${noun}${count === 1 ? '' : 's'} moved to Trash`, 'Undo', () => undoTrashMany(type, ids));
   } catch (err) {
-    button.disabled = false;
+    await loadState();
+    render();
     toast(err.message);
   }
 }
@@ -2343,7 +2350,7 @@ function trashRow(item) {
     onclick: async () => {
       if (remove.dataset.confirm !== '1') {
         remove.dataset.confirm = '1';
-        remove.textContent = 'Confirm?';
+        remove.textContent = 'Delete permanently';
         clearTimeout(remove._confirmTimer);
         remove._confirmTimer = setTimeout(() => {
           remove.dataset.confirm = '';

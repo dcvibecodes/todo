@@ -1418,7 +1418,7 @@ body.flipping .reminder-group { overflow: visible; }
   margin-top: 1px;
   padding: 0;
   border: 1.5px solid var(--text-3);
-  border-radius: 50%;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-3);
   display: grid;
@@ -2029,6 +2029,7 @@ body.sheet-open .sidebar {
 .sheet-head #editor-submit,
 .sheet-head #settings-save,
 .sheet-head #list-save { min-width: 64px; justify-content: flex-end; }
+.sheet-head #trash-empty { min-width: 112px; justify-content: flex-end; white-space: nowrap; }
 
 .sheet-body {
   padding: 16px 18px calc(20px + env(safe-area-inset-bottom));
@@ -3378,7 +3379,7 @@ body.sheet-open .sidebar {
     content: "";
     position: absolute;
     inset: -1px;
-    border-radius: 50%;
+    border-radius: inherit;
     border: 1.5px solid var(--c);
     pointer-events: none;
     animation: check-halo 0.23s ease-out;
@@ -4840,11 +4841,10 @@ button.link-chip { border: 0; font-family: inherit; cursor: pointer; }
   display: none;
   position: absolute;
   left: 14px;
-  top: 50%;
+  top: 15px;
   z-index: 4;
   width: 20px;
   height: 20px;
-  transform: translateY(-50%);
   place-items: center;
   border: 1.5px solid var(--text-3);
   border-radius: 50%;
@@ -4854,6 +4854,8 @@ button.link-chip { border: 0; font-family: inherit; cursor: pointer; }
 }
 .selection-check .ic { width: 11px; height: 11px; }
 body.selection-mode .selection-check { display: grid; }
+.doc-row .selection-check,
+.reminder--single .selection-check { top: 50%; transform: translateY(-50%); }
 body.selection-mode .note-row .swipe-content,
 body.selection-mode .doc-row .swipe-content,
 body.selection-mode .reminder .swipe-content { padding-left: 48px; }
@@ -4928,4 +4930,5 @@ body.selection-mode .fab { display: none; }
 
 @media (max-width: 899px) {
   .selection-bar { margin: 6px 18px 0; }
+  .selection-check { top: 14px; }
 }
