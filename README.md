@@ -2,6 +2,11 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v4.12.8
+
+- **Balanced Sort/Order spacing** - The toolbar now leaves about **20 px above and 20 px below** the controls: the header-to-row gap stays at 20/21.5 px, while the Sort/Order and selection toolbars use a 52 px box with 8 px bottom padding. The first card moves up 7 px, and Select still does not shift the table.
+- Service worker cache bumped to `workspace-v4.12.8`.
+
 ## What's New in v4.12.7
 
 - **Trash header polish** - The Trash title is absolutely centred on the sheet, independent of the Close/Empty widths, and the body starts 8 px below the header divider for a tighter hint/list layout.
