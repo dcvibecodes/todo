@@ -1228,6 +1228,7 @@ function animateTenantContent(direction) {
 
 function setTenant(tenant, direction = 0) {
   exitSelection();
+  resetListToolbarAutoHide();
   const next = TENANTS.includes(tenant) ? tenant : 'reminders';
   state.tenant = next;
   localStorage.setItem('todo.tenant', next);
@@ -1422,6 +1423,7 @@ function route() {
   }
   document.body.dataset.screen = view === 'home' ? 'home' : 'detail';
   render();
+  resetListToolbarAutoHide();
   if (PAGE_SCROLL_MEDIA.matches) {
     pageScroller().scrollTop = screenScroll[document.body.dataset.screen] || 0;
   }
@@ -2033,6 +2035,7 @@ function syncSelectionUI() {
     return;
   }
   document.body.classList.add('selection-mode');
+  showListToolbar();
   const count = state.selection.ids.size;
   const countNode = $('#selection-count');
   if (countNode) countNode.textContent = `${count} selected`;
@@ -2060,6 +2063,82 @@ function syncSelectionUI() {
   applySelectionClasses();
 }
 
+let toolbarAutoHidden = false;
+let toolbarLastScrollTop = null;
+let toolbarHideAccum = 0;
+let toolbarRevealAccum = 0;
+let toolbarScrollFrame = 0;
+let toolbarTransitionUntil = 0;
+const TOOLBAR_HIDE_AFTER = 24;
+const TOOLBAR_REVEAL_AFTER = 80;
+
+function toolbarAutoHideEligible() {
+  return document.body.dataset.screen === 'detail'
+    && state.view !== 'home'
+    && !state.search
+    && !state.selection.active;
+}
+
+function showListToolbar() {
+  const top = $('.main-top');
+  const wasHidden = toolbarAutoHidden || Boolean(top && top.classList.contains('toolbar-auto-hidden'));
+  if (top) top.classList.remove('toolbar-auto-hidden');
+  toolbarAutoHidden = false;
+  toolbarHideAccum = 0;
+  toolbarRevealAccum = 0;
+  if (wasHidden) toolbarTransitionUntil = performance.now() + 220;
+}
+
+function hideListToolbar() {
+  if (!toolbarAutoHideEligible()) return;
+  const top = $('.main-top');
+  if (!top) return;
+  top.classList.add('toolbar-auto-hidden');
+  toolbarAutoHidden = true;
+  toolbarHideAccum = 0;
+  toolbarRevealAccum = 0;
+  toolbarTransitionUntil = performance.now() + 220;
+}
+
+function resetListToolbarAutoHide() {
+  showListToolbar();
+  toolbarLastScrollTop = null;
+}
+
+function updateListToolbarAutoHide() {
+  if (toolbarScrollFrame) return;
+  toolbarScrollFrame = requestAnimationFrame(() => {
+    toolbarScrollFrame = 0;
+    const scroller = screenScroller();
+    if (!scroller) return;
+    const top = Math.max(0, scroller.scrollTop);
+    if (toolbarLastScrollTop == null) {
+      toolbarLastScrollTop = top;
+      return;
+    }
+    const delta = top - toolbarLastScrollTop;
+    toolbarLastScrollTop = top;
+    if (performance.now() < toolbarTransitionUntil) {
+      toolbarHideAccum = 0;
+      toolbarRevealAccum = 0;
+      return;
+    }
+    if (!toolbarAutoHideEligible() || top <= 0) {
+      showListToolbar();
+      return;
+    }
+    if (delta > 0) {
+      toolbarHideAccum += delta;
+      toolbarRevealAccum = 0;
+      if (!toolbarAutoHidden && toolbarHideAccum >= TOOLBAR_HIDE_AFTER) hideListToolbar();
+    } else if (delta < 0) {
+      toolbarRevealAccum += -delta;
+      toolbarHideAccum = 0;
+      if (toolbarAutoHidden && toolbarRevealAccum >= TOOLBAR_REVEAL_AFTER) showListToolbar();
+    }
+  });
+}
+
 function enterSelection(type, id = null) {
   state.selection.active = true;
   state.selection.type = type;
@@ -2078,6 +2157,7 @@ function exitSelection() {
     row.removeAttribute('aria-selected');
   }
   resetSelectionDelete();
+  showListToolbar();
   syncSelectionUI();
 }
 
@@ -8887,6 +8967,7 @@ async function runSearch(query) {
 
 function setSearch(value, source) {
   if (state.selection.active) exitSelection();
+  showListToolbar();
   const wasSearching = Boolean(state.search);
   state.search = value.trim();
   if (Boolean(state.search) !== wasSearching) {
@@ -9356,12 +9437,14 @@ function onScrollActivity() {
   if (!scroller) return;
   scroller.addEventListener('scroll', () => {
     onScrollActivity();
+    updateListToolbarAutoHide();
     if (!PAGE_SCROLL_MEDIA.matches) recordScreenScroll();
   }, { passive: true });
 });
 // The phone layout scrolls the document rather than those elements.
 window.addEventListener('scroll', () => {
   onScrollActivity();
+  updateListToolbarAutoHide();
   if (PAGE_SCROLL_MEDIA.matches) recordScreenScroll();
 }, { passive: true });
 

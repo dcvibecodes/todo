@@ -2,6 +2,12 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v4.13.0
+
+- **Auto-hiding Sort/Select row** - On detail screens, scrolling deeper into the cards collapses the 52 px Sort/Select row after about 24 px. Scrolling back up about 80 px, or reaching the top, restores it. The folder header stays visible.
+- **Selection mode stays visible** - Auto-hide pauses while selecting so Select all, Cancel and the selection controls remain available.
+- Service worker cache bumped to `workspace-v4.13.0`.
+
 ## What's New in v4.12.9
 
 - **Tighter header-to-Sort spacing** - Removed the 6 px top margin above the Sort/Order row. The visible gap from the folder title is now about **14 px desktop / 15.5 px mobile**, while the gap below to the cards stays **20 px**.

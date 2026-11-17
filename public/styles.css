@@ -1146,6 +1146,25 @@ body.list-dragging .list-grip { cursor: grabbing; }
   box-sizing: border-box;
   font-size: 0.75rem;
   color: var(--text-3);
+  transition: height 0.16s ease, padding-bottom 0.16s ease, opacity 0.12s ease;
+}
+
+.main-top .selection-bar {
+  transition: height 0.16s ease, padding-bottom 0.16s ease, opacity 0.12s ease;
+}
+
+.main-top.toolbar-auto-hidden .sort-bar,
+.main-top.toolbar-auto-hidden .selection-bar {
+  height: 0;
+  padding-bottom: 0;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sort-bar,
+  .main-top .selection-bar { transition: none; }
 }
 
 .sort-control {
