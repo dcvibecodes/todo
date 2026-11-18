@@ -5115,7 +5115,13 @@ async function rescheduleRow(reminder, date) {
     await loadState();
     requestRowAnimation();
     render();
-    toast(date === 'today' ? 'Due today' : 'Due tomorrow');
+    const messages = {
+      today: 'Due today',
+      tomorrow: 'Due tomorrow',
+      in_2_days: 'Due in 2 days',
+      in_a_week: 'Due in a week',
+    };
+    toast(messages[date] || 'Rescheduled');
   } catch (err) {
     toast(err.message);
   }
@@ -5396,7 +5402,8 @@ function reminderRow(reminder, options = {}) {
         onclick: (event) => { event.stopPropagation(); rescheduleRow(reminder, 'today'); },
       }));
     }
-    if (!reminder.completed && reminder.due_at && dueToday && (!recurring || (options.reschedule && overdue))) {
+    if (!reminder.completed && reminder.due_at && dueToday && !dueOnToday
+      && (!recurring || (options.reschedule && overdue))) {
       rescheduleActions.push(el('button', {
         type: 'button',
         class: 'mini-btn',
@@ -5404,6 +5411,22 @@ function reminderRow(reminder, options = {}) {
         'aria-label': `Reschedule ${reminder.title} to tomorrow`,
         onclick: (event) => { event.stopPropagation(); rescheduleRow(reminder, 'tomorrow'); },
       }));
+    }
+    if (!reminder.completed && reminder.due_at && dueOnToday) {
+      const choices = [
+        ['Tomorrow', 'tomorrow', 'tomorrow'],
+        ['In 2 days', 'in_2_days', 'in 2 days'],
+        ['In a week', 'in_a_week', 'in a week'],
+      ];
+      for (const [label, target, spoken] of choices) {
+        rescheduleActions.push(el('button', {
+          type: 'button',
+          class: 'mini-btn',
+          text: label,
+          'aria-label': `Reschedule ${reminder.title} to ${spoken}`,
+          onclick: (event) => { event.stopPropagation(); rescheduleRow(reminder, target); },
+        }));
+      }
     }
     const actionGroups = [];
     for (const [label, actions] of [['Snooze', snoozeActions], ['Reschedule', rescheduleActions]]) {

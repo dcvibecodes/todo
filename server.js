@@ -1582,19 +1582,16 @@ async function rescheduleReminder(id, target) {
     ? settings.device_zone
     : null;
   let dateStr = target;
-  if (target === 'today' || target === 'tomorrow') {
+  const relativeDays = { today: 0, tomorrow: 1, in_2_days: 2, in_a_week: 7 };
+  if (Object.prototype.hasOwnProperty.call(relativeDays, target)) {
     const base = zone
       ? recurrence.instantToWall(Date.now(), zone)
       : (() => { const d = new Date(); return { y: d.getUTCFullYear(), mo: d.getUTCMonth() + 1, d: d.getUTCDate() }; })();
-    let dd = base.d + (target === 'tomorrow' ? 1 : 0);
-    const dim = new Date(Date.UTC(base.y, base.mo, 0)).getUTCDate();
-    let mm = base.mo;
-    let yy = base.y;
-    if (dd > dim) { dd = 1; mm += 1; if (mm > 12) { mm = 1; yy += 1; } }
-    dateStr = `${yy}-${String(mm).padStart(2, '0')}-${String(dd).padStart(2, '0')}`;
+    const date = new Date(Date.UTC(base.y, base.mo - 1, base.d + relativeDays[target]));
+    dateStr = `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`;
   }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr || '')) {
-    const err = new Error('Reschedule target must be today, tomorrow, or YYYY-MM-DD');
+    const err = new Error('Reschedule target must be today, tomorrow, in_2_days, in_a_week, or YYYY-MM-DD');
     err.status = 400;
     throw err;
   }
