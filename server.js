@@ -4195,6 +4195,17 @@ async function main() {
     res.json({ ok: true, deleted: result.changes || 0 });
   });
 
+  app.get('/api/trash/count', async (req, res) => {
+    if (req.token) return denyToken(res);
+    const [reminders, notes, docs] = await Promise.all([
+      db.get('SELECT COUNT(*) AS n FROM reminders WHERE deleted_at IS NOT NULL'),
+      db.get('SELECT COUNT(*) AS n FROM notes WHERE deleted_at IS NOT NULL'),
+      db.get("SELECT COUNT(*) AS n FROM attachments WHERE owner_type = 'doc' AND deleted_at IS NOT NULL"),
+    ]);
+    const counts = { reminders: reminders.n, notes: notes.n, docs: docs.n };
+    res.json({ count: counts.reminders + counts.notes + counts.docs, counts });
+  });
+
   app.get('/api/trash', async (req, res) => {
     if (req.token) return denyToken(res);
     const reminders = await db.all(`

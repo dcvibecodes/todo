@@ -1115,7 +1115,7 @@ async function runPullRefresh() {
   pill.classList.remove('pulling');
   pill.classList.add('armed', 'refreshing');
   pill.style.opacity = '1';
-  pill.style.transform = `translate(-50%, ${PULL_START_OFFSET + PULL_THRESHOLD}px)`;
+  pill.style.transform = 'translate(-50%, 0)';
   if (label) label.textContent = 'Refreshing…';
 
   const startedAt = Date.now();
@@ -2337,6 +2337,15 @@ async function refreshAccountStorage() {
   } catch { /* keep the cached total */ }
 }
 
+async function refreshTrashCount() {
+  const node = $('#account-trash-count');
+  if (!node) return;
+  try {
+    const data = await api('/api/trash/count');
+    node.textContent = String(data.count || 0);
+  } catch { /* keep the last known count */ }
+}
+
 let trashEmptyArmed = false;
 let trashEmptyTimer = null;
 
@@ -2356,7 +2365,7 @@ async function loadTrash() {
     const data = await api('/api/trash');
     const count = (data.items || []).length;
     const countNode = $('#account-trash-count');
-    if (countNode) countNode.textContent = count ? String(count) : '';
+    if (countNode) countNode.textContent = String(count);
     if (emptyButton) emptyButton.disabled = !count;
     hint.textContent = count
       ? `Deleted items stay here for ${data.retention_days || 30} days. Restore them or delete them permanently.`
@@ -2479,6 +2488,7 @@ function toggleAccountMenu() {
     menu.getAnimations().forEach((animation) => animation.cancel());
     menu.hidden = false;
     refreshAccountStorage();
+    refreshTrashCount();
     if (!MOTION_REDUCED.matches) {
       menu.animate(
         [{ opacity: 0, transform: 'translateY(-4px) scale(0.98)' }, { opacity: 1, transform: 'none' }],

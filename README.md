@@ -2,6 +2,12 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v4.14.3
+
+- **Refreshing pill moves to the top** - After a pull-to-refresh release, the **Refreshing…** pill now sits at the top of the screen instead of remaining at the pull threshold position.
+- **Trash count in the menu** - Opening the hamburger menu now shows the number of items in Trash beside the storage total, without opening the Trash sheet. Empty Trash shows **0**.
+- Service worker cache bumped to `workspace-v4.14.3`.
+
 ## What's New in v4.14.2
 
 - **More due-today Reschedule choices** - Open reminders due today now show **Tomorrow**, **In 2 days** and **In a week** in that order, including recurring reminders. The server supports the new relative targets with calendar-date arithmetic, preserving timed wall-clock time, date-only state, timezone model and recurrence anchors. Snooze and overdue-only Today behaviour are unchanged.
