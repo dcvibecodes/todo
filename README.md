@@ -2,6 +2,11 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v4.16.1
+
+- **Token follow-up default zone** - Creating or editing a note follow-up through the API without `follow_up_zone` now correctly falls back to the saved device zone.
+- Service worker cache bumped to `workspace-v4.16.1`.
+
 ## What's New in v4.16.0
 
 - **Note Follow-ups** - Notes can now have an optional one-off follow-up date and time. The Notes tenant gains a **Follow-ups** smart group, follow-up labels on cards, quick Tomorrow / In 2 days / In a week choices, and a **Mark followed up** action.

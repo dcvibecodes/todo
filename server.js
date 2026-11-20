@@ -3262,7 +3262,7 @@ async function main() {
       : String(body.follow_up_time).trim();
     if (time && !/^\d{2}:\d{2}$/.test(time)) return { error: 'Follow-up time must be HH:MM' };
     const settings = await getSettings();
-    const zone = body.follow_up_zone === null || body.follow_up_zone === ''
+    const zone = body.follow_up_zone === null || body.follow_up_zone === undefined || body.follow_up_zone === ''
       ? (settings.device_zone || null)
       : String(body.follow_up_zone);
     if (zone && !recurrence.isValidTimeZone(zone)) return { error: 'Unknown follow-up time zone' };
