@@ -1187,7 +1187,6 @@ function parseRoute() {
     return folder && tenantOf(folder) === 'reminders' ? id : 'all';
   }
   if (raw === 'notes') return 'notes';
-  if (raw === 'notes/follow-ups') return 'notes-follow-ups';
   if (raw === 'docs') return 'docs';
   if (raw.startsWith('notes/folder/')) {
     const id = Number(raw.slice(13));
@@ -1204,7 +1203,7 @@ function parseRoute() {
 }
 
 function routeTenant(view) {
-  if (view === 'notes' || view === 'notes-follow-ups' || String(view).startsWith('notes-folder-')) return 'notes';
+  if (view === 'notes' || String(view).startsWith('notes-folder-')) return 'notes';
   if (view === 'docs' || String(view).startsWith('docs-folder-')) return 'docs';
   if (view === 'home') return state.tenant;
   return 'reminders';
@@ -1671,7 +1670,7 @@ function defaultSortFor(view) {
 }
 
 function tenantForView(view) {
-  if (view === 'notes' || view === 'notes-follow-ups' || String(view).startsWith('notes-folder-')) return 'notes';
+  if (view === 'notes' || String(view).startsWith('notes-folder-')) return 'notes';
   if (view === 'docs' || String(view).startsWith('docs-folder-')) return 'docs';
   return 'reminders';
 }
@@ -2001,7 +2000,7 @@ function syncSelectionUI() {
   const select = $('#select-toggle');
   const bar = $('#selection-bar');
   const actions = $('#selection-actions');
-  if (sortBar) sortBar.hidden = state.view === 'home' || state.view === 'notes-follow-ups' || Boolean(state.search) || active;
+  if (sortBar) sortBar.hidden = state.view === 'home' || Boolean(state.search) || active;
   if (select) select.hidden = !available || active;
   if (bar) bar.hidden = !active;
   if (actions) actions.hidden = !active;
@@ -3014,9 +3013,8 @@ function renderSidebar() {
   $$('#smart-nav .nav-row').forEach((row) => {
     const view = row.dataset.view;
     const reminderView = ['today', 'scheduled', 'all', 'flagged', 'completed'].includes(view);
-    const notesView = view === 'notes' || view === 'notes-follow-ups';
     row.hidden = reminderView ? tenant !== 'reminders'
-      : notesView ? tenant !== 'notes'
+      : view === 'notes' ? tenant !== 'notes'
         : view === 'docs' ? tenant !== 'docs' : false;
   });
   $('#day-peek').hidden = tenant !== 'reminders';
@@ -3069,8 +3067,6 @@ function renderSidebar() {
   setPulseText($('#count-all'), allCount ? String(allCount) : '');
   setPulseText($('#count-flagged'), flaggedCount ? String(flaggedCount) : '');
   setPulseText($('#count-notes'), state.notes.length ? String(state.notes.length) : '');
-  const followUpCount = notesWithFollowUps().length;
-  setPulseText($('#count-note-follow-ups'), followUpCount ? String(followUpCount) : '');
   setPulseText($('#count-docs'), state.docs.length ? String(state.docs.length) : '');
 
   $$('#smart-nav .nav-row').forEach((row) => {
@@ -3264,7 +3260,7 @@ function renderMain() {
   $('#view-menu').hidden = true;
   const sortBar = $('#sort-bar');
   // Relevance-ranked search owns the order, so the Sort/Order bar steps aside.
-  sortBar.hidden = view === 'home' || view === 'notes-follow-ups' || Boolean(state.search);
+  sortBar.hidden = view === 'home' || Boolean(state.search);
   syncSortFieldOptions(view);
   if (!sortBar.hidden) {
     const sort = effectiveSort(view);
@@ -3292,7 +3288,7 @@ function renderMain() {
     return;
   }
 
-  if (view === 'notes' || view === 'notes-follow-ups' || String(view).startsWith('notes-folder-')) {
+  if (view === 'notes' || String(view).startsWith('notes-folder-')) {
     renderNotesView(content, view);
     syncNoteExpanders();
     return;
@@ -3377,14 +3373,7 @@ function renderMain() {
   syncNoteExpanders();
 }
 
-function notesWithFollowUps() {
-  return state.notes
-    .filter((note) => note.follow_up_at)
-    .sort((a, b) => String(a.follow_up_at).localeCompare(String(b.follow_up_at)));
-}
-
 function notesForView(view) {
-  if (view === 'notes-follow-ups') return notesWithFollowUps();
   const folderId = viewFolderId(view);
   return folderId ? state.notes.filter((note) => note.folder_id === folderId) : state.notes;
 }
@@ -3495,12 +3484,10 @@ function startCardBatch({ kind, key, items, content, renderRow }) {
 function renderNotesView(content, view) {
   const folderId = viewFolderId(view);
   const folder = folderId ? listById(folderId) : null;
-  const title = view === 'notes-follow-ups' ? 'Follow-ups' : (folder ? folder.name : 'All');
+  const title = folder ? folder.name : 'All';
   $('#view-title').textContent = title;
   document.title = `Workspace — ${title}`;
-  const notes = view === 'notes-follow-ups'
-    ? notesForView(view)
-    : sortNotes(notesForView(view), effectiveSort(view));
+  const notes = sortNotes(notesForView(view), effectiveSort(view));
   setPulseText($('#view-count'), notes.length ? String(notes.length) : '');
   if (folder) {
     $('#view-menu').hidden = false;
@@ -3509,8 +3496,8 @@ function renderNotesView(content, view) {
   if (!notes.length) {
     content.append(el('div', { class: 'empty' }, [
       el('span', { html: ICON('note') }),
-      el('h3', { class: 'empty-heading', text: view === 'notes-follow-ups' ? 'No follow-ups' : 'No notes yet' }),
-      el('p', { text: view === 'notes-follow-ups' ? 'Notes with a follow-up date will appear here.' : 'Notes live in folders and can carry file attachments.' }),
+      el('h3', { class: 'empty-heading', text: 'No notes yet' }),
+      el('p', { text: 'Notes live in folders and can carry file attachments.' }),
     ]));
     return;
   }
@@ -3686,53 +3673,6 @@ function normalizeNoteHtml(value) {
     .replace(/(?:\s*<br>)+$/, '');
 }
 
-function noteFollowUpLabel(note) {
-  if (!note || !note.follow_up_at) return '';
-  const date = new Date(note.follow_up_at);
-  const day = date.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
-  if (!note.follow_up_has_time) return day;
-  const time = date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
-  return `${day} · ${time}`;
-}
-
-async function markNoteFollowUpDone(note, button) {
-  if (!note || !note.follow_up_at) return;
-  if (button) button.disabled = true;
-  try {
-    await api('/api/notes/' + note.id + '/follow-up/done', { method: 'POST' });
-    state.storage = null;
-    await loadState();
-    render();
-    toast('Followed up');
-  } catch (err) {
-    if (button) button.disabled = false;
-    toast(err.message);
-  }
-}
-
-async function rescheduleNoteFollowUp(note, days) {
-  if (!note || !note.follow_up_at) return;
-  const date = new Date();
-  date.setDate(date.getDate() + days);
-  const time = note.follow_up_has_time ? localTimeValue(new Date(note.follow_up_at)) : null;
-  try {
-    await api('/api/notes/' + note.id, {
-      method: 'PATCH',
-      body: {
-        follow_up_date: localDateValue(date),
-        follow_up_time: time,
-        follow_up_zone: deviceZone() || note.follow_up_zone || null,
-      },
-    });
-    state.storage = null;
-    await loadState();
-    render();
-    toast(`Follow-up moved to ${chipDateLabel(localDateValue(date), time)}`);
-  } catch (err) {
-    toast(err.message);
-  }
-}
-
 function noteRow(note, options = {}) {
   const folder = listById(note.folder_id);
   const attachments = attachmentsFor('note', note.id);
@@ -3756,35 +3696,6 @@ function noteRow(note, options = {}) {
         })
         : null,
     ]),
-    note.follow_up_at ? el('div', { class: 'note-follow-up' }, [
-      el('span', { html: ICON('clock', 'ic') }),
-      el('span', { text: `Follow up ${noteFollowUpLabel(note)}` }),
-      el('button', {
-        type: 'button',
-        class: 'note-follow-up-done',
-        text: 'Mark followed up',
-        'aria-label': `Mark follow-up done for ${note.title}`,
-        onclick: (event) => {
-          event.stopPropagation();
-          markNoteFollowUpDone(note, event.currentTarget);
-        },
-      }),
-    ]) : null,
-    note.follow_up_at && state.view === 'notes-follow-ups'
-      ? el('div', { class: 'note-follow-up-actions' }, [
-        ['Tomorrow', 1],
-        ['In 2 days', 2],
-        ['In a week', 7],
-      ].map(([label, days]) => el('button', {
-        type: 'button',
-        class: 'mini-btn',
-        text: label,
-        'aria-label': `Reschedule follow-up for ${note.title} to ${label.toLowerCase()}`,
-        onclick: (event) => {
-          event.stopPropagation();
-          rescheduleNoteFollowUp(note, days);
-        },
-      }))) : null,
     note.body ? el('div', { class: 'reminder-notes' }, [
       el('div', {
         class: 'reminder-note-preview',
@@ -7345,13 +7256,6 @@ function openNoteEditor(id) {
     : '';
   $('#n-delete').hidden = !note;
   $('#n-delete').textContent = 'Delete Note';
-  const followUpDate = note && note.follow_up_at ? new Date(note.follow_up_at) : null;
-  $('#n-follow-up-date-on').checked = Boolean(followUpDate);
-  $('#n-follow-up-time-on').checked = Boolean(followUpDate && note.follow_up_has_time);
-  $('#n-follow-up-date').value = followUpDate ? localDateValue(followUpDate) : '';
-  $('#n-follow-up-time').value = followUpDate && note.follow_up_has_time ? localTimeValue(followUpDate) : '';
-  $('#n-follow-up-done').hidden = !(note && note.follow_up_at);
-  syncNoteFollowUpRows();
   const folderSelect = $('#n-folder');
   folderSelect.replaceChildren();
   for (const folder of foldersFor('notes')) {
@@ -7365,10 +7269,6 @@ function openNoteEditor(id) {
     title: note.title,
     body: normalizeNoteHtml($('#n-body').innerHTML),
     folder_id: note.folder_id,
-    follow_up_date_on: $('#n-follow-up-date-on').checked,
-    follow_up_date: $('#n-follow-up-date').value,
-    follow_up_time_on: $('#n-follow-up-time-on').checked,
-    follow_up_time: $('#n-follow-up-time').value,
   } : null;
   renderNoteAttachments();
   openSheet('#note-editor');
@@ -7390,28 +7290,7 @@ function noteIsDirty() {
   if (!state.noteSnapshot) return true;
   return title !== state.noteSnapshot.title
     || body !== state.noteSnapshot.body
-    || folderId !== state.noteSnapshot.folder_id
-    || $('#n-follow-up-date-on').checked !== state.noteSnapshot.follow_up_date_on
-    || $('#n-follow-up-date').value !== state.noteSnapshot.follow_up_date
-    || $('#n-follow-up-time-on').checked !== state.noteSnapshot.follow_up_time_on
-    || $('#n-follow-up-time').value !== state.noteSnapshot.follow_up_time;
-}
-
-function syncNoteFollowUpRows() {
-  if ($('#n-follow-up-time-on').checked) $('#n-follow-up-date-on').checked = true;
-  if (!$('#n-follow-up-date-on').checked) {
-    $('#n-follow-up-time-on').checked = false;
-    $('#n-follow-up-date').value = '';
-    $('#n-follow-up-time').value = '';
-  }
-  if ($('#n-follow-up-date-on').checked && !$('#n-follow-up-date').value) {
-    $('#n-follow-up-date').value = localDateValue(new Date());
-  }
-  if ($('#n-follow-up-time-on').checked && !$('#n-follow-up-time').value) {
-    $('#n-follow-up-time').value = (state.settings && state.settings.default_time) || '09:00';
-  }
-  revealRow($('#n-follow-up-date-row'), $('#n-follow-up-date-on').checked);
-  revealRow($('#n-follow-up-time-row'), $('#n-follow-up-time-on').checked);
+    || folderId !== state.noteSnapshot.folder_id;
 }
 
 function syncNoteFolderVisual() {
@@ -7461,9 +7340,9 @@ async function saveNote(event) {
   try {
     let id = state.noteEditingId;
     if (id) {
-      await api('/api/notes/' + id, { method: 'PATCH', body: { title, body, body_format: 'html', folder_id: folderId, follow_up_date: $('#n-follow-up-date-on').checked ? ($('#n-follow-up-date').value || null) : null, follow_up_time: $('#n-follow-up-time-on').checked ? ($('#n-follow-up-time').value || null) : null, follow_up_zone: deviceZone() || null } });
+      await api('/api/notes/' + id, { method: 'PATCH', body: { title, body, body_format: 'html', folder_id: folderId } });
     } else {
-      const created = await api('/api/notes', { method: 'POST', body: { title, body, body_format: 'html', folder_id: folderId, follow_up_date: $('#n-follow-up-date-on').checked ? ($('#n-follow-up-date').value || null) : null, follow_up_time: $('#n-follow-up-time-on').checked ? ($('#n-follow-up-time').value || null) : null, follow_up_zone: deviceZone() || null } });
+      const created = await api('/api/notes', { method: 'POST', body: { title, body, body_format: 'html', folder_id: folderId } });
       id = created.id;
     }
     for (const fileId of state.noteRemovedFiles) {
@@ -9302,34 +9181,6 @@ $('#doc-name').addEventListener('keydown', (event) => {
   if (event.key === 'Enter') event.preventDefault();
 });
 $('#n-delete').addEventListener('click', deleteNoteFromEditor);
-$$('[data-follow-up-days]').forEach((button) => {
-  button.addEventListener('click', () => {
-    const date = new Date();
-    date.setDate(date.getDate() + Number(button.dataset.followUpDays || 0));
-    $('#n-follow-up-date-on').checked = true;
-    $('#n-follow-up-date').value = localDateValue(date);
-    syncNoteFollowUpRows();
-  });
-});
-$('#n-follow-up-date-on').addEventListener('change', syncNoteFollowUpRows);
-$('#n-follow-up-time-on').addEventListener('change', syncNoteFollowUpRows);
-$('#n-follow-up-done').addEventListener('click', async () => {
-  const id = state.noteEditingId;
-  if (!id) return;
-  const button = $('#n-follow-up-done');
-  button.disabled = true;
-  try {
-    await api('/api/notes/' + id + '/follow-up/done', { method: 'POST' });
-    closeSheet('#note-editor');
-    state.storage = null;
-    await loadState();
-    render();
-    toast('Followed up');
-  } catch (err) {
-    button.disabled = false;
-    toast(err.message);
-  }
-});
 $('#n-folder').addEventListener('change', syncNoteFolderVisual);
 $('#e-files').addEventListener('change', (event) => {
   state.editorPendingFiles.push(...Array.from(event.target.files || []));

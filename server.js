@@ -1854,7 +1854,6 @@ async function main() {
   const REMINDER_FILES = /^\/reminders\/\d+\/attachments$/;
   const NOTE_ID = /^\/notes\/\d+$/;
   const NOTE_FILES = /^\/notes\/\d+\/attachments$/;
-  const NOTE_FOLLOW_UP = /^\/notes\/\d+\/follow-up\/done$/;
   const DOC_ID = /^\/docs\/\d+$/;
 
   function tokenRouteAllowed(req, token) {
@@ -1877,7 +1876,7 @@ async function main() {
       if (REMINDER_ACTION.test(route)) return tokenReminderWrite(token);
       if (REMINDER_FILES.test(route)) return tokenReminderWrite(token);
       if (route === '/notes') return tokenHas(token, 'notes:write');
-      if (NOTE_FILES.test(route) || NOTE_FOLLOW_UP.test(route)) return tokenHas(token, 'notes:write');
+      if (NOTE_FILES.test(route)) return tokenHas(token, 'notes:write');
       if (route === '/docs') return tokenHas(token, 'docs:write');
       return false;
     }
@@ -2850,8 +2849,7 @@ async function main() {
       FROM lists l ORDER BY l.tenant, l.sort_order, l.id
     `, [thirtyDayCutoff]);
     const notes = await db.all(`
-      SELECT n.id, n.folder_id, n.title, n.body, n.body_format, n.follow_up_at, n.follow_up_has_time,
-             n.follow_up_zone, n.follow_up_notified_at, n.revision, n.created_at, n.updated_at,
+      SELECT n.id, n.folder_id, n.title, n.body, n.body_format, n.revision, n.created_at, n.updated_at,
              l.name AS folder_name, l.color AS folder_color
       FROM notes n JOIN lists l ON l.id = n.folder_id
       WHERE n.deleted_at IS NULL
@@ -3195,8 +3193,8 @@ async function main() {
 
   /* ---------------- Notes tenant ---------------- */
 
-  const NOTE_COLUMNS = 'id, folder_id, title, body, body_format, follow_up_at, follow_up_has_time, follow_up_zone, follow_up_notified_at, revision, created_at, updated_at';
-  const NOTE_WRITE_FIELDS = ['title', 'body', 'body_format', 'folder_id', 'follow_up_date', 'follow_up_time', 'follow_up_zone', 'base_revision', 'base_epoch', 'idempotency_key'];
+  const NOTE_COLUMNS = 'id, folder_id, title, body, body_format, revision, created_at, updated_at';
+  const NOTE_WRITE_FIELDS = ['title', 'body', 'body_format', 'folder_id', 'base_revision', 'base_epoch', 'idempotency_key'];
 
   async function loadNoteRow(id) {
     return db.get(`SELECT ${NOTE_COLUMNS} FROM notes WHERE id = ? AND deleted_at IS NULL`, [id]);
@@ -3241,49 +3239,6 @@ async function main() {
     return null;
   }
 
-  function noteFollowUpRequested(body) {
-    return ['follow_up_date', 'follow_up_time', 'follow_up_zone'].some((key) => body && body[key] !== undefined);
-  }
-
-  async function noteFollowUpUpdate(body) {
-    const date = body.follow_up_date === null || body.follow_up_date === undefined
-      ? ''
-      : String(body.follow_up_date).trim();
-    if (!date) {
-      return {
-        fields: ['follow_up_at = NULL', 'follow_up_has_time = 0', 'follow_up_zone = NULL', 'follow_up_notified_at = NULL'],
-        params: [],
-        clear: true,
-      };
-    }
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return { error: 'Follow-up date must be YYYY-MM-DD' };
-    const time = body.follow_up_time === null || body.follow_up_time === undefined
-      ? ''
-      : String(body.follow_up_time).trim();
-    if (time && !/^\d{2}:\d{2}$/.test(time)) return { error: 'Follow-up time must be HH:MM' };
-    const settings = await getSettings();
-    const zone = body.follow_up_zone === null || body.follow_up_zone === undefined || body.follow_up_zone === ''
-      ? (settings.device_zone || null)
-      : String(body.follow_up_zone);
-    if (zone && !recurrence.isValidTimeZone(zone)) return { error: 'Unknown follow-up time zone' };
-    const [y, mo, d] = date.split('-').map(Number);
-    const check = new Date(Date.UTC(y, mo - 1, d));
-    if (check.getUTCFullYear() !== y || check.getUTCMonth() !== mo - 1 || check.getUTCDate() !== d) {
-      return { error: 'Invalid follow-up date' };
-    }
-    const [hh, mi] = (time || settings.default_time || '09:00').split(':').map(Number);
-    const at = zone
-      ? recurrence.wallToInstant(zone, { y, mo, d, h: hh, mi })
-      : new Date(Date.UTC(y, mo - 1, d, hh, mi)).toISOString();
-    return {
-      at,
-      hasTime: time ? 1 : 0,
-      zone: zone || null,
-      fields: ['follow_up_at = ?', 'follow_up_has_time = ?', 'follow_up_zone = ?', 'follow_up_notified_at = NULL'],
-      params: [at, time ? 1 : 0, zone || null],
-    };
-  }
-
   function validateNoteWrite(body, { create }) {
     for (const key of Object.keys(body || {})) {
       if (!NOTE_WRITE_FIELDS.includes(key)) return `Unknown field: ${key}`;
@@ -3295,15 +3250,6 @@ async function main() {
     }
     if (body.folder_id !== undefined && (!Number.isInteger(body.folder_id) || body.folder_id <= 0)) {
       return 'Invalid folder_id';
-    }
-    if (body.follow_up_date !== undefined && body.follow_up_date !== null && typeof body.follow_up_date !== 'string') {
-      return 'Invalid follow_up_date';
-    }
-    if (body.follow_up_time !== undefined && body.follow_up_time !== null && typeof body.follow_up_time !== 'string') {
-      return 'Invalid follow_up_time';
-    }
-    if (body.follow_up_zone !== undefined && body.follow_up_zone !== null && typeof body.follow_up_zone !== 'string') {
-      return 'Invalid follow_up_zone';
     }
     if (create) {
       if (typeof body.base_epoch !== 'string' || !body.base_epoch) return 'base_epoch is required for API writes';
@@ -3396,15 +3342,10 @@ async function main() {
             : req.body.folder_id;
           const folder = folderId ? await folderRow(folderId, 'notes') : null;
           if (!folder) return { status: 400, body: { error: 'Choose a Notes folder' } };
-          const followUp = noteFollowUpRequested(req.body) ? await noteFollowUpUpdate(req.body) : null;
-          if (followUp && followUp.error) return { status: 400, body: { error: followUp.error } };
           const now = new Date().toISOString();
           const result = await db.run(
-            `INSERT INTO notes
-              (folder_id, title, body, body_format, follow_up_at, follow_up_has_time, follow_up_zone, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [folder.id, title, body, bodyFormat, followUp?.at || null,
-              followUp?.hasTime || 0, followUp?.zone || null, now, now]
+            'INSERT INTO notes (folder_id, title, body, body_format, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+            [folder.id, title, body, bodyFormat, now, now]
           );
           const note = await loadNoteRow(result.lastID);
           return { status: 201, body: { id: result.lastID, note } };
@@ -3420,15 +3361,10 @@ async function main() {
       : parseId(req.body.folder_id);
     const folder = folderId ? await folderRow(folderId, 'notes') : null;
     if (!folder) return res.status(400).json({ error: 'Choose a Notes folder' });
-    const followUp = noteFollowUpRequested(req.body) ? await noteFollowUpUpdate(req.body) : null;
-    if (followUp && followUp.error) return res.status(400).json({ error: followUp.error });
     const now = new Date().toISOString();
     const result = await db.run(
-      `INSERT INTO notes
-        (folder_id, title, body, body_format, follow_up_at, follow_up_has_time, follow_up_zone, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [folder.id, title, body, bodyFormat, followUp?.at || null,
-        followUp?.hasTime || 0, followUp?.zone || null, now, now]
+      'INSERT INTO notes (folder_id, title, body, body_format, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+      [folder.id, title, body, bodyFormat, now, now]
     );
     res.status(201).json({ id: result.lastID });
   });
@@ -3479,12 +3415,6 @@ async function main() {
               [folder.id, id]
             );
           }
-          if (noteFollowUpRequested(req.body)) {
-            const followUp = await noteFollowUpUpdate(req.body);
-            if (followUp.error) return { status: 400, body: { error: followUp.error } };
-            fields.push(...followUp.fields);
-            params.push(...followUp.params);
-          }
           if (!fields.length) return { status: 400, body: { error: 'Nothing to update' } };
           fields.push('updated_at = ?');
           params.push(new Date().toISOString());
@@ -3526,12 +3456,6 @@ async function main() {
         [folder.id, id]
       );
     }
-    if (noteFollowUpRequested(req.body)) {
-      const followUp = await noteFollowUpUpdate(req.body);
-      if (followUp.error) return res.status(400).json({ error: followUp.error });
-      fields.push(...followUp.fields);
-      params.push(...followUp.params);
-    }
     if (!fields.length) return res.status(400).json({ error: 'Nothing to update' });
     fields.push('updated_at = ?');
     params.push(new Date().toISOString());
@@ -3539,49 +3463,6 @@ async function main() {
     params.push(id);
     await db.run(`UPDATE notes SET ${fields.join(', ')} WHERE id = ?`, params);
     res.json({ ok: true });
-  });
-
-  app.post('/api/notes/:id/follow-up/done', async (req, res) => {
-    const id = parseId(req.params.id);
-    if (!id) return res.status(400).json({ error: 'Invalid note' });
-    if (req.token) {
-      const key = idempotencyKeyFrom(req);
-      if (!key) return res.status(400).json({ error: 'Idempotency-Key header is required for API writes' });
-      if (!Number.isInteger(req.body.base_revision) || req.body.base_revision < 0
-        || typeof req.body.base_epoch !== 'string' || !req.body.base_epoch) {
-        return res.status(400).json({ error: 'base_revision and base_epoch are required for API writes' });
-      }
-      return runTokenWrite(req, res, {
-        route: `POST /api/notes/${id}/follow-up/done`,
-        key,
-        fingerprint: payloadFingerprint(req.body),
-        execute: async () => {
-          const note = await loadNoteRow(id);
-          if (!note) return { status: 404, body: { error: 'Note not found' } };
-          const epochError = await guardNoteEpoch(req.body.base_epoch);
-          if (epochError) return epochError;
-          if (note.revision !== req.body.base_revision) {
-            return { status: 409, body: { error: 'Note changed since your read', note } };
-          }
-          const now = new Date().toISOString();
-          await db.run(
-            `UPDATE notes SET follow_up_at = NULL, follow_up_has_time = 0, follow_up_zone = NULL,
-               follow_up_notified_at = NULL, updated_at = ?, revision = revision + 1 WHERE id = ?`,
-            [now, id]
-          );
-          return { status: 200, body: { ok: true, note: await loadNoteRow(id) } };
-        },
-      });
-    }
-    const note = await loadNoteRow(id);
-    if (!note) return res.status(404).json({ error: 'Note not found' });
-    const now = new Date().toISOString();
-    await db.run(
-      `UPDATE notes SET follow_up_at = NULL, follow_up_has_time = 0, follow_up_zone = NULL,
-         follow_up_notified_at = NULL, updated_at = ?, revision = revision + 1 WHERE id = ?`,
-      [now, id]
-    );
-    res.json({ ok: true, note: await loadNoteRow(id) });
   });
 
   app.delete('/api/notes/:id', async (req, res) => {
@@ -5255,67 +5136,6 @@ async function main() {
   // cap keeps a later subscribe from replaying ancient history.
   const BACKLOG_CAP_DAYS = 7;
 
-  let checkingNoteFollowUps = false;
-  async function checkDueNoteFollowUps() {
-    if (checkingNoteFollowUps) return;
-    checkingNoteFollowUps = true;
-    try {
-      const settings = await getSettings();
-      const nowMs = Date.now();
-      const now = new Date(nowMs).toISOString();
-      const floor = new Date(nowMs - BACKLOG_CAP_DAYS * 24 * 3600 * 1000).toISOString();
-      const due = await db.all(`
-        SELECT id, title, body, follow_up_at, follow_up_notified_at
-        FROM notes
-        WHERE deleted_at IS NULL AND follow_up_at IS NOT NULL
-          AND follow_up_notified_at IS NULL
-          AND follow_up_at <= ? AND follow_up_at >= ?
-        ORDER BY follow_up_at LIMIT 50
-      `, [now, floor]);
-      if (!due.length) return;
-      const subscriptions = await db.get('SELECT COUNT(*) AS n FROM push_subscriptions');
-      if (!subscriptions.n) return;
-      const quiet = inQuietHours(nowMs,
-        recurrence.isValidTimeZone(settings.device_zone) ? settings.device_zone : null,
-        settings.quiet_start, settings.quiet_end);
-      if (quiet) return;
-      const badgeZone = recurrence.isValidTimeZone(settings.device_zone) ? settings.device_zone : null;
-      const badgeWall = badgeZone ? recurrence.instantToWall(nowMs, badgeZone) : null;
-      const badgeEnd = badgeWall
-        ? new Date(new Date(recurrence.wallToInstant(badgeZone, { y: badgeWall.y, mo: badgeWall.mo, d: badgeWall.d, h: 23, mi: 59 })).getTime() + 59999).toISOString()
-        : new Date(nowMs + 24 * 3600 * 1000).toISOString();
-      const [reminderBadge, noteBadge] = await Promise.all([
-        db.get(
-          'SELECT COUNT(*) AS n FROM reminders WHERE completed = 0 AND deleted_at IS NULL AND due_at IS NOT NULL AND due_at <= ? AND (snoozed_until IS NULL OR snoozed_until <= ?)',
-          [badgeEnd, now]
-        ),
-        db.get(
-          'SELECT COUNT(*) AS n FROM notes WHERE deleted_at IS NULL AND follow_up_at IS NOT NULL AND follow_up_at <= ?',
-          [badgeEnd]
-        ),
-      ]);
-      const badgeCount = (reminderBadge?.n || 0) + (noteBadge?.n || 0);
-      for (const note of due) {
-        const result = await push.sendToAll({
-          badge: badgeCount,
-          title: note.title,
-          body: 'Note follow-up',
-          url: '/#/notes/follow-ups',
-          tag: 'note-follow-up-' + note.id,
-        });
-        if (!result || !result.sent) continue;
-        await db.run(
-          'UPDATE notes SET follow_up_notified_at = ? WHERE id = ? AND follow_up_at = ? AND follow_up_notified_at IS NULL',
-          [now, note.id, note.follow_up_at]
-        );
-      }
-    } catch (err) {
-      console.error('Note follow-up check failed:', err.message);
-    } finally {
-      checkingNoteFollowUps = false;
-    }
-  }
-
   let checkingDue = false;
   async function checkDueReminders() {
     if (checkingDue) return;
@@ -5416,8 +5236,6 @@ async function main() {
 
   checkDueReminders();
   setInterval(checkDueReminders, 15 * 1000);
-  checkDueNoteFollowUps();
-  setInterval(checkDueNoteFollowUps, 15 * 1000);
 
   const purgeOldCompleted = () => purgeCompletedRetention().then((count) => {
     if (count) console.log(`Removed ${count} completed item(s) outside retention`);
