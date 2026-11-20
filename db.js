@@ -312,7 +312,20 @@ async function init() {
   if (!noteColumns.some((column) => column.name === 'deleted_at')) {
     await run('ALTER TABLE notes ADD COLUMN deleted_at TEXT');
   }
+  if (!noteColumns.some((column) => column.name === 'follow_up_at')) {
+    await run('ALTER TABLE notes ADD COLUMN follow_up_at TEXT');
+  }
+  if (!noteColumns.some((column) => column.name === 'follow_up_has_time')) {
+    await run('ALTER TABLE notes ADD COLUMN follow_up_has_time INTEGER NOT NULL DEFAULT 0');
+  }
+  if (!noteColumns.some((column) => column.name === 'follow_up_zone')) {
+    await run('ALTER TABLE notes ADD COLUMN follow_up_zone TEXT');
+  }
+  if (!noteColumns.some((column) => column.name === 'follow_up_notified_at')) {
+    await run('ALTER TABLE notes ADD COLUMN follow_up_notified_at TEXT');
+  }
   await run('CREATE INDEX IF NOT EXISTS idx_notes_deleted ON notes(deleted_at)');
+  await run('CREATE INDEX IF NOT EXISTS idx_notes_follow_up ON notes(follow_up_at)');
   // Every uploaded file: Docs rows themselves (owner_type = 'doc') plus
   // attachments owned by a reminder or a note. `stored_name` is an opaque
   // filename under data/uploads; the original name is display metadata.

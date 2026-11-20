@@ -253,6 +253,11 @@
           <span class="nav-label">All</span>
           <span class="badge" id="count-notes"></span>
         </button>
+        <button class="nav-row" data-view="notes-follow-ups" hidden>
+          <span class="nav-ic scheduled"><svg class="ic"><use href="#i-clock"/></svg></span>
+          <span class="nav-label">Follow-ups</span>
+          <span class="badge" id="count-note-follow-ups"></span>
+        </button>
         <button class="nav-row" data-view="docs" hidden>
           <span class="nav-ic all"><svg class="ic"><use href="#i-all"/></svg></span>
           <span class="nav-label">All</span>
@@ -619,6 +624,26 @@
                   <select id="n-folder" aria-label="Note folder"></select>
                 </div>
               </div>
+            </div>
+            <div class="ed-section">
+              <div class="ed-section-label">Follow up</div>
+              <div class="ed-group">
+                <div class="ed-row">
+                  <span class="ed-label">Date</span>
+                  <input id="n-follow-up-date" type="date" aria-label="Follow-up date">
+                </div>
+                <div class="ed-row">
+                  <span class="ed-label">Time</span>
+                  <input id="n-follow-up-time" type="time" aria-label="Follow-up time">
+                </div>
+              </div>
+              <div class="follow-up-quick" aria-label="Quick follow-up dates">
+                <button type="button" class="mini-btn" data-follow-up-days="1">Tomorrow</button>
+                <button type="button" class="mini-btn" data-follow-up-days="2">In 2 days</button>
+                <button type="button" class="mini-btn" data-follow-up-days="7">In a week</button>
+              </div>
+              <p class="notify-hint">Optional. Date-only follow-ups use the default notification time.</p>
+              <button type="button" id="n-follow-up-done" class="text-btn" hidden>Mark followed up</button>
             </div>
             <div class="ed-section">
               <div class="ed-section-label">Attachments</div>

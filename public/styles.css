@@ -4999,3 +4999,35 @@ body.selection-mode .fab { display: none; }
 @media (max-width: 899px) {
   .selection-bar { margin: 0 18px; }
 }
+
+
+/* Note follow-ups */
+.note-follow-up {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 3px;
+  font-size: 0.75rem;
+  color: var(--text-2);
+}
+.note-follow-up .ic { width: 12px; height: 12px; flex: none; color: var(--text-3); }
+.note-follow-up-done {
+  margin-left: 2px;
+  padding: 1px 6px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-3);
+  font-family: inherit;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.note-follow-up-done:hover { background: var(--fill); color: var(--text); }
+.follow-up-quick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0 2px;
+}
+#n-follow-up-done { margin-top: 6px; color: var(--text-3); }
