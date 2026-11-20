@@ -1245,28 +1245,6 @@ function setTenant(tenant, direction = 0) {
   animateTenantContent(direction);
 }
 
-const SHOW_COMPLETED_KEY = 'todo.showCompleted';
-
-function showCompletedPrefs() {
-  try {
-    return JSON.parse(localStorage.getItem(SHOW_COMPLETED_KEY)) || {};
-  } catch {
-    return {};
-  }
-}
-
-// Completed stays hidden by default, but when you tap "Show N Completed" on
-// a list, that choice is remembered per list and restored on every visit.
-function getShowCompleted(listId) {
-  return Boolean(showCompletedPrefs()[listId]);
-}
-
-function setShowCompleted(listId, value) {
-  const prefs = showCompletedPrefs();
-  if (value) prefs[listId] = true;
-  else delete prefs[listId];
-  localStorage.setItem(SHOW_COMPLETED_KEY, JSON.stringify(prefs));
-}
 
 const NAV_MOBILE = window.matchMedia('(max-width: 899px)');
 // On phones both screens share the document scroller, so keep one position
@@ -1406,7 +1384,7 @@ function route() {
     expandedNoteId = null;
   }
   if (view !== state.view) {
-    state.showCompleted = typeof view === 'number' ? getShowCompleted(view) : false;
+    state.showCompleted = false;
   }
   const active = document.activeElement;
   // Don't steal the keyboard when the user is mid-search: the results view
@@ -3246,7 +3224,6 @@ function syncCompletedFilter() {
   const completedCount = listItems.filter((reminder) => reminder.completed).length;
   if (state.showCompleted && completedCount === 0) {
     state.showCompleted = false;
-    setShowCompleted(view, false);
   }
   const alternateCount = state.showCompleted ? openCount : completedCount;
   const noun = alternateCount === 1 ? 'item' : 'items';
@@ -9299,7 +9276,6 @@ $('#sort-completed').addEventListener('click', (event) => {
   const scroller = screenScroller();
   if (!state.showCompleted && scroller) folderOpenScroll.set(view, scroller.scrollTop);
   state.showCompleted = !state.showCompleted;
-  setShowCompleted(view, state.showCompleted);
   renderMain();
   const next = screenScroller();
   if (!next) return;
