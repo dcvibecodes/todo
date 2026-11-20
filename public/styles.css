@@ -1320,6 +1320,40 @@ body.flipping .reminder-group { overflow: visible; }
   color: var(--text-3);
 }
 
+.completed-retention-inline {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  flex: 0 1 auto;
+}
+.completed-retention-inline[hidden] { display: none; }
+#completed-retention-inline-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-3);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+.retention-change {
+  flex: none;
+  padding: 0 2px;
+  border: 0;
+  background: transparent;
+  color: var(--text-3);
+  font-family: inherit;
+  font-size: 0.75rem;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.retention-change:hover {
+  color: var(--text);
+  text-decoration: underline;
+}
+
 .completed-retention-edit:hover {
   background: transparent;
   color: var(--text);

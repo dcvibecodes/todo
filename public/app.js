@@ -3219,8 +3219,10 @@ function syncCompletedFilter() {
   const sortBar = $('#sort-bar');
   if (!filter) return;
   filter.hidden = !show;
+  const inline = $('#completed-retention-inline');
   if (!show) {
     if (sortBar) sortBar.classList.remove('showing-completed');
+    if (inline) inline.hidden = true;
     return;
   }
   const listItems = state.reminders.filter((reminder) => reminder.list_id === view);
@@ -3246,6 +3248,7 @@ function syncCompletedFilter() {
   const icon = $('#sort-completed-icon');
   if (icon) icon.setAttribute('href', state.showCompleted ? '#i-list' : '#i-check');
   if (sortBar) sortBar.classList.toggle('showing-completed', state.showCompleted);
+  if (inline && !state.showCompleted) inline.hidden = true;
   $('#sort-completed-count').textContent = String(alternateCount);
 }
 
@@ -3321,24 +3324,24 @@ function renderMain() {
 
   if (showingCompleted) {
     const retention = listRetention(list);
+    const label = retentionLabel(retention);
+    const inline = $('#completed-retention-inline');
+    const inlineText = $('#completed-retention-inline-text');
+    const change = $('#completed-retention-change');
+    if (inline) {
+      inline.hidden = false;
+      inline.title = retention === 'forever'
+        ? 'Completed items are kept indefinitely'
+        : `Completed items are kept for ${label}`;
+    }
+    if (inlineText) inlineText.textContent = `Kept ${label}`;
+    if (change) {
+      change.setAttribute('aria-label', `Change completed retention for ${list ? list.name : 'this folder'}`);
+      change.onclick = () => openListSheet(list);
+    }
     const group = el('div', { class: 'reminder-group' });
     for (const reminder of completed) group.append(reminderRow(reminder));
-    content.append(el('div', { class: 'completed-section' }, [
-      el('div', { class: 'completed-retention' }, [
-        el('span', {
-          text: retention === 'forever'
-            ? 'Completed items are kept indefinitely.'
-            : `Completed items are kept for ${retentionLabel(retention)}.`,
-        }),
-        el('button', {
-          type: 'button',
-          class: 'text-btn completed-retention-edit',
-          text: 'Edit',
-          onclick: () => openListSheet(list),
-        }),
-      ]),
-      group,
-    ]));
+    content.append(el('div', { class: 'completed-section' }, [group]));
   } else if (!items.length) {
     content.append(emptyState(view));
     if (state.search) return;

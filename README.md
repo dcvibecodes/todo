@@ -2,6 +2,11 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v4.15.5
+
+- **Inline completed-retention control** - In Completed view, the retention period and a muted **Change** action now sit in the freed Sort/Order space. The retention line above the cards is gone, so Open and Completed views place cards at the same vertical position.
+- Service worker cache bumped to `workspace-v4.15.5`.
+
 ## What's New in v4.15.4
 
 - **Header count alignment** - The folder title and count now share a common text baseline, with the count using a 1px line box, so the number sits optically aligned with the title on desktop and mobile.
