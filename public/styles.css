@@ -1109,7 +1109,7 @@ body.list-dragging .list-grip { cursor: grabbing; }
   flex: 1;
   min-width: 0;
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 10px;
 }
 
@@ -1128,6 +1128,7 @@ body.list-dragging .list-grip { cursor: grabbing; }
 
 .view-count {
   font-size: 0.875rem;
+  line-height: 1;
   font-weight: 500;
   color: var(--text-3);
   font-variant-numeric: tabular-nums;
@@ -3085,7 +3086,7 @@ body.sheet-open .sidebar {
 
   .back-btn { order: 1; flex: none; padding: 6px 6px 6px 0; margin-right: 2px; }
   .back-btn span { display: none; }
-  .title-wrap { order: 2; flex-direction: row; align-items: center; gap: 8px; }
+  .title-wrap { order: 2; flex-direction: row; align-items: baseline; gap: 8px; }
   .main-head .search-bar-overlay {
     top: calc(14px + env(safe-area-inset-top));
     right: 18px;
