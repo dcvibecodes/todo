@@ -629,11 +629,19 @@
               <div class="ed-section-label">Follow up</div>
               <div class="ed-group">
                 <div class="ed-row">
-                  <span class="ed-label">Date</span>
+                  <span class="ed-ic"><svg class="ic"><use href="#i-calendar"/></svg></span>
+                  <label class="ed-label" for="n-follow-up-date-on">Date</label>
+                  <label class="ed-switch"><input id="n-follow-up-date-on" type="checkbox"><span></span></label>
+                </div>
+                <div class="ed-subrow" id="n-follow-up-date-row" hidden>
                   <input id="n-follow-up-date" type="date" aria-label="Follow-up date">
                 </div>
                 <div class="ed-row">
-                  <span class="ed-label">Time</span>
+                  <span class="ed-ic"><svg class="ic"><use href="#i-clock"/></svg></span>
+                  <label class="ed-label" for="n-follow-up-time-on">Time</label>
+                  <label class="ed-switch"><input id="n-follow-up-time-on" type="checkbox"><span></span></label>
+                </div>
+                <div class="ed-subrow" id="n-follow-up-time-row" hidden>
                   <input id="n-follow-up-time" type="time" aria-label="Follow-up time">
                 </div>
               </div>

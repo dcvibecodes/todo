@@ -3069,7 +3069,7 @@ function renderSidebar() {
   setPulseText($('#count-all'), allCount ? String(allCount) : '');
   setPulseText($('#count-flagged'), flaggedCount ? String(flaggedCount) : '');
   setPulseText($('#count-notes'), state.notes.length ? String(state.notes.length) : '');
-  const followUpCount = state.notes.filter((note) => note.follow_up_at).length;
+  const followUpCount = notesWithFollowUps().length;
   setPulseText($('#count-note-follow-ups'), followUpCount ? String(followUpCount) : '');
   setPulseText($('#count-docs'), state.docs.length ? String(state.docs.length) : '');
 
@@ -3377,12 +3377,14 @@ function renderMain() {
   syncNoteExpanders();
 }
 
+function notesWithFollowUps() {
+  return state.notes
+    .filter((note) => note.follow_up_at)
+    .sort((a, b) => String(a.follow_up_at).localeCompare(String(b.follow_up_at)));
+}
+
 function notesForView(view) {
-  if (view === 'notes-follow-ups') {
-    return state.notes
-      .filter((note) => note.follow_up_at)
-      .sort((a, b) => String(a.follow_up_at).localeCompare(String(b.follow_up_at)));
-  }
+  if (view === 'notes-follow-ups') return notesWithFollowUps();
   const folderId = viewFolderId(view);
   return folderId ? state.notes.filter((note) => note.folder_id === folderId) : state.notes;
 }
@@ -3708,6 +3710,29 @@ async function markNoteFollowUpDone(note, button) {
   }
 }
 
+async function rescheduleNoteFollowUp(note, days) {
+  if (!note || !note.follow_up_at) return;
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  const time = note.follow_up_has_time ? localTimeValue(new Date(note.follow_up_at)) : null;
+  try {
+    await api('/api/notes/' + note.id, {
+      method: 'PATCH',
+      body: {
+        follow_up_date: localDateValue(date),
+        follow_up_time: time,
+        follow_up_zone: deviceZone() || note.follow_up_zone || null,
+      },
+    });
+    state.storage = null;
+    await loadState();
+    render();
+    toast(`Follow-up moved to ${chipDateLabel(localDateValue(date), time)}`);
+  } catch (err) {
+    toast(err.message);
+  }
+}
+
 function noteRow(note, options = {}) {
   const folder = listById(note.folder_id);
   const attachments = attachmentsFor('note', note.id);
@@ -3737,7 +3762,7 @@ function noteRow(note, options = {}) {
       el('button', {
         type: 'button',
         class: 'note-follow-up-done',
-        text: 'Done',
+        text: 'Mark followed up',
         'aria-label': `Mark follow-up done for ${note.title}`,
         onclick: (event) => {
           event.stopPropagation();
@@ -3745,6 +3770,21 @@ function noteRow(note, options = {}) {
         },
       }),
     ]) : null,
+    note.follow_up_at && state.view === 'notes-follow-ups'
+      ? el('div', { class: 'note-follow-up-actions' }, [
+        ['Tomorrow', 1],
+        ['In 2 days', 2],
+        ['In a week', 7],
+      ].map(([label, days]) => el('button', {
+        type: 'button',
+        class: 'mini-btn',
+        text: label,
+        'aria-label': `Reschedule follow-up for ${note.title} to ${label.toLowerCase()}`,
+        onclick: (event) => {
+          event.stopPropagation();
+          rescheduleNoteFollowUp(note, days);
+        },
+      }))) : null,
     note.body ? el('div', { class: 'reminder-notes' }, [
       el('div', {
         class: 'reminder-note-preview',
@@ -7306,9 +7346,12 @@ function openNoteEditor(id) {
   $('#n-delete').hidden = !note;
   $('#n-delete').textContent = 'Delete Note';
   const followUpDate = note && note.follow_up_at ? new Date(note.follow_up_at) : null;
+  $('#n-follow-up-date-on').checked = Boolean(followUpDate);
+  $('#n-follow-up-time-on').checked = Boolean(followUpDate && note.follow_up_has_time);
   $('#n-follow-up-date').value = followUpDate ? localDateValue(followUpDate) : '';
   $('#n-follow-up-time').value = followUpDate && note.follow_up_has_time ? localTimeValue(followUpDate) : '';
   $('#n-follow-up-done').hidden = !(note && note.follow_up_at);
+  syncNoteFollowUpRows();
   const folderSelect = $('#n-folder');
   folderSelect.replaceChildren();
   for (const folder of foldersFor('notes')) {
@@ -7322,7 +7365,9 @@ function openNoteEditor(id) {
     title: note.title,
     body: normalizeNoteHtml($('#n-body').innerHTML),
     folder_id: note.folder_id,
+    follow_up_date_on: $('#n-follow-up-date-on').checked,
     follow_up_date: $('#n-follow-up-date').value,
+    follow_up_time_on: $('#n-follow-up-time-on').checked,
     follow_up_time: $('#n-follow-up-time').value,
   } : null;
   renderNoteAttachments();
@@ -7346,8 +7391,27 @@ function noteIsDirty() {
   return title !== state.noteSnapshot.title
     || body !== state.noteSnapshot.body
     || folderId !== state.noteSnapshot.folder_id
+    || $('#n-follow-up-date-on').checked !== state.noteSnapshot.follow_up_date_on
     || $('#n-follow-up-date').value !== state.noteSnapshot.follow_up_date
+    || $('#n-follow-up-time-on').checked !== state.noteSnapshot.follow_up_time_on
     || $('#n-follow-up-time').value !== state.noteSnapshot.follow_up_time;
+}
+
+function syncNoteFollowUpRows() {
+  if ($('#n-follow-up-time-on').checked) $('#n-follow-up-date-on').checked = true;
+  if (!$('#n-follow-up-date-on').checked) {
+    $('#n-follow-up-time-on').checked = false;
+    $('#n-follow-up-date').value = '';
+    $('#n-follow-up-time').value = '';
+  }
+  if ($('#n-follow-up-date-on').checked && !$('#n-follow-up-date').value) {
+    $('#n-follow-up-date').value = localDateValue(new Date());
+  }
+  if ($('#n-follow-up-time-on').checked && !$('#n-follow-up-time').value) {
+    $('#n-follow-up-time').value = (state.settings && state.settings.default_time) || '09:00';
+  }
+  revealRow($('#n-follow-up-date-row'), $('#n-follow-up-date-on').checked);
+  revealRow($('#n-follow-up-time-row'), $('#n-follow-up-time-on').checked);
 }
 
 function syncNoteFolderVisual() {
@@ -7397,9 +7461,9 @@ async function saveNote(event) {
   try {
     let id = state.noteEditingId;
     if (id) {
-      await api('/api/notes/' + id, { method: 'PATCH', body: { title, body, body_format: 'html', folder_id: folderId, follow_up_date: $('#n-follow-up-date').value || null, follow_up_time: $('#n-follow-up-time').value || null, follow_up_zone: deviceZone() || null } });
+      await api('/api/notes/' + id, { method: 'PATCH', body: { title, body, body_format: 'html', folder_id: folderId, follow_up_date: $('#n-follow-up-date-on').checked ? ($('#n-follow-up-date').value || null) : null, follow_up_time: $('#n-follow-up-time-on').checked ? ($('#n-follow-up-time').value || null) : null, follow_up_zone: deviceZone() || null } });
     } else {
-      const created = await api('/api/notes', { method: 'POST', body: { title, body, body_format: 'html', folder_id: folderId, follow_up_date: $('#n-follow-up-date').value || null, follow_up_time: $('#n-follow-up-time').value || null, follow_up_zone: deviceZone() || null } });
+      const created = await api('/api/notes', { method: 'POST', body: { title, body, body_format: 'html', folder_id: folderId, follow_up_date: $('#n-follow-up-date-on').checked ? ($('#n-follow-up-date').value || null) : null, follow_up_time: $('#n-follow-up-time-on').checked ? ($('#n-follow-up-time').value || null) : null, follow_up_zone: deviceZone() || null } });
       id = created.id;
     }
     for (const fileId of state.noteRemovedFiles) {
@@ -9242,9 +9306,13 @@ $$('[data-follow-up-days]').forEach((button) => {
   button.addEventListener('click', () => {
     const date = new Date();
     date.setDate(date.getDate() + Number(button.dataset.followUpDays || 0));
+    $('#n-follow-up-date-on').checked = true;
     $('#n-follow-up-date').value = localDateValue(date);
+    syncNoteFollowUpRows();
   });
 });
+$('#n-follow-up-date-on').addEventListener('change', syncNoteFollowUpRows);
+$('#n-follow-up-time-on').addEventListener('change', syncNoteFollowUpRows);
 $('#n-follow-up-done').addEventListener('click', async () => {
   const id = state.noteEditingId;
   if (!id) return;

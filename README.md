@@ -2,6 +2,14 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v4.16.2
+
+- **Consistent follow-up date fields** - Note follow-up date/time now uses the same switch + native field rows as the Reminders editor.
+- **Follow-up rescheduling in the group** - Follow-ups cards now offer Tomorrow / In 2 days / In a week, preserving timed or date-only state.
+- **Clearer follow-up action** - The card action now says **Mark followed up** instead of Done.
+- **Consistent counts** - The Follow-ups badge, list and empty state use the same source; due-today follow-ups stay visible until explicitly marked followed up.
+- Service worker cache bumped to `workspace-v4.16.2`.
+
 ## What's New in v4.16.1
 
 - **Token follow-up default zone** - Creating or editing a note follow-up through the API without `follow_up_zone` now correctly falls back to the saved device zone.
