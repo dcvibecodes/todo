@@ -2,6 +2,12 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v4.15.3
+
+- **Completed view ordering** - Sort/Order controls are hidden while viewing completed items, and completed cards always show newest completion first.
+- **Quieter Edit link** - The retention action now says **Edit** and uses the same muted colour as Select instead of the bright accent colour.
+- Service worker cache bumped to `workspace-v4.15.3`.
+
 ## What's New in v4.15.2
 
 - **Folders always open on Open view** - Leaving a folder while viewing completed items and returning—directly, through another folder, or through Home—now resets it to the open list. The completed view is temporary for that visit.

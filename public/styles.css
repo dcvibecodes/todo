@@ -1315,14 +1315,17 @@ body.flipping .reminder-group { overflow: visible; }
   flex: none;
   padding: 2px 0;
   font-size: 0.8125rem;
-  color: var(--accent);
+  font-weight: 500;
+  color: var(--text-3);
 }
 
 .completed-retention-edit:hover {
   background: transparent;
-  color: var(--accent);
+  color: var(--text);
   text-decoration: underline;
 }
+
+.sort-bar.showing-completed > label.sort-control { display: none; }
 
 .flip-moving { position: relative; z-index: 2; }
 

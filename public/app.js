@@ -3216,9 +3216,13 @@ function syncCompletedFilter() {
   const view = state.view;
   const show = typeof view === 'number' && !state.search;
   const filter = $('#sort-completed');
+  const sortBar = $('#sort-bar');
   if (!filter) return;
   filter.hidden = !show;
-  if (!show) return;
+  if (!show) {
+    if (sortBar) sortBar.classList.remove('showing-completed');
+    return;
+  }
   const listItems = state.reminders.filter((reminder) => reminder.list_id === view);
   const openCount = listItems.filter((reminder) => !reminder.completed).length;
   const completedCount = listItems.filter((reminder) => reminder.completed).length;
@@ -3241,6 +3245,7 @@ function syncCompletedFilter() {
   }
   const icon = $('#sort-completed-icon');
   if (icon) icon.setAttribute('href', state.showCompleted ? '#i-list' : '#i-check');
+  if (sortBar) sortBar.classList.toggle('showing-completed', state.showCompleted);
   $('#sort-completed-count').textContent = String(alternateCount);
 }
 
@@ -3303,7 +3308,7 @@ function renderMain() {
 
   const items = viewItems();
   const showingCompleted = isList && state.showCompleted;
-  const completed = showingCompleted ? completedInList(view, effectiveSort(view)) : [];
+  const completed = showingCompleted ? completedInList(view) : [];
   const visibleItems = showingCompleted ? completed : items;
 
   $('#view-title').textContent = title;
@@ -3328,7 +3333,7 @@ function renderMain() {
         el('button', {
           type: 'button',
           class: 'text-btn completed-retention-edit',
-          text: 'Edit folder',
+          text: 'Edit',
           onclick: () => openListSheet(list),
         }),
       ]),
