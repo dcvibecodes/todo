@@ -2048,10 +2048,12 @@ function syncSelectionUI() {
       : [];
     const openCount = reminderItems.filter((item) => !item.completed).length;
     const doneCount = reminderItems.filter((item) => item.completed).length;
-    completeButton.hidden = state.selection.type !== 'reminders';
-    uncompleteButton.hidden = state.selection.type !== 'reminders';
-    completeButton.disabled = !openCount;
-    uncompleteButton.disabled = !doneCount;
+    const completedMode = state.selection.type === 'reminders'
+      && (state.showCompleted || state.view === 'completed');
+    completeButton.hidden = state.selection.type !== 'reminders' || completedMode;
+    uncompleteButton.hidden = state.selection.type !== 'reminders' || !completedMode;
+    completeButton.disabled = completedMode || !openCount;
+    uncompleteButton.disabled = !completedMode || !doneCount;
     completeButton.textContent = 'Complete';
     uncompleteButton.textContent = 'Uncomplete';
   }
