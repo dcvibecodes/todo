@@ -1825,11 +1825,10 @@ function sortCompleted(items) {
   return sortItems(items, { field: 'completed', dir: 'desc' });
 }
 
-function completedInList(listId) {
-  // Completed history always reads newest completion first, independent of
-  // the list's sort for active items.
-  return sortCompleted(state.reminders
-    .filter((reminder) => reminder.list_id === listId && reminder.completed));
+function completedInList(listId, sort = null) {
+  const items = state.reminders
+    .filter((reminder) => reminder.list_id === listId && reminder.completed);
+  return sort ? sortItems(items, sort) : sortCompleted(items);
 }
 
 // A search result can be older than the 30-day completed window that
@@ -3240,17 +3239,30 @@ function syncCompletedFilter() {
   if (!filter) return;
   filter.hidden = !show;
   if (!show) return;
-  const count = state.reminders.filter((reminder) => reminder.list_id === view && reminder.completed).length;
-  const noun = count === 1 ? 'item' : 'items';
-  filter.disabled = count === 0;
+  const listItems = state.reminders.filter((reminder) => reminder.list_id === view);
+  const openCount = listItems.filter((reminder) => !reminder.completed).length;
+  const completedCount = listItems.filter((reminder) => reminder.completed).length;
+  if (state.showCompleted && completedCount === 0) {
+    state.showCompleted = false;
+    setShowCompleted(view, false);
+  }
+  const alternateCount = state.showCompleted ? openCount : completedCount;
+  const noun = alternateCount === 1 ? 'item' : 'items';
+  filter.disabled = !state.showCompleted && completedCount === 0;
   filter.setAttribute('aria-pressed', state.showCompleted ? 'true' : 'false');
-  filter.setAttribute('aria-label', count
-    ? `${state.showCompleted ? 'Hide' : 'Show'} ${count} completed ${noun}`
-    : 'No completed items');
-  filter.title = count
-    ? `${state.showCompleted ? 'Hide' : 'Show'} completed ${noun}`
-    : 'No completed items';
-  $('#sort-completed-count').textContent = String(count);
+  if (state.showCompleted) {
+    filter.setAttribute('aria-label', `Show ${openCount} open ${noun}`);
+    filter.title = `Show ${openCount} open ${noun}`;
+  } else if (completedCount) {
+    filter.setAttribute('aria-label', `Show ${completedCount} completed ${noun}`);
+    filter.title = `Show ${completedCount} completed ${noun}`;
+  } else {
+    filter.setAttribute('aria-label', 'No completed items');
+    filter.title = 'No completed items';
+  }
+  const icon = $('#sort-completed-icon');
+  if (icon) icon.setAttribute('href', state.showCompleted ? '#i-list' : '#i-check');
+  $('#sort-completed-count').textContent = String(alternateCount);
 }
 
 function renderMain() {
@@ -3311,20 +3323,39 @@ function renderMain() {
   }
 
   const items = viewItems();
-  const completed = isList && state.showCompleted ? completedInList(view) : [];
+  const showingCompleted = isList && state.showCompleted;
+  const completed = showingCompleted ? completedInList(view, effectiveSort(view)) : [];
+  const visibleItems = showingCompleted ? completed : items;
 
   $('#view-title').textContent = title;
-  const shownCount = typeof view === 'number'
-    ? items.length + (state.showCompleted && !state.search ? completed.length : 0)
-    : items.length;
-  setPulseText($('#view-count'), shownCount ? String(shownCount) : '');
+  setPulseText($('#view-count'), visibleItems.length ? String(visibleItems.length) : '');
   if (typeof view === 'number') {
     $('#view-menu').hidden = false;
     $('#view-menu').onclick = () => openListSheet(list);
   }
   document.title = `Workspace — ${title}`;
 
-  if (!items.length) {
+  if (showingCompleted) {
+    const retention = listRetention(list);
+    const group = el('div', { class: 'reminder-group' });
+    for (const reminder of completed) group.append(reminderRow(reminder));
+    content.append(el('div', { class: 'completed-section' }, [
+      el('div', { class: 'completed-retention' }, [
+        el('span', {
+          text: retention === 'forever'
+            ? 'Completed items are kept indefinitely.'
+            : `Completed items are kept for ${retentionLabel(retention)}.`,
+        }),
+        el('button', {
+          type: 'button',
+          class: 'text-btn completed-retention-edit',
+          text: 'Edit folder',
+          onclick: () => openListSheet(list),
+        }),
+      ]),
+      group,
+    ]));
+  } else if (!items.length) {
     content.append(emptyState(view));
     if (state.search) return;
   } else if (view === 'scheduled') {
@@ -3343,29 +3374,6 @@ function renderMain() {
       group.append(reminderRow(reminder, { reschedule: view === 'flagged' && isOverdue(reminder) }));
     }
     content.append(group);
-  }
-
-  if (isList && state.showCompleted && completed.length) {
-    const retention = listRetention(list);
-    const group = el('div', { class: 'reminder-group' });
-    for (const reminder of completed) group.append(reminderRow(reminder));
-    content.append(el('div', { class: 'completed-section' }, [
-      el('h3', { class: 'group-title', text: 'Completed' }),
-      el('div', { class: 'completed-retention' }, [
-        el('span', {
-          text: retention === 'forever'
-            ? 'Completed items are kept indefinitely.'
-            : `Completed items are kept for ${retentionLabel(retention)}.`,
-        }),
-        el('button', {
-          type: 'button',
-          class: 'text-btn completed-retention-edit',
-          text: 'Edit folder',
-          onclick: () => openListSheet(list),
-        }),
-      ]),
-      group,
-    ]));
   }
 
   if (!state.lists.length) {
@@ -9280,72 +9288,25 @@ $('#sort-dir').addEventListener('change', (event) => {
   requestRowAnimation();
   render();
 });
-// Same outcome as the old "Show N Completed" link: reveal this list's
-// completed items and remember the choice per list (localStorage), so every
-// visit to that list restores it.
-let completedToggleToken = 0;
-
-function animateCompletedSectionOpen() {
-  const section = $('.completed-section');
-  if (!section || MOTION_REDUCED.matches) return;
-  section.getAnimations().forEach((animation) => animation.cancel());
-  const height = section.getBoundingClientRect().height;
-  section.style.overflow = 'hidden';
-  const anim = section.animate(
-    [{ height: '0px', opacity: 0 }, { height: `${height}px`, opacity: 1 }],
-    { duration: 220, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' },
-  );
-  anim.onfinish = () => {
-    section.style.overflow = '';
-    section.style.height = '';
-  };
-}
-
-function animateCompletedSectionClose(done) {
-  const section = $('.completed-section');
-  if (!section || MOTION_REDUCED.matches) { done(); return; }
-  section.getAnimations().forEach((animation) => animation.cancel());
-  const rect = section.getBoundingClientRect();
-  if (rect.bottom < 0 || rect.top > window.innerHeight) { done(); return; }
-  const height = rect.height;
-  section.style.overflow = 'hidden';
-  const anim = section.animate(
-    [{ height: `${height}px`, opacity: 1 }, { height: '0px', opacity: 0 }],
-    { duration: 180, easing: 'ease-out' },
-  );
-  anim.onfinish = done;
-}
-
-function preserveContentScroll(action, mode = 'keep') {
-  const scroller = screenScroller();
-  if (!scroller) { action(); return; }
-  const top = scroller.scrollTop;
-  action();
-  scroller.scrollTop = mode === 'clamp'
-    ? Math.min(top, Math.max(0, scroller.scrollHeight - scroller.clientHeight))
-    : top;
-}
+// Toggle the folder between its open and completed lists.
+const folderOpenScroll = new Map();
 
 $('#sort-completed').addEventListener('click', (event) => {
   if (typeof state.view !== 'number' || event.currentTarget.disabled) return;
-  const token = ++completedToggleToken;
+  const view = state.view;
+  const scroller = screenScroller();
+  if (!state.showCompleted && scroller) folderOpenScroll.set(view, scroller.scrollTop);
   state.showCompleted = !state.showCompleted;
-  setShowCompleted(state.view, state.showCompleted);
-  event.currentTarget.setAttribute('aria-pressed', state.showCompleted ? 'true' : 'false');
+  setShowCompleted(view, state.showCompleted);
+  renderMain();
+  const next = screenScroller();
+  if (!next) return;
   if (state.showCompleted) {
-    preserveContentScroll(() => renderMain());
-    animateCompletedSectionOpen();
-    return;
+    next.scrollTop = 0;
+  } else {
+    const saved = folderOpenScroll.get(view) || 0;
+    next.scrollTop = Math.min(saved, Math.max(0, next.scrollHeight - next.clientHeight));
   }
-  const previous = screenScroller();
-  const previousScroll = previous ? previous.scrollTop : 0;
-  animateCompletedSectionClose(() => {
-    if (token === completedToggleToken && $('.completed-section')) {
-      renderMain();
-      const scroller = screenScroller();
-      if (scroller) scroller.scrollTop = Math.min(previousScroll, Math.max(0, scroller.scrollHeight - scroller.clientHeight));
-    }
-  });
 });
 $('#set-sort-field').addEventListener('change', () => {
   if ($('#set-sort-field').value === 'due') $('#set-sort-dir').value = 'asc';

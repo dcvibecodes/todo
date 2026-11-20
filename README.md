@@ -2,6 +2,13 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v4.15.0
+
+- **Open / Completed view toggle** - In a folder, the completed chip now switches the card list between open and completed items instead of stacking completed items below the open list. The chip shows the alternate view count: ✓ + completed count when viewing open items, and a list icon + open count when viewing completed items.
+- **Sort applies to the visible list** - The folder's existing Sort/Order now applies to whichever list is shown. Retention details and Edit folder stay above completed items.
+- **Per-folder view memory** - Each folder remembers whether it was last showing open or completed items. Switching back to open restores the previous open-list scroll position.
+- Service worker cache bumped to `workspace-v4.15.0`.
+
 ## What's New in v4.14.3
 
 - **Refreshing pill moves to the top** - After a pull-to-refresh release, the **Refreshing…** pill now sits at the top of the screen instead of remaining at the pull threshold position.
