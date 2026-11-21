@@ -392,6 +392,7 @@
         <div class="editor-fields">
           <div id="e-notes" class="e-notes inline-text-field" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Notes and URL" data-placeholder="Notes &amp; URL"></div>
           <div id="e-notes-links" class="ed-note-links" aria-label="Links in notes" hidden></div>
+          <p class="inline-link-hint">Type / to link an item</p>
         </div>
 
         <div class="ed-section">
@@ -598,7 +599,7 @@
           <button type="button" id="note-link-cancel" class="mini-btn">Cancel</button>
         </div>
           <div id="n-body" class="e-notes note-body note-rich" contenteditable="true" role="textbox" aria-multiline="true" data-placeholder="Write your note"></div>
-          <p class="note-editor-hint">Enter = new paragraph &middot; Shift+Enter or &#8629; button = line break &middot; Tab = indent list item</p>
+          <p class="note-editor-hint">Enter = new paragraph &middot; Shift+Enter or &#8629; button = line break &middot; Tab = indent list item &middot; Type / to link an item</p>
         </div>
         <div class="note-more-toggle-wrap">
           <button type="button" id="n-more-toggle" class="e-more-toggle" aria-expanded="false" aria-controls="n-more">
@@ -662,6 +663,7 @@
           <div class="ed-section-label">Description</div>
           <div id="doc-description" class="doc-description-input inline-text-field" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Description" data-placeholder="Add a description"></div>
           <p id="doc-description-count" class="doc-description-count">0 / 1000</p>
+          <p class="inline-link-hint">Type / to link an item</p>
         </div>
         <div class="ed-section">
           <div class="ed-section-label">Folder</div>
@@ -1088,7 +1090,7 @@ curl -X PATCH -H "Authorization: Bearer $TOKEN" \
       <span class="foot-ic"><svg class="ic"><use href="#i-logout"/></svg></span>
       <span>Log out</span>
     </button>
-    <div class="account-menu-shortcuts" aria-label="Keyboard shortcuts">N New · / Link · R Refresh · <span id="shortcut-search-key">Ctrl K</span> Search · Esc Back</div>
+    <div class="account-menu-shortcuts" aria-label="Keyboard shortcuts">N New · R Refresh · <span id="shortcut-search-key">Ctrl K</span> Search · Esc Back</div>
   </div>
 
   <div id="pull-refresh" class="pull-refresh" aria-hidden="true">

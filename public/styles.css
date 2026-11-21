@@ -5151,3 +5151,12 @@ body.selection-mode .fab { display: none; }
   outline-offset: -2px;
   background: var(--fill);
 }
+
+.inline-link-hint {
+  margin: 0;
+  padding-inline: var(--sheet-content-inset);
+  color: var(--text-3);
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+#doc-description-count + .inline-link-hint { margin-top: -2px; }
