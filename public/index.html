@@ -395,6 +395,13 @@
         </div>
 
         <div class="ed-section">
+          <div class="ed-section-label">Linked items</div>
+          <div id="e-item-links" class="item-links-editor"></div>
+          <button type="button" id="e-add-link" class="mini-btn">Add link</button>
+          <p class="notify-hint">Link a note or doc. Linked items open in their own sheet.</p>
+        </div>
+
+        <div class="ed-section">
           <div class="ed-section-label">Attachments</div>
           <div id="e-attachments" class="attach-list"></div>
           <label class="attach-add">
@@ -622,6 +629,11 @@
               </div>
             </div>
             <div class="ed-section">
+              <div class="ed-section-label">Linked docs</div>
+              <div id="n-item-links" class="item-links-editor"></div>
+              <button type="button" id="n-add-link" class="mini-btn">Add doc link</button>
+            </div>
+            <div class="ed-section">
               <div class="ed-section-label">Attachments</div>
               <div id="n-attachments" class="attach-list"></div>
               <label class="attach-add">
@@ -685,6 +697,21 @@
     </form>
   </div>
 
+
+  <div id="link-picker" class="sheet" hidden>
+    <div class="sheet-backdrop" data-close></div>
+    <div class="sheet-card link-picker-card">
+      <header class="sheet-head">
+        <button type="button" class="text-btn" data-close>Cancel</button>
+        <span>Link item</span>
+        <button type="button" id="link-picker-done" class="text-btn strong">Done</button>
+      </header>
+      <div class="sheet-body">
+        <input id="link-picker-search" class="e-title" type="search" placeholder="Search notes and docs" autocomplete="off">
+        <div id="link-picker-results" class="link-picker-results"></div>
+      </div>
+    </div>
+  </div>
 
   <div id="bulk-complete-sheet" class="sheet" hidden>
     <div class="sheet-backdrop" data-close></div>

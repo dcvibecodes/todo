@@ -5004,3 +5004,94 @@ body.selection-mode .fab { display: none; }
 @media (max-width: 899px) {
   .selection-bar { margin: 0 18px; }
 }
+
+/* Interlinkage: ordinary text links, not chips */
+.item-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  margin-top: 7px;
+  font-size: 0.8125rem;
+}
+.item-links-label {
+  color: var(--text-3);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.item-link {
+  appearance: none;
+  border: 0;
+  padding: 0;
+  background: none;
+  color: var(--accent, var(--blue));
+  font: inherit;
+  text-align: left;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.item-link:hover { text-decoration-thickness: 2px; }
+.item-link:disabled {
+  color: var(--text-3);
+  text-decoration: none;
+  cursor: default;
+}
+.item-links-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 8px;
+}
+.item-link-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  border-bottom: 1px solid var(--line-soft, var(--line));
+}
+.item-link-row:last-child { border-bottom: 0; }
+.item-link-row .item-link { flex: 1; min-width: 0; }
+.item-link-row .item-link-type {
+  color: var(--text-3);
+  font-size: 0.72rem;
+}
+.item-link-remove {
+  appearance: none;
+  border: 0;
+  background: none;
+  color: var(--text-3);
+  font-size: 1rem;
+  line-height: 1;
+  padding: 6px;
+  cursor: pointer;
+}
+.link-picker-results {
+  display: flex;
+  flex-direction: column;
+  margin-top: 10px;
+}
+.link-picker-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  border: 0;
+  border-bottom: 1px solid var(--line-soft, var(--line));
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  padding: 8px 2px;
+  cursor: pointer;
+}
+.link-picker-row:disabled { opacity: 0.5; cursor: default; }
+.link-picker-row-type {
+  color: var(--text-3);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}

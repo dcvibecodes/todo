@@ -49,6 +49,9 @@ const state = {
   listTenant: 'reminders',
   noteEditingId: null,
   noteSnapshot: null,
+  editorItemLinks: [],
+  noteItemLinks: [],
+  linkPickerSource: null,
   docEditingId: null,
   docSnapshot: null,
   notePendingFiles: [],
@@ -1118,6 +1121,7 @@ async function runPullRefresh() {
   pill.style.transform = 'translate(-50%, 0)';
   if (label) label.textContent = 'Refreshing…';
 
+  const startedAt = Date.now();
   await refreshState();
   const remaining = PULL_MIN_SPIN - (Date.now() - startedAt);
   if (remaining > 0) await new Promise((resolve) => setTimeout(resolve, remaining));
@@ -3708,6 +3712,8 @@ function noteRow(note, options = {}) {
   ]);
   const extras = attachmentExtras(attachments);
   if (extras) body.append(extras);
+  const itemLinks = itemLinksBlock(note.links);
+  if (itemLinks) body.append(itemLinks);
   const copy = el('button', {
     type: 'button',
     class: 'row-copy',
@@ -5049,6 +5055,145 @@ function renderEditorLinks() {
   wrap.hidden = false;
 }
 
+function linkTypeName(type) {
+  return type === 'note' ? 'Note' : 'Doc';
+}
+
+function linkedTargetAvailable(link) {
+  if (!link || link.trashed) return null;
+  return link.target_type === 'note' ? noteById(link.target_id) : docById(link.target_id);
+}
+
+function openLinkedTarget(link) {
+  const target = linkedTargetAvailable(link);
+  if (!target) return;
+  if (link.target_type === 'note') openNoteEditor(link.target_id);
+  else openDocSheet(target);
+}
+
+function itemLinkLabel(link) {
+  const suffix = link.trashed ? ' (in Trash)' : '';
+  return `${linkTypeName(link.target_type)} · ${link.title}${suffix}`;
+}
+
+function itemLinksBlock(links) {
+  if (!Array.isArray(links) || !links.length) return null;
+  const wrap = el('div', { class: 'item-links' }, [
+    el('span', { class: 'item-links-label', text: 'Linked' }),
+  ]);
+  for (const link of links) {
+    const available = Boolean(linkedTargetAvailable(link));
+    wrap.append(el('button', {
+      type: 'button',
+      class: 'item-link',
+      text: itemLinkLabel(link),
+      disabled: link.trashed || !available,
+      title: link.trashed ? 'This item is in Trash' : (link.target_type === 'note' ? 'Open note' : 'Open doc'),
+      onclick: (event) => { event.stopPropagation(); openLinkedTarget(link); },
+    }));
+  }
+  return wrap;
+}
+
+function renderEditorItemLinks(sourceType) {
+  const wrap = sourceType === 'note' ? $('#n-item-links') : $('#e-item-links');
+  if (!wrap) return;
+  const links = sourceType === 'note' ? state.noteItemLinks : state.editorItemLinks;
+  wrap.replaceChildren();
+  if (!links.length) {
+    wrap.append(el('p', { class: 'notify-hint', text: 'Nothing linked yet.' }));
+    return;
+  }
+  for (const link of links) {
+    const row = el('div', { class: 'item-link-row' }, [
+      el('button', {
+        type: 'button',
+        class: 'item-link',
+        text: itemLinkLabel(link),
+        disabled: Boolean(link.trashed),
+        onclick: () => openLinkedTarget(link),
+      }),
+      el('button', {
+        type: 'button',
+        class: 'item-link-remove',
+        text: '×',
+        'aria-label': `Remove link to ${link.title}`,
+        onclick: () => {
+          if (sourceType === 'note') {
+            state.noteItemLinks = state.noteItemLinks.filter((item) => !(item.target_type === link.target_type && item.target_id === link.target_id));
+            renderEditorItemLinks('note');
+          } else {
+            state.editorItemLinks = state.editorItemLinks.filter((item) => !(item.target_type === link.target_type && item.target_id === link.target_id));
+            renderEditorItemLinks('reminder');
+          }
+        },
+      }),
+    ]);
+    wrap.append(row);
+  }
+}
+
+function openLinkPicker(sourceType) {
+  state.linkPickerSource = sourceType;
+  $('#link-picker-search').value = '';
+  $('#link-picker-search').placeholder = sourceType === 'note' ? 'Search docs' : 'Search notes and docs';
+  renderLinkPickerResults();
+  openSheet('#link-picker');
+  setTimeout(() => $('#link-picker-search').focus(), 60);
+}
+
+function renderLinkPickerResults() {
+  const sourceType = state.linkPickerSource;
+  const wrap = $('#link-picker-results');
+  if (!wrap || !sourceType) return;
+  const query = $('#link-picker-search').value.trim().toLowerCase();
+  const selected = sourceType === 'note' ? state.noteItemLinks : state.editorItemLinks;
+  const selectedKeys = new Set(selected.map((link) => `${link.target_type}:${link.target_id}`));
+  const candidates = [];
+  if (sourceType === 'reminder') {
+    for (const note of state.notes) candidates.push({ type: 'note', id: note.id, title: note.title });
+  }
+  for (const doc of state.docs) candidates.push({ type: 'doc', id: doc.id, title: doc.name });
+  const filtered = candidates.filter((item) => {
+    if (selectedKeys.has(`${item.type}:${item.id}`)) return false;
+    return !query || item.title.toLowerCase().includes(query);
+  });
+  wrap.replaceChildren();
+  if (!filtered.length) {
+    wrap.append(el('p', { class: 'notify-hint', text: query ? 'No matches.' : 'Nothing left to link.' }));
+    return;
+  }
+  for (const item of filtered) {
+    wrap.append(el('button', {
+      type: 'button',
+      class: 'link-picker-row',
+      onclick: () => {
+        const link = { target_type: item.type, target_id: item.id, title: item.title, trashed: false };
+        if (sourceType === 'note') {
+          state.noteItemLinks = [...state.noteItemLinks, link];
+          renderEditorItemLinks('note');
+        } else {
+          state.editorItemLinks = [...state.editorItemLinks, link];
+          renderEditorItemLinks('reminder');
+        }
+        closeSheet('#link-picker');
+      },
+    }, [
+      el('span', { class: 'link-picker-row-type', text: linkTypeName(item.type) }),
+      el('span', { text: item.title }),
+    ]));
+  }
+}
+
+async function saveItemLinks(sourceType, sourceId, links) {
+  const noteIds = links.filter((link) => link.target_type === 'note').map((link) => link.target_id);
+  const docIds = links.filter((link) => link.target_type === 'doc').map((link) => link.target_id);
+  await api('/api/links', {
+    method: 'PUT',
+    body: { source_type: sourceType, source_id: sourceId, note_ids: noteIds, doc_ids: docIds },
+  });
+}
+
 function autoGrowTitle() {
   const title = $('#e-title');
   title.style.height = 'auto';
@@ -5360,6 +5505,8 @@ function reminderRow(reminder, options = {}) {
   const files = attachmentsFor('reminder', reminder.id);
   const extras = attachmentExtras(files);
   if (extras) body.append(extras);
+  const itemLinks = itemLinksBlock(reminder.links);
+  if (itemLinks) body.append(itemLinks);
 
   if (!options.dayPeek) {
     // Contextual actions live on the row so due items never require opening
@@ -6455,6 +6602,7 @@ function openEditor(id) {
   state.editingId = reminder ? reminder.id : null;
   state.editorPendingFiles = [];
   state.editorRemovedFiles = [];
+  state.editorItemLinks = reminder && Array.isArray(reminder.links) ? reminder.links.map((link) => ({ ...link })) : [];
   pendingOccurrenceOps = [];
   pendingSnooze = null;
   resetEditorDelete();
@@ -6508,6 +6656,7 @@ function openEditor(id) {
   syncRecordRows();
   $('#e-delete').hidden = !editing;
   renderEditorLinks();
+  renderEditorItemLinks('reminder');
   syncSnoozeRow();
   $('#e-history').hidden = true;
   if (editing && rule.type !== 'none') loadHistory(reminder.id);
@@ -6605,6 +6754,7 @@ async function saveEditor(event) {
     if (!editingSeries) body.completed = $('#e-completed').checked;
   }
 
+  const startedAt = Date.now();
   setEditorSubmitting(true);
   let savedId = state.editingId;
   try {
@@ -6630,6 +6780,7 @@ async function saveEditor(event) {
       if (state.editorPendingFiles.length) {
         await uploadFiles('/api/reminders/' + savedId + '/attachments', state.editorPendingFiles);
       }
+      await saveItemLinks('reminder', savedId, state.editorItemLinks);
     }
     state.editorPendingFiles = [];
     state.editorRemovedFiles = [];
@@ -7238,6 +7389,7 @@ function openNoteEditor(id) {
   state.noteEditingId = note ? note.id : null;
   state.notePendingFiles = [];
   state.noteRemovedFiles = [];
+  state.noteItemLinks = note && Array.isArray(note.links) ? note.links.map((link) => ({ ...link })) : [];
   $('#note-heading').textContent = note ? 'Edit Note' : 'New Note';
   $('#n-title').value = note ? note.title : '';
   $('#n-body').innerHTML = note
@@ -7258,8 +7410,10 @@ function openNoteEditor(id) {
     title: note.title,
     body: normalizeNoteHtml($('#n-body').innerHTML),
     folder_id: note.folder_id,
+    linkKeys: (note.links || []).map((link) => `${link.target_type}:${link.target_id}`).sort().join(','),
   } : null;
   renderNoteAttachments();
+  renderEditorItemLinks('note');
   openSheet('#note-editor');
   requestAnimationFrame(() => {
     autoGrowNoteTitle();
@@ -7277,9 +7431,11 @@ function noteIsDirty() {
     return Boolean(title || $('#n-body').textContent.trim());
   }
   if (!state.noteSnapshot) return true;
+  const linkKeys = state.noteItemLinks.map((link) => `${link.target_type}:${link.target_id}`).sort().join(',');
   return title !== state.noteSnapshot.title
     || body !== state.noteSnapshot.body
-    || folderId !== state.noteSnapshot.folder_id;
+    || folderId !== state.noteSnapshot.folder_id
+    || linkKeys !== state.noteSnapshot.linkKeys;
 }
 
 function syncNoteFolderVisual() {
@@ -7340,6 +7496,7 @@ async function saveNote(event) {
     if (state.notePendingFiles.length) {
       await uploadFiles('/api/notes/' + id + '/attachments', state.notePendingFiles);
     }
+    await saveItemLinks('note', id, state.noteItemLinks);
     state.notePendingFiles = [];
     state.noteRemovedFiles = [];
     state.storage = null;
@@ -7478,6 +7635,7 @@ async function saveList(event, options = {}) {
     : (system
       ? { color: state.selectedColor }
       : { name, color: state.selectedColor, tenant: state.listTenant });
+  const startedAt = Date.now();
   let created = null;
   let result = null;
   listSaving = true;
@@ -8283,6 +8441,7 @@ async function saveAppSettings() {
   if (!serverChanged && !bodySizeChanged && !appearanceDirty && !sortChanged) return;
 
   const saveBtn = $('#settings-save');
+  const startedAt = Date.now();
   settingsSaving = true;
   saveBtn.textContent = 'Saving...';
   saveBtn.disabled = true;
@@ -9033,6 +9192,10 @@ $('#search-form').addEventListener('submit', (event) => {
   $('#search').blur();
 });
 
+$('#e-add-link').addEventListener('click', () => openLinkPicker('reminder'));
+$('#n-add-link').addEventListener('click', () => openLinkPicker('note'));
+$('#link-picker-search').addEventListener('input', renderLinkPickerResults);
+$('#link-picker-done').addEventListener('click', () => closeSheet('#link-picker'));
 $('#editor-form').addEventListener('submit', saveEditor);
 $('#note-form').addEventListener('submit', saveNote);
 $('#n-title').addEventListener('input', autoGrowNoteTitle);

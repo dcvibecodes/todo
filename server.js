@@ -522,6 +522,51 @@ async function systemFolderId(tenant) {
   return folder ? folder.id : null;
 }
 
+// Interlinkage is intentionally polymorphic: a source is a reminder or note,
+// and a target is a note or doc. Deleted targets stay linked so a restore
+// brings the relationship back; permanent purge removes both directions.
+async function linksFor(sourceType, ids, allowedTargets = null) {
+  const map = new Map();
+  if (!ids || !ids.length) return map;
+  const placeholders = ids.map(() => '?').join(',');
+  const rows = await db.all(`
+    SELECT il.source_id, il.target_type, il.target_id,
+      CASE il.target_type WHEN 'note' THEN n.title ELSE a.name END AS title,
+      CASE il.target_type WHEN 'note' THEN (n.deleted_at IS NOT NULL) ELSE (a.deleted_at IS NOT NULL) END AS trashed
+    FROM item_links il
+    LEFT JOIN notes n ON il.target_type = 'note' AND n.id = il.target_id
+    LEFT JOIN attachments a ON il.target_type = 'doc' AND a.id = il.target_id
+    WHERE il.source_type = ? AND il.source_id IN (${placeholders})
+    ORDER BY il.id ASC
+  `, [sourceType, ...ids]);
+  for (const row of rows) {
+    if (allowedTargets && !allowedTargets.has(row.target_type)) continue;
+    const list = map.get(row.source_id) || [];
+    list.push({
+      target_type: row.target_type,
+      target_id: row.target_id,
+      title: row.title || 'Deleted item',
+      trashed: Boolean(row.trashed),
+    });
+    map.set(row.source_id, list);
+  }
+  return map;
+}
+
+async function attachLinks(items, sourceType, allowedTargets = null) {
+  const map = await linksFor(sourceType, items.map((item) => item.id), allowedTargets);
+  for (const item of items) item.links = map.get(item.id) || [];
+  return items;
+}
+
+async function deleteLinksFor(type, id) {
+  const sourceType = type === 'reminders' ? 'reminder' : type === 'notes' ? 'note' : 'doc';
+  await db.run(
+    'DELETE FROM item_links WHERE (source_type = ? AND source_id = ?) OR (target_type = ? AND target_id = ?)',
+    [sourceType, id, sourceType, id]
+  );
+}
+
 async function hashUploadedFile(filePath) {
   return new Promise((resolve, reject) => {
     const hash = crypto.createHash('sha256');
@@ -807,6 +852,11 @@ async function purgeCompletedRetention(listId = null) {
         [reminder.id]
       );
     }
+    const expiredIds = expired.map((row) => row.id);
+    if (expiredIds.length) {
+      const holes = expiredIds.map(() => '?').join(',');
+      await db.run(`DELETE FROM item_links WHERE source_type = 'reminder' AND source_id IN (${holes})`, expiredIds);
+    }
     const result = await db.run(
       `DELETE FROM reminders
        WHERE list_id = ? AND deleted_at IS NULL AND completed = 1 AND completed_at IS NOT NULL AND completed_at < ?`,
@@ -836,6 +886,7 @@ async function purgeTrashItem(type, id) {
     );
     if (!file) return false;
     await removeStoredFiles([file]);
+    await deleteLinksFor('docs', id);
     await db.run("DELETE FROM attachments WHERE id = ? AND owner_type = 'doc'", [id]);
     return true;
   }
@@ -848,6 +899,7 @@ async function purgeTrashItem(type, id) {
     [ownerType, id]
   );
   await removeStoredFiles(files);
+  await deleteLinksFor(type, id);
   await db.run('DELETE FROM attachments WHERE owner_type = ? AND owner_id = ?', [ownerType, id]);
   await db.run(`DELETE FROM ${table} WHERE id = ?`, [id]);
   return true;
@@ -1880,6 +1932,9 @@ async function main() {
       if (route === '/docs') return tokenHas(token, 'docs:write');
       return false;
     }
+    if (method === 'PUT' && route === '/links') {
+      return tokenReminderWrite(token) || tokenHas(token, 'notes:write');
+    }
     if (method === 'PATCH') {
       if (REMINDER_ID.test(route)) return tokenReminderWrite(token);
       if (NOTE_ID.test(route)) return tokenHas(token, 'notes:write');
@@ -2887,6 +2942,7 @@ async function main() {
     let visibleNotes = notes;
     let visibleDocs = docs;
     let visibleAttachments = attachments;
+    let allowedTargets = null;
     if (req.token) {
       const tenants = new Set(tokenAuthorizedTenants(req.token));
       visibleLists = lists.filter((list) => tenants.has(list.tenant));
@@ -2896,7 +2952,15 @@ async function main() {
         file.owner_type === 'reminder'
         || (file.owner_type === 'note' && tenants.has('notes'))
       ));
+      allowedTargets = new Set([
+        ...(tenants.has('notes') ? ['note'] : []),
+        ...(tenants.has('docs') ? ['doc'] : []),
+      ]);
     }
+    await Promise.all([
+      attachLinks(reminders, 'reminder', allowedTargets),
+      attachLinks(visibleNotes, 'note', allowedTargets),
+    ]);
     res.json({
       lists: visibleLists,
       reminders,
@@ -3043,6 +3107,7 @@ async function main() {
       const reminders = await db.all(
         `SELECT ${REMINDER_COLUMNS} FROM reminders WHERE deleted_at IS NULL ORDER BY id ASC`
       );
+      await attachLinks(reminders, 'reminder');
       return res.json({ reminders, complete: true, store_epoch: storeEpoch });
     }
     const conditions = ['deleted_at IS NULL'];
@@ -3076,6 +3141,7 @@ async function main() {
       `SELECT ${REMINDER_COLUMNS} FROM reminders ${where} ORDER BY sort_order, id LIMIT ?`,
       [...params, limit]
     );
+    await attachLinks(reminders, 'reminder');
     res.json({ reminders, store_epoch: storeEpoch });
   });
 
@@ -3086,7 +3152,87 @@ async function main() {
       `SELECT ${REMINDER_COLUMNS} FROM reminders WHERE id = ? AND deleted_at IS NULL`, [id]
     );
     if (!reminder) return res.status(404).json({ error: 'Item not found' });
+    await attachLinks([reminder], 'reminder');
     res.json({ reminder });
+  });
+
+  // Replace a source item's links atomically. This is separate from item
+  // PATCH routes so links can be edited without touching item revisions.
+  app.put('/api/links', async (req, res) => {
+    const sourceType = req.body.source_type;
+    const sourceId = parseId(req.body.source_id);
+    if (!['reminder', 'note'].includes(sourceType) || !sourceId) {
+      return res.status(400).json({ error: 'Invalid link source' });
+    }
+    if (req.token) {
+      if (sourceType === 'reminder' && !tokenReminderWrite(req.token)) return denyToken(res);
+      if (sourceType === 'note' && !tokenHas(req.token, 'notes:write')) return denyToken(res);
+      if (Array.isArray(req.body.note_ids) && req.body.note_ids.length && !tokenHas(req.token, 'notes:read')) return denyToken(res);
+      if (Array.isArray(req.body.doc_ids) && req.body.doc_ids.length && !tokenHas(req.token, 'docs:read')) return denyToken(res);
+    }
+    const noteIds = Array.isArray(req.body.note_ids) ? req.body.note_ids.map(parseId).filter(Boolean) : [];
+    const docIds = Array.isArray(req.body.doc_ids) ? req.body.doc_ids.map(parseId).filter(Boolean) : [];
+    if (new Set(noteIds).size !== noteIds.length || new Set(docIds).size !== docIds.length) {
+      return res.status(400).json({ error: 'Duplicate linked item' });
+    }
+    if (noteIds.length + docIds.length > 100) {
+      return res.status(400).json({ error: 'Too many linked items' });
+    }
+    if (sourceType === 'note' && noteIds.length) {
+      return res.status(400).json({ error: 'Notes can only link to docs' });
+    }
+    const sourceTable = sourceType === 'reminder' ? 'reminders' : 'notes';
+    const source = await db.get(`SELECT id FROM ${sourceTable} WHERE id = ? AND deleted_at IS NULL`, [sourceId]);
+    if (!source) return res.status(404).json({ error: 'Source item not found' });
+    if (noteIds.length) {
+      const holes = noteIds.map(() => '?').join(',');
+      const found = await db.all(`SELECT id FROM notes WHERE id IN (${holes}) AND deleted_at IS NULL`, noteIds);
+      const missing = noteIds.filter((id) => !found.some((row) => row.id === id));
+      if (missing.length) {
+        const linked = await db.all(
+          `SELECT target_id FROM item_links WHERE source_type = ? AND source_id = ? AND target_type = 'note'
+             AND target_id IN (${missing.map(() => '?').join(',')})`,
+          [sourceType, sourceId, ...missing]
+        );
+        if (linked.length !== missing.length) return res.status(400).json({ error: 'One or more notes are unavailable' });
+      }
+    }
+    if (docIds.length) {
+      const holes = docIds.map(() => '?').join(',');
+      const found = await db.all(
+        `SELECT id FROM attachments WHERE id IN (${holes}) AND owner_type = 'doc' AND deleted_at IS NULL`,
+        docIds
+      );
+      const missing = docIds.filter((id) => !found.some((row) => row.id === id));
+      if (missing.length) {
+        const linked = await db.all(
+          `SELECT target_id FROM item_links WHERE source_type = ? AND source_id = ? AND target_type = 'doc'
+             AND target_id IN (${missing.map(() => '?').join(',')})`,
+          [sourceType, sourceId, ...missing]
+        );
+        if (linked.length !== missing.length) return res.status(400).json({ error: 'One or more docs are unavailable' });
+      }
+    }
+    const now = new Date().toISOString();
+    await db.transaction(async () => {
+      await db.run('DELETE FROM item_links WHERE source_type = ? AND source_id = ?', [sourceType, sourceId]);
+      for (const targetId of noteIds) {
+        await db.run(
+          `INSERT INTO item_links (source_type, source_id, target_type, target_id, created_at)
+           VALUES (?, ?, 'note', ?, ?)`,
+          [sourceType, sourceId, targetId, now]
+        );
+      }
+      for (const targetId of docIds) {
+        await db.run(
+          `INSERT INTO item_links (source_type, source_id, target_type, target_id, created_at)
+           VALUES (?, ?, 'doc', ?, ?)`,
+          [sourceType, sourceId, targetId, now]
+        );
+      }
+    });
+    const links = (await linksFor(sourceType, [sourceId])).get(sourceId) || [];
+    res.json({ ok: true, links });
   });
 
   app.post('/api/lists', async (req, res) => {
@@ -3293,6 +3439,10 @@ async function main() {
       ? (await db.get(`SELECT COUNT(*) AS count FROM notes n ${where}`, params)).count
       : notes.length;
     const attached = await noteAttachmentsMap(notes.map((note) => note.id));
+    await attachLinks(notes, 'note', req.token ? new Set([
+      ...(tokenHas(req.token, 'notes:read') ? ['note'] : []),
+      ...(tokenHas(req.token, 'docs:read') ? ['doc'] : []),
+    ]) : null);
     for (const note of notes) {
       note.attachments = attached.get(note.id) || [];
       note.attachment_count = note.attachments.length;
@@ -3317,6 +3467,10 @@ async function main() {
     note.attachments = (await noteAttachmentsMap([id])).get(id) || [];
     note.attachment_count = note.attachments.length;
     note.has_images = note.attachments.some((file) => file.is_image);
+    await attachLinks([note], 'note', req.token ? new Set([
+      ...(tokenHas(req.token, 'notes:read') ? ['note'] : []),
+      ...(tokenHas(req.token, 'docs:read') ? ['doc'] : []),
+    ]) : null);
     res.json({ note });
   });
 
