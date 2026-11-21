@@ -1442,7 +1442,10 @@ Authenticated routes require the `todo.sid` session cookie. State-changing reque
 - `GET /api/lists`, `GET /api/reminders` (also usable with a token)
 - `GET/POST /api/notes`, `GET/PATCH/DELETE /api/notes/:id`, `GET/POST /api/notes/:id/attachments`
 - `GET/POST /api/docs`, `GET/PATCH/DELETE /api/docs/:id`, `GET /api/files/:id`, `GET /api/files/:id/preview` (image-only)
-- Reminder token writes accept optional `linked_reminder_ids`, `linked_note_ids` and `linked_doc_ids` arrays. Targets are validated, then canonical inline tokens are appended to the reminder notes. Reminder reads return a structured `links` array (`target_type`, `target_id`, `title`, `trashed`). For an inline link at a specific position, write `[[ws:reminder:12]]`, `[[ws:note:12]]` or `[[ws:doc:12]]` directly in `notes`.
+- Reminder token writes accept optional `linked_reminder_ids`, `linked_note_ids` and `linked_doc_ids` arrays. Targets must exist (trashed targets are allowed), then canonical inline tokens are appended to the reminder notes. Reminder, note and doc reads return a structured `links` array (`target_type`, `target_id`, `title`, `trashed`) resolved from tokens or stored anchors. For an inline link at a specific position, write `[[ws:reminder:12]]`, `[[ws:note:12]]` or `[[ws:doc:12]]` directly in reminder notes or doc descriptions.
+- API note bodies accept `body_format: "text"` or `"html"`. A text body containing link tokens is converted to the stored HTML-anchor form and returned with `body_format: "html"`; HTML anchor bodies are validated and preserved.
+- `PUT` is accepted as an alias for `PATCH` on `/api/reminders/:id`, `/api/notes/:id` and `/api/docs/:id`. Write-profile tokens may update existing notes and docs without additional write scopes; creates still require `notes:write` / `docs:write`.
+- Writes reject references to targets that do not exist (`Linked target not found: type:id`). Existing-but-trashed targets are accepted and read back with `trashed: true`; links are never stripped when a target is trashed or deleted later.
 - `GET/POST /api/reminders/:id/attachments`, `DELETE /api/attachments/:id`
 - `GET /api/storage`
 - `GET /api/tokens`, `POST /api/tokens`, `POST /api/tokens/:id/permissions`, `POST /api/tokens/:id/profile`, `POST /api/tokens/:id/revoke`

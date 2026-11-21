@@ -1842,6 +1842,14 @@ async function main() {
     return res.status(401).json({ error: 'Not signed in' });
   });
 
+  // PUT is accepted as an alias for the existing PATCH update routes.
+  app.use('/api', (req, res, next) => {
+    if (req.method === 'PUT' && /^\/(reminders|notes|docs)\/\d+$/.test(req.path)) {
+      req.method = 'PATCH';
+    }
+    next();
+  });
+
   // Token scope enforcement by profile (default-deny). `read` is the
   // default for new tokens; `write` is opt-in; `legacy` keeps exactly the
   // capabilities tokens had before profiles existed. Deletes, list
@@ -1882,8 +1890,8 @@ async function main() {
     }
     if (method === 'PATCH') {
       if (REMINDER_ID.test(route)) return tokenReminderWrite(token);
-      if (NOTE_ID.test(route)) return tokenHas(token, 'notes:write');
-      if (DOC_ID.test(route)) return tokenHas(token, 'docs:write');
+      if (NOTE_ID.test(route)) return tokenHas(token, 'notes:write') || token.profile === 'write';
+      if (DOC_ID.test(route)) return tokenHas(token, 'docs:write') || token.profile === 'write';
       return false;
     }
     if (method === 'DELETE') {
@@ -2810,7 +2818,7 @@ async function main() {
     completed_at, urgent, repeat_rule, time_model, time_zone, snoozed_until,
     notified_at, last_push_at, push_count, sort_order, created_at, updated_at, revision`;
 
-  const INLINE_LINK_RE = /\[\[ws:(reminder|note|doc):(\d+)\]\]/g;
+  const INLINE_LINK_RE = /\[\[ws:(reminder|note|doc):(\d+)\]\]|data-ws-link=["'](reminder|note|doc):(\d+)["']/g;
   const LINK_FIELDS = {
     reminder: 'linked_reminder_ids',
     note: 'linked_note_ids',
@@ -2842,15 +2850,19 @@ async function main() {
     const holes = ids.map(() => '?').join(',');
     const rows = type === 'doc'
       ? await db.all(
-        `SELECT id FROM attachments WHERE id IN (${holes}) AND owner_type = 'doc' AND deleted_at IS NULL`,
+        `SELECT id FROM attachments WHERE id IN (${holes}) AND owner_type = 'doc'`,
         ids
       )
       : await db.all(
         `SELECT id FROM ${type === 'reminder' ? 'reminders' : 'notes'}
-         WHERE id IN (${holes}) AND deleted_at IS NULL`,
+         WHERE id IN (${holes})`,
         ids
       );
-    if (rows.length !== ids.length) throw linkWriteError('One or more linked items are unavailable');
+    if (rows.length !== ids.length) {
+      const found = new Set(rows.map((row) => row.id));
+      const missing = ids.find((id) => !found.has(id));
+      throw linkWriteError(`Linked target not found: ${type}:${missing}`);
+    }
   }
 
   function appendLinkedTokens(notes, body) {
@@ -2883,7 +2895,78 @@ async function main() {
     return notes === body.notes ? body : { ...body, notes };
   }
 
-  async function attachInlineLinks(reminders, token = null) {
+  const INLINE_TOKEN_RE = /\[\[ws:(reminder|note|doc):(\d+)\]\]/g;
+
+  function inlineRefsIn(value) {
+    const refs = [];
+    for (const match of String(value || '').matchAll(INLINE_LINK_RE)) {
+      const type = match[1] || match[3];
+      const id = Number(match[2] || match[4]);
+      if (type && id && !refs.some((ref) => ref.type === type && ref.id === id)) {
+        refs.push({ type, id });
+      }
+    }
+    return refs;
+  }
+
+  async function inlineTargetMap(refs) {
+    const map = new Map();
+    for (const type of ['reminder', 'note', 'doc']) {
+      const ids = refs.filter((ref) => ref.type === type).map((ref) => ref.id);
+      if (!ids.length) continue;
+      const holes = ids.map(() => '?').join(',');
+      const rows = type === 'doc'
+        ? await db.all(`SELECT id, name AS title, deleted_at FROM attachments WHERE id IN (${holes}) AND owner_type = 'doc'`, ids)
+        : await db.all(`SELECT id, title, deleted_at FROM ${type === 'reminder' ? 'reminders' : 'notes'} WHERE id IN (${holes})`, ids);
+      for (const row of rows) {
+        map.set(`${type}:${row.id}`, { title: row.title || null, trashed: Boolean(row.deleted_at) });
+      }
+    }
+    return map;
+  }
+
+  async function validateInlineText(value) {
+    const refs = inlineRefsIn(value);
+    if (!refs.length) return;
+    const targets = await inlineTargetMap(refs);
+    const missing = refs.find((ref) => !targets.has(`${ref.type}:${ref.id}`));
+    if (missing) throw linkWriteError(`Linked target not found: ${missing.type}:${missing.id}`);
+  }
+
+  function escapeInlineHtml(value) {
+    return String(value || '')
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#39;');
+  }
+
+  async function prepareNoteBodyForApi(raw, format) {
+    if (!['text', 'html'].includes(format)) throw linkWriteError('Invalid body_format');
+    const source = String(raw || '');
+    const refs = inlineRefsIn(source);
+    if (!refs.length) return { body: source, bodyFormat: format };
+    const targets = await inlineTargetMap(refs);
+    const missing = refs.find((ref) => !targets.has(`${ref.type}:${ref.id}`));
+    if (missing) throw linkWriteError(`Linked target not found: ${missing.type}:${missing.id}`);
+    const anchor = (type, id) => {
+      const target = targets.get(`${type}:${id}`);
+      return `<a href="#" class="ws-inline-link" data-ws-link="${type}:${id}" contenteditable="false">${escapeInlineHtml(target && target.title ? target.title : 'Unavailable item')}</a>`;
+    };
+    if (format === 'html') {
+      return {
+        body: source.replace(INLINE_TOKEN_RE, (token, type, id) => anchor(type, id)),
+        bodyFormat: 'html',
+      };
+    }
+    return {
+      body: escapeInlineHtml(source).replace(/\n/g, '<br>').replace(INLINE_TOKEN_RE, (token, type, id) => anchor(type, id)),
+      bodyFormat: 'html',
+    };
+  }
+
+  async function attachInlineLinks(items, token = null, field = 'notes') {
     const allowed = token
       ? new Set([
         'reminder',
@@ -2893,17 +2976,17 @@ async function main() {
       : new Set(['reminder', 'note', 'doc']);
     const refsByType = { reminder: new Set(), note: new Set(), doc: new Set() };
     const order = new Map();
-    for (const reminder of reminders) {
+    for (const item of items) {
       const refs = [];
-      for (const match of String(reminder.notes || '').matchAll(INLINE_LINK_RE)) {
-        const type = match[1];
-        const id = Number(match[2]);
+      for (const match of String(item[field] || '').matchAll(INLINE_LINK_RE)) {
+        const type = match[1] || match[3];
+        const id = Number(match[2] || match[4]);
         if (!allowed.has(type)) continue;
         const key = `${type}:${id}`;
         if (!order.has(key)) order.set(key, { type, id });
         refs.push(key);
       }
-      reminder._linkRefs = [...new Set(refs)];
+      item._linkRefs = [...new Set(refs)];
     }
     for (const ref of order.values()) refsByType[ref.type].add(ref.id);
     const targets = new Map();
@@ -2923,8 +3006,8 @@ async function main() {
         });
       }
     }
-    for (const reminder of reminders) {
-      reminder.links = (reminder._linkRefs || []).map((key) => (
+    for (const item of items) {
+      item.links = (item._linkRefs || []).map((key) => (
         targets.get(key) || {
           target_type: key.split(':')[0],
           target_id: Number(key.split(':')[1]),
@@ -2932,9 +3015,9 @@ async function main() {
           trashed: true,
         }
       ));
-      delete reminder._linkRefs;
+      delete item._linkRefs;
     }
-    return reminders;
+    return items;
   }
 
   // Merge pending occurrence-only edits: an 'exception' row for the current
@@ -3030,6 +3113,8 @@ async function main() {
       ));
     }
     await attachInlineLinks(reminders, req.token);
+    await attachInlineLinks(visibleNotes, req.token, 'body');
+    await attachInlineLinks(visibleDocs, req.token, 'description');
     res.json({
       lists: visibleLists,
       reminders,
@@ -3434,6 +3519,7 @@ async function main() {
       note.attachment_count = note.attachments.length;
       note.has_images = note.attachments.some((file) => file.is_image);
     }
+    await attachInlineLinks(notes, req.token, 'body');
     res.json({
       notes,
       complete: !hasMore,
@@ -3453,6 +3539,7 @@ async function main() {
     note.attachments = (await noteAttachmentsMap([id])).get(id) || [];
     note.attachment_count = note.attachments.length;
     note.has_images = note.attachments.some((file) => file.is_image);
+    await attachInlineLinks([note], req.token, 'body');
     res.json({ note });
   });
 
@@ -3471,8 +3558,11 @@ async function main() {
           if (epochError) return epochError;
           const title = text(req.body.title, 500);
           if (!title) return { status: 400, body: { error: 'Note title is required' } };
-          const body = typeof req.body.body === 'string' ? req.body.body.slice(0, NOTE_BODY_MAX) : '';
-          const bodyFormat = req.body.body_format === 'html' ? 'html' : 'text';
+          const sourceBody = typeof req.body.body === 'string' ? req.body.body.slice(0, NOTE_BODY_MAX) : '';
+          const sourceFormat = req.body.body_format === 'html' ? 'html' : 'text';
+          const prepared = await prepareNoteBodyForApi(sourceBody, sourceFormat);
+          const body = prepared.body;
+          const bodyFormat = prepared.bodyFormat;
           const folderId = req.body.folder_id === undefined || req.body.folder_id === null
             ? await systemFolderId('notes')
             : req.body.folder_id;
@@ -3484,14 +3574,23 @@ async function main() {
             [folder.id, title, body, bodyFormat, now, now]
           );
           const note = await loadNoteRow(result.lastID);
+          if (note) await attachInlineLinks([note], req.token, 'body');
           return { status: 201, body: { id: result.lastID, note } };
         },
       });
     }
     const title = text(req.body.title, 500);
     if (!title) return res.status(400).json({ error: 'Note title is required' });
-    const body = typeof req.body.body === 'string' ? req.body.body.slice(0, NOTE_BODY_MAX) : '';
-    const bodyFormat = req.body.body_format === 'html' ? 'html' : 'text';
+    const sourceBody = typeof req.body.body === 'string' ? req.body.body.slice(0, NOTE_BODY_MAX) : '';
+    const sourceFormat = req.body.body_format === 'html' ? 'html' : 'text';
+    let prepared;
+    try {
+      prepared = await prepareNoteBodyForApi(sourceBody, sourceFormat);
+    } catch (err) {
+      return res.status(err.status || 400).json({ error: err.message });
+    }
+    const body = prepared.body;
+    const bodyFormat = prepared.bodyFormat;
     const folderId = req.body.folder_id === undefined || req.body.folder_id === null
       ? await systemFolderId('notes')
       : parseId(req.body.folder_id);
@@ -3534,10 +3633,15 @@ async function main() {
             params.push(title);
           }
           if (req.body.body !== undefined) {
+            const sourceFormat = req.body.body_format !== undefined
+              ? req.body.body_format
+              : current.body_format;
+            const prepared = await prepareNoteBodyForApi(req.body.body.slice(0, NOTE_BODY_MAX), sourceFormat);
             fields.push('body = ?');
-            params.push(req.body.body.slice(0, NOTE_BODY_MAX));
-          }
-          if (req.body.body_format !== undefined) {
+            params.push(prepared.body);
+            fields.push('body_format = ?');
+            params.push(prepared.bodyFormat);
+          } else if (req.body.body_format !== undefined) {
             fields.push('body_format = ?');
             params.push(req.body.body_format);
           }
@@ -3557,11 +3661,13 @@ async function main() {
           fields.push('revision = revision + 1');
           params.push(id);
           await db.run(`UPDATE notes SET ${fields.join(', ')} WHERE id = ?`, params);
-          return { status: 200, body: { ok: true, note: await loadNoteRow(id) } };
+          const note = await loadNoteRow(id);
+          if (note) await attachInlineLinks([note], req.token, 'body');
+          return { status: 200, body: { ok: true, note } };
         },
       });
     }
-    const note = await db.get('SELECT id FROM notes WHERE id = ? AND deleted_at IS NULL', [id]);
+    const note = await db.get('SELECT id, body_format FROM notes WHERE id = ? AND deleted_at IS NULL', [id]);
     if (!note) return res.status(404).json({ error: 'Note not found' });
     const fields = [];
     const params = [];
@@ -3572,10 +3678,23 @@ async function main() {
       params.push(title);
     }
     if (req.body.body !== undefined) {
+      const sourceFormat = req.body.body_format !== undefined
+        ? req.body.body_format
+        : note.body_format;
+      let prepared;
+      try {
+        prepared = await prepareNoteBodyForApi(
+          typeof req.body.body === 'string' ? req.body.body.slice(0, NOTE_BODY_MAX) : '',
+          sourceFormat
+        );
+      } catch (err) {
+        return res.status(err.status || 400).json({ error: err.message });
+      }
       fields.push('body = ?');
-      params.push(typeof req.body.body === 'string' ? req.body.body.slice(0, NOTE_BODY_MAX) : '');
-    }
-    if (req.body.body_format !== undefined) {
+      params.push(prepared.body);
+      fields.push('body_format = ?');
+      params.push(prepared.bodyFormat);
+    } else if (req.body.body_format !== undefined) {
       if (!['text', 'html'].includes(req.body.body_format)) {
         return res.status(400).json({ error: 'Invalid body_format' });
       }
@@ -3906,6 +4025,7 @@ async function main() {
     const total = limit
       ? (await db.get(`SELECT COUNT(*) AS count FROM attachments a WHERE ${where}`, params)).count
       : docs.length;
+    await attachInlineLinks(docs, req.token, 'description');
     res.json({
       docs,
       complete: !hasMore,
@@ -3925,6 +4045,7 @@ async function main() {
        FROM attachments WHERE id = ? AND owner_type = 'doc' AND deleted_at IS NULL`, [id]
     );
     if (!doc) return res.status(404).json({ error: 'File not found' });
+    await attachInlineLinks([doc], req.token, 'description');
     res.json({ doc });
   });
 
@@ -4132,6 +4253,11 @@ async function main() {
       if (typeof req.body.description !== 'string') return res.status(400).json({ error: 'Description must be text' });
       nextDescription = req.body.description.trim();
       if (nextDescription.length > 1000) return res.status(400).json({ error: 'Description must be 1000 characters or fewer' });
+      try {
+        await validateInlineText(nextDescription);
+      } catch (err) {
+        return res.status(err.status || 400).json({ error: err.message });
+      }
     }
     if (hasName) {
       const requested = typeof req.body.name === 'string' ? req.body.name.trim() : '';
@@ -4594,6 +4720,7 @@ async function main() {
     if (!req.token || profile === 'legacy') {
       try {
         const createBody = await applyLinkedFields(req.body);
+        await validateInlineText(createBody.notes);
         const prep = await prepareReminderCreate(createBody, { strict: false, parity: false, isToken: Boolean(req.token) });
         // Duplicate-safe creation: a retried request carrying the same
         // idempotency key returns the original reminder instead of a copy.
@@ -4636,6 +4763,7 @@ async function main() {
       fingerprint,
       execute: async () => {
         const createBody = await applyLinkedFields(req.body);
+        await validateInlineText(createBody.notes);
         const prep = await prepareReminderCreate(createBody, { strict: true, parity: true, isToken: true });
         const now = new Date().toISOString();
         const createdId = await insertReminderRow(prep, createBody, now);
@@ -4776,6 +4904,13 @@ async function main() {
         if (hasLinkedFields(body)) {
           try {
             nextNotes = (await applyLinkedFields(body, current.notes)).notes;
+          } catch (err) {
+            return { status: err.status || 400, body: { error: err.message } };
+          }
+        }
+        if (nextNotes !== undefined) {
+          try {
+            await validateInlineText(nextNotes);
           } catch (err) {
             return { status: err.status || 400, body: { error: err.message } };
           }
