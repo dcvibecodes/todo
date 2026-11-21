@@ -4452,7 +4452,7 @@ function attachManualOrderControls(row, kind, id, label) {
     'aria-label': `Move ${label} to the bottom`,
     html: ICON('chevrons', 'ic'),
   });
-  const controls = el('div', { class: 'manual-order-controls' }, [up, down, top, bottom]);
+  const controls = el('div', { class: 'manual-order-controls' }, [top, up, down, bottom]);
   content.prepend(controls);
   up.addEventListener('click', (event) => { event.stopPropagation(); moveManualRow(row, kind, -1); });
   down.addEventListener('click', (event) => { event.stopPropagation(); moveManualRow(row, kind, 1); });
