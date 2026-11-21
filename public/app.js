@@ -29,6 +29,7 @@ const state = {
   tenant: ['reminders', 'notes', 'docs'].includes(localStorage.getItem('todo.tenant'))
     ? localStorage.getItem('todo.tenant') : 'reminders',
   settings: {},
+  storeEpoch: null,
   view: 'today',
   search: '',
   searchOpen: [],
@@ -898,6 +899,7 @@ async function loadState() {
   state.attachments = data.attachments || [];
   applyDocsFormatUI();
   state.settings = data.settings || {};
+  state.storeEpoch = data.store_epoch || null;
   applyCardBodySize(storedCardBodySize() ?? state.settings.card_body_size);
   await syncListProgressWithServer();
   await syncSortWithServer();
@@ -1677,6 +1679,34 @@ function tenantForView(view) {
   return 'reminders';
 }
 
+function manualListForView(view) {
+  if (state.search) return null;
+  if (typeof view === 'number') return state.showCompleted ? null : listById(view);
+  const folderId = viewFolderId(view);
+  if (!folderId) return null;
+  const list = listById(folderId);
+  if (!list) return null;
+  return tenantOf(list) === 'notes' || tenantOf(list) === 'docs' ? list : null;
+}
+
+function manualModeForView(view) {
+  const list = manualListForView(view);
+  return Boolean(list && list.manual_order);
+}
+
+function manualTenantForView(view) {
+  if (typeof view === 'number') return 'reminders';
+  return tenantForView(view);
+}
+
+function sortManual(items) {
+  return [...items].sort((a, b) => {
+    const av = a.manual_position === null || a.manual_position === undefined ? -Infinity : a.manual_position;
+    const bv = b.manual_position === null || b.manual_position === undefined ? -Infinity : b.manual_position;
+    return av === bv ? (a.id - b.id) : (av - bv);
+  });
+}
+
 function effectiveSort(view) {
   const key = viewSortKey(view);
   const override = key ? state.sortOverrides[key] : null;
@@ -1794,6 +1824,7 @@ function viewItems() {
   } else if (typeof view === 'number') {
     items = state.reminders
       .filter((reminder) => reminder.list_id === view && !reminder.completed);
+    if (manualModeForView(view)) return sortManual(items);
   } else {
     items = [];
   }
@@ -3215,6 +3246,68 @@ function emptySearchState() {
   ]);
 }
 
+function syncManualOrderToggle(view = state.view) {
+  const button = $('#sort-manual');
+  const sortBar = $('#sort-bar');
+  const list = manualListForView(view);
+  if (!button) return;
+  const show = Boolean(list) && !state.search && view !== 'home';
+  button.hidden = !show;
+  button.setAttribute('aria-pressed', list && list.manual_order ? 'true' : 'false');
+  button.disabled = !show;
+  button.title = list && list.manual_order ? 'Use automatic sorting' : 'Use manual item order';
+  if (sortBar) sortBar.classList.toggle('showing-manual', Boolean(show && list && list.manual_order));
+}
+
+function manualItemsForView(view) {
+  if (typeof view === 'number') {
+    return state.reminders.filter((item) => item.list_id === view && !item.completed);
+  }
+  return view.startsWith('notes')
+    ? state.notes.filter((item) => item.folder_id === viewFolderId(view))
+    : state.docs.filter((item) => item.folder_id === viewFolderId(view));
+}
+
+function manualIdsForView(view) {
+  const list = manualListForView(view);
+  if (!list) return [];
+  const items = manualItemsForView(view);
+  let ordered;
+  if (list.manual_order_revision > 0) {
+    ordered = sortManual(items);
+  } else if (typeof view === 'number') {
+    ordered = sortItems(items, effectiveSort(view));
+  } else if (view.startsWith('notes')) {
+    ordered = sortNotes(items, effectiveSort(view));
+  } else {
+    ordered = sortDocs(items, effectiveSort(view));
+  }
+  return ordered.map((item) => item.id);
+}
+
+async function setManualOrder(enabled) {
+  const view = state.view;
+  const list = manualListForView(view);
+  const button = $('#sort-manual');
+  if (!list || !state.storeEpoch || !button) return;
+  const body = {
+    enabled,
+    base_revision: Number(list.manual_order_revision) || 0,
+    base_epoch: state.storeEpoch,
+  };
+  if (enabled) body.ids = manualIdsForView(view);
+  button.disabled = true;
+  try {
+    await api(`/api/lists/${list.id}/manual-order`, { method: 'PUT', body });
+    await loadState();
+    requestRowAnimation();
+    render();
+  } catch (err) {
+    toast(err.message || 'Could not save manual order');
+    button.disabled = false;
+  }
+}
+
 function syncCompletedFilter() {
   const view = state.view;
   const show = typeof view === 'number' && !state.search;
@@ -3278,6 +3371,7 @@ function renderMain() {
   // the list has nothing completed. Hidden during search and on Home.
   const isList = typeof view === 'number';
   syncCompletedFilter();
+  syncManualOrderToggle(view);
 
   if (state.search) {
     renderSearchResults(content);
@@ -3490,7 +3584,10 @@ function renderNotesView(content, view) {
   const title = folder ? folder.name : 'All';
   $('#view-title').textContent = title;
   document.title = `Workspace — ${title}`;
-  const notes = sortNotes(notesForView(view), effectiveSort(view));
+  const manual = Boolean(folder && folder.manual_order);
+  const notes = manual
+    ? sortManual(notesForView(view))
+    : sortNotes(notesForView(view), effectiveSort(view));
   setPulseText($('#view-count'), notes.length ? String(notes.length) : '');
   if (folder) {
     $('#view-menu').hidden = false;
@@ -3502,6 +3599,12 @@ function renderNotesView(content, view) {
       el('h3', { class: 'empty-heading', text: 'No notes yet' }),
       el('p', { text: 'Notes live in folders and can carry file attachments.' }),
     ]));
+    return;
+  }
+  if (manual) {
+    const group = el('div', { class: 'reminder-group' });
+    for (const note of notes) group.append(noteRow(note, { showFolder: !folder }));
+    content.append(group);
     return;
   }
   startCardBatch({
@@ -3519,7 +3622,10 @@ function renderDocsView(content, view) {
   const title = folder ? folder.name : 'All';
   $('#view-title').textContent = title;
   document.title = `Workspace — ${title}`;
-  const docs = sortDocs(docsForView(view), effectiveSort(view));
+  const manual = Boolean(folder && folder.manual_order);
+  const docs = manual
+    ? sortManual(docsForView(view))
+    : sortDocs(docsForView(view), effectiveSort(view));
   setPulseText($('#view-count'), docs.length ? String(docs.length) : '');
   if (folder) {
     $('#view-menu').hidden = false;
@@ -3532,6 +3638,12 @@ function renderDocsView(content, view) {
       el('p', { class: 'docs-format-list', text: docsFormatMessage() }),
       el('p', { class: 'notify-hint', text: 'New images and PDFs may be stored as smaller optimized copies; downloads return the optimized bytes. Text files are compressed losslessly. HEIC/HEIF photos are converted to JPG. Change this in Settings → Uploads.' }),
     ]));
+    return;
+  }
+  if (manual) {
+    const group = el('div', { class: 'reminder-group' });
+    for (const doc of docs) group.append(docRow(doc, { showFolder: !folder }));
+    content.append(group);
     return;
   }
   startCardBatch({
@@ -3878,6 +3990,7 @@ function noteRow(note, options = {}) {
   });
   row.append(el('span', { class: 'selection-check', 'aria-hidden': 'true', html: ICON('check', 'ic') }));
   attachSelectionLongPress(row, 'notes', note.id);
+  attachManualOrderControls(row, 'note', note.id, note.title);
   return row;
 }
 
@@ -3952,7 +4065,8 @@ function docRow(doc, options = {}) {
   });
   row.append(el('span', { class: 'selection-check', 'aria-hidden': 'true', html: ICON('check', 'ic') }));
   attachSelectionLongPress(row, 'docs', doc.id);
-  makeDocDraggable(row, doc);
+  if (!manualModeForView(state.view)) makeDocDraggable(row, doc);
+  attachManualOrderControls(row, 'doc', doc.id, doc.name);
   return row;
 }
 
@@ -4196,6 +4310,146 @@ async function saveDoc(event) {
     button.textContent = 'Save';
     syncDocSave();
   }
+}
+
+function manualRowsFor(row) {
+  if (!row || !row.parentElement) return [];
+  return Array.from(row.parentElement.children).filter((node) => node.classList && node.classList.contains('reminder'));
+}
+
+function manualRowIds(row, kind) {
+  const key = kind === 'reminder' ? 'reminderId' : kind === 'note' ? 'noteId' : 'docId';
+  return manualRowsFor(row).map((node) => Number(node.dataset[key])).filter(Boolean);
+}
+
+function updateManualMoveButtons(row) {
+  const rows = manualRowsFor(row);
+  const index = rows.indexOf(row);
+  const up = row.querySelector('.manual-order-move[data-dir="up"]');
+  const down = row.querySelector('.manual-order-move[data-dir="down"]');
+  if (up) up.disabled = index <= 0;
+  if (down) down.disabled = index < 0 || index >= rows.length - 1;
+}
+
+let manualOrderSaving = false;
+
+async function persistManualRowOrder(kind, row) {
+  if (manualOrderSaving) return;
+  const list = manualListForView(state.view);
+  if (!list || !state.storeEpoch) return;
+  const ids = manualRowIds(row, kind);
+  if (!ids.length) return;
+  manualOrderSaving = true;
+  try {
+    await api(`/api/lists/${list.id}/manual-order`, {
+      method: 'PUT',
+      body: {
+        enabled: true,
+        ids,
+        base_revision: Number(list.manual_order_revision) || 0,
+        base_epoch: state.storeEpoch,
+      },
+    });
+    await loadState();
+    requestRowAnimation();
+    render();
+  } catch (err) {
+    toast(err.message || 'Could not save item order');
+    await loadState();
+    render();
+  } finally {
+    manualOrderSaving = false;
+  }
+}
+
+function moveManualRow(row, kind, direction) {
+  if (manualOrderSaving) return;
+  const rows = manualRowsFor(row);
+  const index = rows.indexOf(row);
+  const target = rows[index + direction];
+  if (!target) return;
+  if (direction < 0) row.parentElement.insertBefore(row, target);
+  else target.after(row);
+  persistManualRowOrder(kind, row);
+}
+
+function startManualDrag(event, row, kind) {
+  if (manualOrderSaving || event.button > 0) return;
+  event.preventDefault();
+  event.stopPropagation();
+  const rows = manualRowsFor(row);
+  if (rows.length < 2) return;
+  const startY = event.clientY;
+  let moved = false;
+  row.classList.add('item-dragging');
+  document.body.classList.add('item-drag-active');
+  try { event.currentTarget.setPointerCapture(event.pointerId); } catch { /* ignore */ }
+  const onMove = (moveEvent) => {
+    if (moveEvent.pointerId !== event.pointerId) return;
+    if (Math.abs(moveEvent.clientY - startY) < 5) return;
+    moved = true;
+    const siblings = manualRowsFor(row).filter((node) => node !== row);
+    let placed = false;
+    for (const sibling of siblings) {
+      const rect = sibling.getBoundingClientRect();
+      if (moveEvent.clientY < rect.top + rect.height / 2) {
+        sibling.before(row);
+        placed = true;
+        break;
+      }
+    }
+    if (!placed) row.parentElement.append(row);
+  };
+  const finish = (upEvent) => {
+    if (upEvent && upEvent.pointerId !== event.pointerId) return;
+    window.removeEventListener('pointermove', onMove);
+    window.removeEventListener('pointerup', finish);
+    window.removeEventListener('pointercancel', finish);
+    row.classList.remove('item-dragging');
+    document.body.classList.remove('item-drag-active');
+    if (moved) persistManualRowOrder(kind, row);
+  };
+  window.addEventListener('pointermove', onMove, { passive: false });
+  window.addEventListener('pointerup', finish);
+  window.addEventListener('pointercancel', finish);
+}
+
+function attachManualOrderControls(row, kind, id, label) {
+  if (!manualModeForView(state.view)) return;
+  const content = row.querySelector('.swipe-content');
+  if (!content) return;
+  const grip = el('button', {
+    type: 'button',
+    class: 'manual-order-grip',
+    title: 'Drag to reorder',
+    'aria-label': `Reorder ${label}: drag, or press arrow keys`,
+    html: ICON('grip', 'ic'),
+  });
+  const up = el('button', {
+    type: 'button',
+    class: 'manual-order-move',
+    'data-dir': 'up',
+    'aria-label': `Move ${label} up`,
+    html: ICON('chevron', 'ic'),
+  });
+  const down = el('button', {
+    type: 'button',
+    class: 'manual-order-move',
+    'data-dir': 'down',
+    'aria-label': `Move ${label} down`,
+    html: ICON('chevron', 'ic'),
+  });
+  const controls = el('div', { class: 'manual-order-controls' }, [grip, up, down]);
+  content.prepend(controls);
+  grip.addEventListener('pointerdown', (event) => startManualDrag(event, row, kind));
+  grip.addEventListener('click', (event) => { event.preventDefault(); event.stopPropagation(); });
+  grip.addEventListener('keydown', (event) => {
+    if (event.key === 'ArrowUp') { event.preventDefault(); moveManualRow(row, kind, -1); }
+    if (event.key === 'ArrowDown') { event.preventDefault(); moveManualRow(row, kind, 1); }
+  });
+  up.addEventListener('click', (event) => { event.stopPropagation(); moveManualRow(row, kind, -1); });
+  down.addEventListener('click', (event) => { event.stopPropagation(); moveManualRow(row, kind, 1); });
+  requestAnimationFrame(() => updateManualMoveButtons(row));
 }
 
 function swipeRow({ class: extraClass, color, data, label, onDelete, content, icon, onClick }) {
@@ -5666,6 +5920,7 @@ function reminderRow(reminder, options = {}) {
   }, [background, content]);
   row.append(el('span', { class: 'selection-check', 'aria-hidden': 'true', html: ICON('check', 'ic') }));
   attachSelectionLongPress(row, 'reminders', reminder.id);
+  attachManualOrderControls(row, 'reminder', reminder.id, reminder.title);
   return row;
 }
 
@@ -9747,6 +10002,12 @@ $('#sort-dir').addEventListener('change', (event) => {
 });
 // Toggle the folder between its open and completed lists.
 const folderOpenScroll = new Map();
+
+$('#sort-manual').addEventListener('click', () => {
+  const list = manualListForView(state.view);
+  if (!list) return;
+  setManualOrder(!list.manual_order);
+});
 
 $('#sort-completed').addEventListener('click', (event) => {
   if (typeof state.view !== 'number' || event.currentTarget.disabled) return;

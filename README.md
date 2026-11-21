@@ -1436,6 +1436,7 @@ Authenticated routes require the `todo.sid` session cookie. State-changing reque
 - `POST /api/settings/sort` (synced per-view sorting; one intent per call - single view, apply-all, or first-device seed - merged server-side)
 - `POST` / `PATCH` / `DELETE /api/lists[/:id]`
 - `PUT /api/lists/order`
+- `PUT /api/lists/:id/manual-order` (`{ enabled, ids, base_revision, base_epoch }`)
 - `POST /api/reminders`, `PATCH` / `DELETE /api/reminders/:id`
 - `POST /api/reminders/:id/skip|unskip|snooze|reschedule`, `GET /api/reminders/:id/occurrences`
 - `POST /api/parse` (natural-language title parsing)

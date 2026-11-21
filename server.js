@@ -1888,6 +1888,10 @@ async function main() {
       if (route === '/docs') return tokenHas(token, 'docs:write');
       return false;
     }
+    if (method === 'PUT') {
+      if (/^\/lists\/\d+\/manual-order$/.test(route)) return true;
+      return false;
+    }
     if (method === 'PATCH') {
       if (REMINDER_ID.test(route)) return tokenReminderWrite(token);
       if (NOTE_ID.test(route)) return tokenHas(token, 'notes:write') || token.profile === 'write';
@@ -2323,15 +2327,15 @@ async function main() {
   app.get('/api/export', async (req, res) => {
     if (req.token) return denyToken(res);
     const settings = await getSettings();
-    const lists = await db.all('SELECT id, name, color, sort_order, completed_retention, tenant, created_at FROM lists ORDER BY tenant, sort_order, id');
+    const lists = await db.all('SELECT id, name, color, sort_order, completed_retention, manual_order, manual_order_revision, tenant, created_at FROM lists ORDER BY tenant, sort_order, id');
     const reminders = await db.all(`SELECT id, list_id, title, notes, due_at, has_time, completed,
       completed_at, urgent, repeat_rule, time_model, time_zone, snoozed_until,
-      sort_order, created_at, updated_at, revision FROM reminders WHERE deleted_at IS NULL ORDER BY id`);
+      sort_order, manual_position, created_at, updated_at, revision FROM reminders WHERE deleted_at IS NULL ORDER BY id`);
     const occurrences = await db.all(
       `SELECT reminder_id, occurrence_at, status, title, notes, list_id, urgent,
          completed_at, created_at FROM reminder_occurrences ORDER BY id`
     );
-    const notes = await db.all('SELECT id, folder_id, title, body, body_format, created_at, updated_at FROM notes WHERE deleted_at IS NULL ORDER BY id');
+    const notes = await db.all('SELECT id, folder_id, title, body, body_format, manual_position, created_at, updated_at FROM notes WHERE deleted_at IS NULL ORDER BY id');
     res.json({
       app: 'todo',
       format: 1,
@@ -2372,12 +2376,14 @@ async function main() {
       try {
         const tenant = validTenant(list.tenant, 'reminders');
         await db.run(
-          'INSERT INTO lists (id, name, color, sort_order, completed_retention, tenant, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          'INSERT INTO lists (id, name, color, sort_order, completed_retention, manual_order, manual_order_revision, tenant, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
           [list.id, String(list.name).slice(0, 120), validColor(list.color),
             Number.isInteger(list.sort_order) ? list.sort_order : 0,
             tenant === 'reminders'
               ? (validCompletedRetention(list.completed_retention) || 'forever')
               : 'forever',
+            list.manual_order ? 1 : 0,
+            Number.isInteger(list.manual_order_revision) ? list.manual_order_revision : 0,
             tenant,
             typeof list.created_at === 'string' ? list.created_at : new Date().toISOString()]
         );
@@ -2409,8 +2415,8 @@ async function main() {
           INSERT INTO reminders
             (id, list_id, title, notes, due_at, has_time, completed, completed_at, urgent,
              repeat_rule, time_model, time_zone, snoozed_until, notified_at, last_push_at, push_count,
-             sort_order, created_at, updated_at, revision)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)
+             sort_order, manual_position, created_at, updated_at, revision)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)
         `, [
           reminder.id, reminder.list_id, String(reminder.title).slice(0, 500),
           String(reminder.notes || '').slice(0, NOTES_MAX),
@@ -2422,6 +2428,7 @@ async function main() {
           isoOrNull(reminder.notified_at),
           null,
           Number.isInteger(reminder.sort_order) ? reminder.sort_order : 0,
+          Number.isInteger(reminder.manual_position) ? reminder.manual_position : null,
           typeof reminder.created_at === 'string' ? reminder.created_at : new Date().toISOString(),
           typeof reminder.updated_at === 'string' ? reminder.updated_at : new Date().toISOString(),
           Number.isInteger(reminder.revision) && reminder.revision >= 0 ? reminder.revision : 0,
@@ -2476,10 +2483,11 @@ async function main() {
       }
       try {
         await db.run(
-          'INSERT INTO notes (id, folder_id, title, body, body_format, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          'INSERT INTO notes (id, folder_id, title, body, body_format, manual_position, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
           [note.id, note.folder_id, String(note.title).slice(0, 500),
             String(note.body || '').slice(0, NOTE_BODY_MAX),
             note.body_format === 'html' ? 'html' : 'text',
+            Number.isInteger(note.manual_position) ? note.manual_position : null,
             typeof note.created_at === 'string' ? note.created_at : new Date().toISOString(),
             typeof note.updated_at === 'string' ? note.updated_at : new Date().toISOString()]
         );
@@ -2816,7 +2824,7 @@ async function main() {
 
   const REMINDER_COLUMNS = `id, list_id, title, notes, due_at, has_time, completed,
     completed_at, urgent, repeat_rule, time_model, time_zone, snoozed_until,
-    notified_at, last_push_at, push_count, sort_order, created_at, updated_at, revision`;
+    notified_at, last_push_at, push_count, sort_order, manual_position, created_at, updated_at, revision`;
 
   const INLINE_LINK_RE = /\[\[ws:(reminder|note|doc):(\d+)\]\]|data-ws-link=["'](reminder|note|doc):(\d+)["']/g;
   const LINK_FIELDS = {
@@ -3050,7 +3058,7 @@ async function main() {
     const thirtyDayCutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
     const cutoffs = retentionCutoffs();
     const lists = await db.all(`
-      SELECT l.id, l.name, l.color, l.sort_order, l.completed_retention, l.created_at, l.is_system, l.tenant,
+      SELECT l.id, l.name, l.color, l.sort_order, l.completed_retention, l.manual_order, l.manual_order_revision, l.created_at, l.is_system, l.tenant,
         CASE l.tenant
           WHEN 'notes' THEN (SELECT COUNT(*) FROM notes n WHERE n.folder_id = l.id AND n.deleted_at IS NULL)
           WHEN 'docs' THEN (SELECT COUNT(*) FROM attachments a WHERE a.folder_id = l.id AND a.owner_type = 'doc' AND a.deleted_at IS NULL)
@@ -3064,14 +3072,14 @@ async function main() {
       FROM lists l ORDER BY l.tenant, l.sort_order, l.id
     `, [thirtyDayCutoff]);
     const notes = await db.all(`
-      SELECT n.id, n.folder_id, n.title, n.body, n.body_format, n.revision, n.created_at, n.updated_at,
+      SELECT n.id, n.folder_id, n.title, n.body, n.body_format, n.revision, n.manual_position, n.created_at, n.updated_at,
              l.name AS folder_name, l.color AS folder_color
       FROM notes n JOIN lists l ON l.id = n.folder_id
       WHERE n.deleted_at IS NULL
       ORDER BY n.updated_at DESC, n.id DESC
     `);
     const docs = await db.all(`
-      SELECT a.id, a.folder_id, a.name, a.description, a.mime, a.size, a.stored_size, a.original_size, a.compression, a.optimization, a.revision, a.created_at,
+      SELECT a.id, a.folder_id, a.name, a.description, a.mime, a.size, a.stored_size, a.original_size, a.compression, a.optimization, a.revision, a.manual_position, a.created_at,
              l.name AS folder_name, l.color AS folder_color
       FROM attachments a JOIN lists l ON l.id = a.folder_id
       WHERE a.owner_type = 'doc' AND a.deleted_at IS NULL
@@ -3228,7 +3236,7 @@ async function main() {
   app.get('/api/lists', async (req, res) => {
     const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
     const lists = await db.all(`
-      SELECT l.id, l.name, l.color, l.sort_order, l.completed_retention, l.created_at, l.is_system, l.tenant,
+      SELECT l.id, l.name, l.color, l.sort_order, l.completed_retention, l.manual_order, l.manual_order_revision, l.created_at, l.is_system, l.tenant,
         CASE l.tenant
           WHEN 'notes' THEN (SELECT COUNT(*) FROM notes n WHERE n.folder_id = l.id AND n.deleted_at IS NULL)
           WHEN 'docs' THEN (SELECT COUNT(*) FROM attachments a WHERE a.folder_id = l.id AND a.owner_type = 'doc' AND a.deleted_at IS NULL)
@@ -3308,6 +3316,128 @@ async function main() {
     if (!reminder) return res.status(404).json({ error: 'Item not found' });
     await attachInlineLinks([reminder], req.token);
     res.json({ reminder });
+  });
+
+  function manualTable(tenant) {
+    return tenant === 'reminders'
+      ? { table: 'reminders', folder: 'list_id', active: 'deleted_at IS NULL AND completed = 0' }
+      : tenant === 'notes'
+        ? { table: 'notes', folder: 'folder_id', active: 'deleted_at IS NULL' }
+        : { table: 'attachments', folder: 'folder_id', active: "deleted_at IS NULL AND owner_type = 'doc'" };
+  }
+
+  async function manualTopPosition(tenant, folderId) {
+    const list = await db.get('SELECT manual_order FROM lists WHERE id = ? AND tenant = ?', [folderId, tenant]);
+    if (!list || !list.manual_order) return null;
+    const cfg = manualTable(tenant);
+    const row = await db.get(
+      `SELECT MIN(manual_position) AS min FROM ${cfg.table} WHERE ${cfg.folder} = ? AND ${cfg.active}`,
+      [folderId]
+    );
+    return row && row.min !== null && row.min !== undefined ? row.min - 1 : 0;
+  }
+
+  async function manualPositionForMove(tenant, targetFolderId, currentFolderId) {
+    if (targetFolderId === currentFolderId) return undefined;
+    const list = await db.get('SELECT manual_order FROM lists WHERE id = ? AND tenant = ?', [targetFolderId, tenant]);
+    return list && list.manual_order ? manualTopPosition(tenant, targetFolderId) : null;
+  }
+
+  async function manualItemIds(list) {
+    const cfg = manualTable(list.tenant);
+    return (await db.all(
+      `SELECT id FROM ${cfg.table} WHERE ${cfg.folder} = ? AND ${cfg.active} ORDER BY id`,
+      [list.id]
+    )).map((row) => row.id);
+  }
+
+  async function tokenCanOrderList(token, tenant) {
+    if (!token) return true;
+    if (tenant === 'reminders') return tokenReminderWrite(token);
+    if (tenant === 'notes') return tokenHas(token, 'notes:write') || token.profile === 'write';
+    return tokenHas(token, 'docs:write') || token.profile === 'write';
+  }
+
+  app.put('/api/lists/:id/manual-order', async (req, res) => {
+    const id = parseId(req.params.id);
+    if (!id) return res.status(400).json({ error: 'Invalid folder' });
+    const list = await db.get(
+      'SELECT id, tenant, manual_order, manual_order_revision FROM lists WHERE id = ?', [id]
+    );
+    if (!list) return res.status(404).json({ error: 'Folder not found' });
+    if (!(await tokenCanOrderList(req.token, list.tenant))) return denyToken(res);
+    const allowedFields = ['enabled', 'ids', 'base_revision', 'base_epoch', 'idempotency_key'];
+    for (const key of Object.keys(req.body || {})) {
+      if (!allowedFields.includes(key)) return res.status(400).json({ error: `Unknown field: ${key}` });
+    }
+    if (typeof req.body.enabled !== 'boolean') return res.status(400).json({ error: 'enabled must be boolean' });
+    if (!Number.isInteger(req.body.base_revision) || req.body.base_revision < 0
+      || typeof req.body.base_epoch !== 'string' || !req.body.base_epoch) {
+      return res.status(400).json({ error: 'base_revision and base_epoch are required' });
+    }
+
+    const applyOrder = async () => {
+      const current = await db.get(
+        'SELECT id, tenant, manual_order, manual_order_revision FROM lists WHERE id = ?', [id]
+      );
+      if (!current) return { status: 404, body: { error: 'Folder not found' } };
+      if ((await getStoreEpoch()) !== req.body.base_epoch) {
+        return { status: 409, body: { error: 'Store was restored since your read' } };
+      }
+      const items = await manualItemIds(current);
+      const requested = req.body.enabled
+        ? (Array.isArray(req.body.ids) ? req.body.ids : [])
+        : [];
+      if (req.body.enabled) {
+        if (requested.some((value) => !Number.isInteger(value) || value <= 0)
+          || new Set(requested).size !== requested.length
+          || requested.length !== items.length
+          || items.some((itemId) => !requested.includes(itemId))) {
+          return { status: 409, body: { error: 'Item order is out of date', item_ids: items } };
+        }
+      }
+      const claimed = await db.run(
+        `UPDATE lists SET manual_order = ?, manual_order_revision = manual_order_revision + 1
+         WHERE id = ? AND manual_order_revision = ?`,
+        [req.body.enabled ? 1 : 0, id, req.body.base_revision]
+      );
+      if (!claimed.changes) {
+        return { status: 409, body: { error: 'Order changed since your read' } };
+      }
+      if (req.body.enabled && requested.length) {
+        const cfg = manualTable(current.tenant);
+        const cases = requested.map((itemId, index) => `WHEN ${itemId} THEN ${index}`).join(' ');
+        await db.run(
+          `UPDATE ${cfg.table} SET manual_position = CASE id ${cases} END WHERE id IN (${requested.join(', ')})`
+        );
+      }
+      return {
+        status: 200,
+        body: {
+          ok: true,
+          manual_order: req.body.enabled,
+          revision: req.body.base_revision + 1,
+          item_ids: req.body.enabled ? requested : items,
+        },
+      };
+    };
+
+    if (!req.token) {
+      try {
+        const result = await db.transaction(applyOrder);
+        return res.status(result.status).json(result.body);
+      } catch (err) {
+        return res.status(500).json({ error: 'Could not save manual order' });
+      }
+    }
+    const key = idempotencyKeyFrom(req);
+    if (!key) return res.status(400).json({ error: 'Idempotency-Key header is required for API writes' });
+    return runTokenWrite(req, res, {
+      route: `PUT /api/lists/${id}/manual-order`,
+      key,
+      fingerprint: payloadFingerprint(req.body),
+      execute: applyOrder,
+    });
   });
 
   app.post('/api/lists', async (req, res) => {
@@ -3414,7 +3544,7 @@ async function main() {
 
   /* ---------------- Notes tenant ---------------- */
 
-  const NOTE_COLUMNS = 'id, folder_id, title, body, body_format, revision, created_at, updated_at';
+  const NOTE_COLUMNS = 'id, folder_id, title, body, body_format, revision, manual_position, created_at, updated_at';
   const NOTE_WRITE_FIELDS = ['title', 'body', 'body_format', 'folder_id', 'base_revision', 'base_epoch', 'idempotency_key'];
 
   async function loadNoteRow(id) {
@@ -3569,9 +3699,10 @@ async function main() {
           const folder = folderId ? await folderRow(folderId, 'notes') : null;
           if (!folder) return { status: 400, body: { error: 'Choose a Notes folder' } };
           const now = new Date().toISOString();
+          const manualPosition = await manualTopPosition('notes', folder.id);
           const result = await db.run(
-            'INSERT INTO notes (folder_id, title, body, body_format, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
-            [folder.id, title, body, bodyFormat, now, now]
+            'INSERT INTO notes (folder_id, title, body, body_format, manual_position, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [folder.id, title, body, bodyFormat, manualPosition, now, now]
           );
           const note = await loadNoteRow(result.lastID);
           if (note) await attachInlineLinks([note], req.token, 'body');
@@ -3597,9 +3728,10 @@ async function main() {
     const folder = folderId ? await folderRow(folderId, 'notes') : null;
     if (!folder) return res.status(400).json({ error: 'Choose a Notes folder' });
     const now = new Date().toISOString();
+    const manualPosition = await manualTopPosition('notes', folder.id);
     const result = await db.run(
-      'INSERT INTO notes (folder_id, title, body, body_format, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
-      [folder.id, title, body, bodyFormat, now, now]
+      'INSERT INTO notes (folder_id, title, body, body_format, manual_position, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [folder.id, title, body, bodyFormat, manualPosition, now, now]
     );
     res.status(201).json({ id: result.lastID });
   });
@@ -3650,6 +3782,11 @@ async function main() {
             if (!folder) return { status: 400, body: { error: 'Choose a Notes folder' } };
             fields.push('folder_id = ?');
             params.push(folder.id);
+            const manualPosition = await manualPositionForMove('notes', folder.id, current.folder_id);
+            if (manualPosition !== undefined) {
+              fields.push('manual_position = ?');
+              params.push(manualPosition);
+            }
             await db.run(
               "UPDATE attachments SET folder_id = ? WHERE owner_type = 'note' AND owner_id = ?",
               [folder.id, id]
@@ -3667,7 +3804,7 @@ async function main() {
         },
       });
     }
-    const note = await db.get('SELECT id, body_format FROM notes WHERE id = ? AND deleted_at IS NULL', [id]);
+    const note = await db.get('SELECT id, folder_id, body_format FROM notes WHERE id = ? AND deleted_at IS NULL', [id]);
     if (!note) return res.status(404).json({ error: 'Note not found' });
     const fields = [];
     const params = [];
@@ -3706,6 +3843,11 @@ async function main() {
       if (!folder) return res.status(400).json({ error: 'Choose a Notes folder' });
       fields.push('folder_id = ?');
       params.push(folder.id);
+      const manualPosition = await manualPositionForMove('notes', folder.id, note.folder_id);
+      if (manualPosition !== undefined) {
+        fields.push('manual_position = ?');
+        params.push(manualPosition);
+      }
       await db.run(
         "UPDATE attachments SET folder_id = ? WHERE owner_type = 'note' AND owner_id = ?",
         [folder.id, id]
@@ -3780,12 +3922,15 @@ async function main() {
         const optimized = await optimizeUploadedFile(file, name, optimizeUploads);
         if (optimized.name) name = optimized.name;
         if (optimized.mime) mime = optimized.mime;
+        const manualPosition = tenant === 'docs' && ownerType === 'doc'
+          ? await manualTopPosition('docs', folderId)
+          : null;
         const result = await db.run(
-          `INSERT INTO attachments (tenant, owner_type, owner_id, folder_id, name, stored_name, mime, size, stored_size, original_size, compression, optimization, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO attachments (tenant, owner_type, owner_id, folder_id, name, stored_name, mime, size, stored_size, original_size, compression, optimization, manual_position, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [tenant, ownerType, ownerId, folderId, name, file.filename,
             mime, optimized.size, optimized.storedSize, optimized.originalSize,
-            optimized.compression, optimized.optimization, new Date().toISOString()]
+            optimized.compression, optimized.optimization, manualPosition, new Date().toISOString()]
         );
         rows.push({
           id: result.lastID, name, mime, size: optimized.size, stored_size: optimized.storedSize,
@@ -4015,7 +4160,7 @@ async function main() {
     }
     const where = conditions.join(' AND ');
     const rows = await db.all(
-      `SELECT a.id, a.folder_id, a.name, a.description, a.mime, a.size, a.stored_size, a.original_size, a.compression, a.optimization, a.revision, a.created_at
+      `SELECT a.id, a.folder_id, a.name, a.description, a.mime, a.size, a.stored_size, a.original_size, a.compression, a.optimization, a.revision, a.manual_position, a.created_at
        FROM attachments a WHERE ${where}
        ORDER BY a.created_at DESC, a.id DESC${limit ? ' LIMIT ?' : ''}`,
       limit ? [...params, limit + 1] : params
@@ -4041,7 +4186,7 @@ async function main() {
     const id = parseId(req.params.id);
     if (!id) return res.status(400).json({ error: 'Invalid file' });
     const doc = await db.get(
-      `SELECT id, folder_id, name, description, mime, size, stored_size, original_size, compression, optimization, revision, created_at
+      `SELECT id, folder_id, name, description, mime, size, stored_size, original_size, compression, optimization, revision, manual_position, created_at
        FROM attachments WHERE id = ? AND owner_type = 'doc' AND deleted_at IS NULL`, [id]
     );
     if (!doc) return res.status(404).json({ error: 'File not found' });
@@ -4282,10 +4427,12 @@ async function main() {
     }
 
     let nextFolder = file.folder_id;
+    let nextManualPosition;
     if (hasFolder) {
       const folder = await folderRow(parseId(req.body.folder_id), 'docs');
       if (!folder) return res.status(400).json({ error: 'Choose a Docs folder' });
       nextFolder = folder.id;
+      nextManualPosition = await manualPositionForMove('docs', folder.id, file.folder_id);
     }
 
     if (req.token) {
@@ -4316,7 +4463,14 @@ async function main() {
           }
           const fields = [];
           const params = [];
-          if (hasFolder) { fields.push('folder_id = ?'); params.push(nextFolder); }
+          if (hasFolder) {
+            fields.push('folder_id = ?');
+            params.push(nextFolder);
+            if (nextManualPosition !== undefined) {
+              fields.push('manual_position = ?');
+              params.push(nextManualPosition);
+            }
+          }
           if (hasName) {
             fields.push('name = ?');
             params.push(nextName);
@@ -4342,7 +4496,14 @@ async function main() {
 
     const fields = [];
     const params = [];
-    if (hasFolder) { fields.push('folder_id = ?'); params.push(nextFolder); }
+    if (hasFolder) {
+      fields.push('folder_id = ?');
+      params.push(nextFolder);
+      if (nextManualPosition !== undefined) {
+        fields.push('manual_position = ?');
+        params.push(nextManualPosition);
+      }
+    }
     if (hasName) {
       fields.push('name = ?');
       params.push(nextName);
@@ -4715,16 +4876,17 @@ async function main() {
       'SELECT COALESCE(MAX(sort_order), -1) AS s FROM reminders WHERE list_id = ?',
       [prep.listId]
     );
+    const manualPosition = await manualTopPosition('reminders', prep.listId);
     const result = await db.run(`
       INSERT INTO reminders
         (list_id, title, notes, due_at, has_time, completed, completed_at, urgent,
          repeat_rule, time_model, time_zone, notified_at, last_push_at, push_count,
-         sort_order, created_at, updated_at, revision)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 0, ?, ?, ?, 1)
+         sort_order, manual_position, created_at, updated_at, revision)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 0, ?, ?, ?, ?, 1)
     `, [prep.listId, prep.title, text(body.notes, NOTES_MAX), prep.dueAt, prep.hasTime,
       prep.completed, prep.completed ? now : null,
       prep.urgent, recurrence.encodeRepeatRule(prep.rule), prep.timeModel, prep.timeZone, notifiedAt,
-      max.s + 1, now, now]);
+      max.s + 1, manualPosition, now, now]);
     return result.lastID;
   }
 
@@ -4992,8 +5154,13 @@ async function main() {
         if (body.list_id !== undefined) {
           const list = await db.get("SELECT id FROM lists WHERE id = ? AND tenant = 'reminders'", [body.list_id]);
           if (!list) return { status: 400, body: { error: 'Choose a valid list' } };
+          const manualPosition = await manualPositionForMove('reminders', body.list_id, current.list_id);
           fields.push('list_id = ?');
           params.push(body.list_id);
+          if (manualPosition !== undefined) {
+            fields.push('manual_position = ?');
+            params.push(manualPosition);
+          }
         }
         if (body.due_at !== undefined) {
           const dueAt = normalizeDate(body.due_at);
@@ -5210,8 +5377,13 @@ async function main() {
       const listId = parseId(req.body.list_id);
       const list = listId ? await db.get("SELECT id FROM lists WHERE id = ? AND tenant = 'reminders'", [listId]) : null;
       if (!list) return res.status(400).json({ error: 'Choose a valid list' });
+      const manualPosition = await manualPositionForMove('reminders', listId, current.list_id);
       fields.push('list_id = ?');
       params.push(listId);
+      if (manualPosition !== undefined) {
+        fields.push('manual_position = ?');
+        params.push(manualPosition);
+      }
     }
 
     if (req.body.due_at !== undefined) {

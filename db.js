@@ -133,6 +133,12 @@ async function init() {
   if (!listColumns.some((column) => column.name === 'tenant')) {
     await run("ALTER TABLE lists ADD COLUMN tenant TEXT NOT NULL DEFAULT 'reminders'");
   }
+  if (!listColumns.some((column) => column.name === 'manual_order')) {
+    await run('ALTER TABLE lists ADD COLUMN manual_order INTEGER NOT NULL DEFAULT 0');
+  }
+  if (!listColumns.some((column) => column.name === 'manual_order_revision')) {
+    await run('ALTER TABLE lists ADD COLUMN manual_order_revision INTEGER NOT NULL DEFAULT 0');
+  }
   await run("UPDATE lists SET tenant = 'reminders' WHERE tenant IS NULL OR tenant = ''");
   await run("UPDATE lists SET name = 'Unfiled' WHERE is_system = 1 AND LOWER(name) = 'unlisted'");
   // Pinned Unfiled folder: always first in each tenant, cannot be renamed,
@@ -200,6 +206,7 @@ async function init() {
   // notification bookkeeping never touches it.
   await addReminderColumn('revision', 'revision INTEGER NOT NULL DEFAULT 0');
   await addReminderColumn('deleted_at', 'deleted_at TEXT');
+  await addReminderColumn('manual_position', 'manual_position INTEGER');
   // Per-occurrence history for recurring reminders. One row per
   // (reminder, scheduled occurrence): 'completed' | 'skipped' | 'exception'
   // (an occurrence-only edit waiting to fire). UNIQUE keeps history honest.
@@ -312,7 +319,11 @@ async function init() {
   if (!noteColumns.some((column) => column.name === 'deleted_at')) {
     await run('ALTER TABLE notes ADD COLUMN deleted_at TEXT');
   }
+  if (!noteColumns.some((column) => column.name === 'manual_position')) {
+    await run('ALTER TABLE notes ADD COLUMN manual_position INTEGER');
+  }
   await run('CREATE INDEX IF NOT EXISTS idx_notes_deleted ON notes(deleted_at)');
+  await run('CREATE INDEX IF NOT EXISTS idx_notes_manual ON notes(folder_id, manual_position)');
   // Every uploaded file: Docs rows themselves (owner_type = 'doc') plus
   // attachments owned by a reminder or a note. `stored_name` is an opaque
   // filename under data/uploads; the original name is display metadata.
@@ -352,6 +363,9 @@ async function init() {
   }
   if (!attachmentColumns.some((column) => column.name === 'deleted_at')) {
     await run('ALTER TABLE attachments ADD COLUMN deleted_at TEXT');
+  }
+  if (!attachmentColumns.some((column) => column.name === 'manual_position')) {
+    await run('ALTER TABLE attachments ADD COLUMN manual_position INTEGER');
   }
   await run('CREATE INDEX IF NOT EXISTS idx_attachments_deleted ON attachments(deleted_at)');
   await run('UPDATE attachments SET stored_size = size WHERE stored_size IS NULL');
