@@ -5032,3 +5032,39 @@ body.selection-mode .fab { display: none; }
 @media (max-width: 899px) {
   .selection-bar { margin: 0 18px; }
 }
+
+/* Keyboard shortcut hints in the account menu (fine-pointer devices only). */
+.account-menu-shortcuts {
+  margin-top: 6px;
+  padding: 8px 8px 4px;
+  border-top: 1px solid var(--line-soft);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.shortcut-hint {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  min-width: 0;
+  color: var(--text-3);
+  font-size: 0.75rem;
+}
+.shortcut-hint kbd {
+  flex: none;
+  min-width: 24px;
+  padding: 2px 6px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--text-2);
+  font-family: inherit;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  line-height: 1.35;
+  text-align: center;
+}
+@media (pointer: coarse) {
+  .account-menu-shortcuts { display: none; }
+}

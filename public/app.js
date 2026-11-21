@@ -8842,10 +8842,52 @@ $('#import-file').addEventListener('change', (event) => {
   event.target.value = '';
 });
 
-$('#fab-add').addEventListener('click', () => {
+function addNewItemForTenant() {
   if (state.tenant === 'notes') openNoteEditor(null);
   else if (state.tenant === 'docs') chooseDocsFiles();
   else openEditor(null);
+}
+
+$('#fab-add').addEventListener('click', addNewItemForTenant);
+
+const FINE_POINTER = window.matchMedia('(pointer: fine)');
+const IS_MAC = /Mac|iPhone|iPad|iPod/.test(navigator.platform || navigator.userAgent);
+const shortcutSearchKey = $('#shortcut-search-key');
+if (shortcutSearchKey) shortcutSearchKey.textContent = IS_MAC ? '⌘K' : 'Ctrl K';
+
+function shortcutTextTarget(target) {
+  return target instanceof Element
+    && Boolean(target.closest('input, textarea, select, [contenteditable="true"], [contenteditable=""]'));
+}
+
+function shortcutAvailable(event) {
+  return state.authenticated && !event.isComposing && FINE_POINTER.matches
+    && !$$('.sheet').some((sheet) => !sheet.hidden);
+}
+
+document.addEventListener('keydown', (event) => {
+  if (event.defaultPrevented || !shortcutAvailable(event)) return;
+
+  const key = String(event.key || '').toLowerCase();
+  const commandSearch = (event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && key === 'k';
+  if (commandSearch) {
+    event.preventDefault();
+    closeAccountMenu();
+    setSearchOverlay(true);
+    return;
+  }
+
+  if (event.metaKey || event.ctrlKey || event.altKey || event.repeat) return;
+  if (shortcutTextTarget(event.target) || shortcutTextTarget(document.activeElement)) return;
+  if (key === 'n') {
+    event.preventDefault();
+    closeAccountMenu();
+    addNewItemForTenant();
+  } else if (key === 'r') {
+    event.preventDefault();
+    closeAccountMenu();
+    refreshState();
+  }
 });
 $('#menu-btn').addEventListener('click', handleMenuButton);
 $('#sidebar-menu-btn').addEventListener('click', toggleAccountMenu);
