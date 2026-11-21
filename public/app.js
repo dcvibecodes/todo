@@ -1384,7 +1384,9 @@ function route() {
     expandedNoteId = null;
   }
   if (view !== state.view) {
-    state.showCompleted = false;
+    const pendingReminder = pendingInlineFocus && pendingInlineFocus.type === 'reminder'
+      ? wsLinkTarget('reminder', pendingInlineFocus.id) : null;
+    state.showCompleted = Boolean(pendingReminder && pendingReminder.completed && pendingReminder.list_id === view);
   }
   const active = document.activeElement;
   // Don't steal the keyboard when the user is mid-search: the results view
@@ -1947,6 +1949,7 @@ function render() {
   if (state.selection.active) applySelectionClasses();
   syncSelectionUI();
   state.justAddedId = null;
+  applyPendingInlineFocus();
 }
 
 let selectionDeleteArmed = false;
@@ -3572,6 +3575,99 @@ async function copyRichItem(title, plainBody, htmlBody) {
   }
 }
 
+const WS_LINK_TOKEN = /\[\[ws:(reminder|note|doc):(\d+)\]\]/g;
+const WS_LINK_TYPES = { reminder: 'Reminder', note: 'Note', doc: 'File' };
+
+function wsLinkTarget(type, id) {
+  const numeric = Number(id);
+  if (!numeric) return null;
+  if (type === 'reminder') return state.reminders.find((item) => item.id === numeric) || null;
+  if (type === 'note') return noteById(numeric);
+  if (type === 'doc') return docById(numeric);
+  return null;
+}
+
+function wsLinkTitle(type, id) {
+  const target = wsLinkTarget(type, id);
+  if (target) return type === 'doc' ? target.name : target.title;
+  return `Unavailable ${(WS_LINK_TYPES[type] || 'item').toLowerCase()}`;
+}
+
+function wsLinkToken(type, id) {
+  return `[[ws:${type}:${Number(id)}]]`;
+}
+
+function inlinePlainText(value) {
+  return String(value || '').replace(WS_LINK_TOKEN, (match, type, id) => wsLinkTitle(type, id));
+}
+
+function wsLinkAnchor(type, id) {
+  const valid = /^(reminder|note|doc)$/.test(type) && Number(id) > 0;
+  const available = Boolean(wsLinkTarget(type, id));
+  return el('a', {
+    class: 'ws-inline-link',
+    href: '#',
+    contenteditable: 'false',
+    'data-ws-link': `${type}:${id}`,
+    'aria-disabled': available ? null : 'true',
+    title: available ? (type === 'doc' ? 'Open file folder' : 'Open folder') : 'This linked item is unavailable',
+  }, wsLinkTitle(type, id));
+}
+
+function inlineTokensHtml(value) {
+  const text = String(value || '');
+  let html = '';
+  let last = 0;
+  for (const match of text.matchAll(WS_LINK_TOKEN)) {
+    html += escapeHtml(text.slice(last, match.index));
+    const anchor = wsLinkAnchor(match[1], match[2]).outerHTML;
+    html += anchor;
+    last = match.index + match[0].length;
+  }
+  html += escapeHtml(text.slice(last));
+  return html.replace(/\n/g, '<br>');
+}
+
+function markInlineTokens(text) {
+  const source = String(text || '');
+  const frag = document.createDocumentFragment();
+  let last = 0;
+  for (const match of source.matchAll(WS_LINK_TOKEN)) {
+    if (match.index > last) frag.append(document.createTextNode(source.slice(last, match.index)));
+    frag.append(wsLinkAnchor(match[1], match[2]));
+    last = match.index + match[0].length;
+  }
+  if (last < source.length) frag.append(document.createTextNode(source.slice(last)));
+  return frag;
+}
+
+function setInlineField(node, value) {
+  if (!node) return;
+  node.replaceChildren(markInlineTokens(value));
+}
+
+function inlineFieldValue(node) {
+  if (!node) return '';
+  let out = '';
+  const walk = (current) => {
+    if (current.nodeType === Node.TEXT_NODE) {
+      out += current.nodeValue || '';
+      return;
+    }
+    if (current.nodeType !== Node.ELEMENT_NODE) return;
+    if (current.tagName === 'BR') { out += '\n'; return; }
+    const link = current.getAttribute && current.getAttribute('data-ws-link');
+    if (current.tagName === 'A' && /^(reminder|note|doc):\d+$/.test(link || '')) {
+      out += wsLinkToken(link.split(':')[0], link.split(':')[1]);
+      return;
+    }
+    Array.from(current.childNodes).forEach(walk);
+    if (current.tagName === 'DIV' || current.tagName === 'P') out += '\n';
+  };
+  Array.from(node.childNodes).forEach(walk);
+  return out.replace(/\n$/, '');
+}
+
 function noteMarkdownHtml(value) {
   let html = escapeHtml(String(value || ''));
   html = html.replace(/^(#{1,3})[ \t]+(.+)$/gm, (match, hashes, text) => (
@@ -3606,6 +3702,10 @@ function safeNoteHtml(value, preview = false) {
     if (tag === 'I' || tag === 'EM') return `<em>${inner}</em>`;
     if (tag === 'U') return `<u>${inner}</u>`;
     if (tag === 'A') {
+      const link = node.getAttribute('data-ws-link') || '';
+      if (/^(reminder|note|doc):\d+$/.test(link)) {
+        return `<a href="#" class="ws-inline-link" data-ws-link="${link}" contenteditable="false">${inner}</a>`;
+      }
       const href = node.getAttribute('href') || '';
       if (!/^(https?:\/\/|mailto:)/i.test(href)) return inner;
       return `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${inner}</a>`;
@@ -3650,6 +3750,10 @@ function normalizeNoteHtml(value) {
     if (tag === 'I' || tag === 'EM') return `<em>${inner}</em>`;
     if (tag === 'U') return `<u>${inner}</u>`;
     if (tag === 'A') {
+      const link = node.getAttribute('data-ws-link') || '';
+      if (/^(reminder|note|doc):\d+$/.test(link)) {
+        return `<a href="#" class="ws-inline-link" data-ws-link="${link}" contenteditable="false">${inner}</a>`;
+      }
       const href = node.getAttribute('href') || '';
       if (!/^(https?:\/\/|mailto:)/i.test(href)) return inner;
       return `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${inner}</a>`;
@@ -3782,7 +3886,7 @@ function docRow(doc, options = {}) {
         el('span', { text: folder.name }),
       ]) : null,
       doc.description
-        ? el('div', { class: 'doc-description', text: doc.description, title: doc.description })
+        ? el('div', { class: 'doc-description', html: inlineTokensHtml(doc.description), title: doc.description })
         : null,
       formatAddedDate(doc.created_at)
         ? el('div', { class: 'doc-added', text: `Added ${formatAddedDate(doc.created_at)}`, title: formatRecordDate(doc.created_at) })
@@ -3877,7 +3981,7 @@ function syncDocSave() {
   const button = $('#doc-save');
   if (!doc || !button) return;
   const name = $('#doc-name').value.trim();
-  const description = $('#doc-description').value.trim();
+  const description = inlineFieldValue($('#doc-description')).trim();
   button.disabled = !name || (Number($('#doc-folder').value) === doc.folder_id
     && name === doc.name
     && description === (state.docSnapshot ? state.docSnapshot.description : (doc.description || '')));
@@ -3887,7 +3991,7 @@ function docIsDirty() {
   const doc = state.docEditingId ? docById(state.docEditingId) : null;
   if (!doc) return false;
   const name = $('#doc-name').value.trim();
-  const description = $('#doc-description').value.trim();
+  const description = inlineFieldValue($('#doc-description')).trim();
   const folderId = Number($('#doc-folder').value);
   const snapshot = state.docSnapshot || { name: doc.name, folder_id: doc.folder_id, description: doc.description || '' };
   return name !== snapshot.name || folderId !== snapshot.folder_id || description !== snapshot.description;
@@ -3997,7 +4101,7 @@ function syncDocDescriptionCount() {
   const field = $('#doc-description');
   const count = $('#doc-description-count');
   if (!field || !count) return;
-  count.textContent = `${field.value.length} / 1000`;
+  count.textContent = `${inlineFieldValue(field).length} / 1000`;
 }
 
 function openDocSheet(doc) {
@@ -4005,7 +4109,7 @@ function openDocSheet(doc) {
   state.docSnapshot = { name: doc.name, folder_id: doc.folder_id, description: doc.description || '' };
   if (!docShareCache || docShareCache.docId !== doc.id) docShareCache = null;
   $('#doc-name').value = doc.name;
-  $('#doc-description').value = doc.description || '';
+  setInlineField($('#doc-description'), doc.description || '');
   syncDocDescriptionCount();
   autoGrowDocName();
   const preview = $('#doc-image-preview');
@@ -4062,7 +4166,7 @@ async function saveDoc(event) {
   const name = $('#doc-name').value.trim();
   if (!folderId) return toast('Choose a Docs folder');
   if (!name) return toast('File name is required');
-  const description = $('#doc-description').value.trim();
+  const description = inlineFieldValue($('#doc-description')).trim();
   const renamed = name !== doc.name;
   const moved = folderId !== doc.folder_id;
   const described = description !== (doc.description || '');
@@ -5040,7 +5144,7 @@ function noteParts(value) {
 function renderEditorLinks() {
   const wrap = $('#e-notes-links');
   if (!wrap) return;
-  const { links } = noteParts($('#e-notes').value);
+  const { links } = noteParts(inlineFieldValue($('#e-notes')));
   wrap.replaceChildren();
   if (!links.length) {
     wrap.hidden = true;
@@ -5348,7 +5452,7 @@ function reminderRow(reminder, options = {}) {
       const expanded = expandedNoteId === String(reminder.id);
       const note = el('div', {
         class: 'reminder-notes' + (expanded ? ' is-expanded' : ''),
-        text: parts.text,
+        html: inlineTokensHtml(parts.text),
       });
       body.append(el('div', { class: 'note-wrap' }, [note]));
     }
@@ -5464,7 +5568,7 @@ function reminderRow(reminder, options = {}) {
     html: ICON('copy', 'ic'),
     onclick: async (event) => {
       event.stopPropagation();
-      const note = (reminder.notes || '').trim();
+      const note = inlinePlainText(reminder.notes || '').trim();
       const htmlBody = note
         ? `<div>${escapeHtml(note).replace(/\n/g, '<br>')}</div>`
         : '';
@@ -6277,7 +6381,7 @@ function editorValues() {
   const model = $('#e-model').value;
   return {
     title: $('#e-title').value.trim(),
-    notes: $('#e-notes').value.trim(),
+    notes: inlineFieldValue($('#e-notes')).trim(),
     list: $('#e-list').value,
     dateOn,
     date: dateOn ? $('#e-date').value : '',
@@ -6476,7 +6580,7 @@ function openEditor(id) {
   $('#editor-heading').textContent = reminder ? 'Edit Item' : 'New Item';
   $('#e-title').value = reminder ? reminder.title : '';
   clearFieldError($('#e-title'), $('#e-title-error'));
-  $('#e-notes').value = reminder ? reminder.notes : '';
+  setInlineField($('#e-notes'), reminder ? reminder.notes : '');
 
   const select = $('#e-list');
   select.replaceChildren();
@@ -6599,7 +6703,7 @@ async function saveEditor(event) {
   const scope = (editingSeries && !pendingOccurrenceOps.length && !pendingSnooze) ? state.editScope : 'series';
   const body = {
     title,
-    notes: $('#e-notes').value,
+    notes: inlineFieldValue($('#e-notes')),
     list_id: listId,
     urgent: $('#e-urgent').checked,
     device_zone: deviceZone(),
@@ -8850,6 +8954,248 @@ function addNewItemForTenant() {
 
 $('#fab-add').addEventListener('click', addNewItemForTenant);
 
+/* ---------------- Inline slash links ---------------- */
+
+let inlinePicker = null;
+const INLINE_FIELDS = '#e-notes, #n-body, #doc-description';
+
+function inlineSource(field) {
+  if (field.id === 'e-notes') return { type: 'reminder', id: state.editingId };
+  if (field.id === 'n-body') return { type: 'note', id: state.noteEditingId };
+  return { type: 'doc', id: state.docEditingId };
+}
+
+function inlinePickerItems() {
+  const { tenant, folderId } = inlinePicker;
+  const source = inlinePicker.source;
+  if (tenant === 'reminders') {
+    return state.reminders
+      .filter((item) => item.list_id === folderId && !(source.type === 'reminder' && source.id === item.id))
+      .map((item) => ({ type: 'reminder', id: item.id, title: item.title, completed: item.completed }));
+  }
+  if (tenant === 'notes') {
+    return state.notes
+      .filter((item) => item.folder_id === folderId && !(source.type === 'note' && source.id === item.id))
+      .map((item) => ({ type: 'note', id: item.id, title: item.title }));
+  }
+  return state.docs
+    .filter((item) => item.folder_id === folderId && !(source.type === 'doc' && source.id === item.id))
+    .map((item) => ({ type: 'doc', id: item.id, title: item.name }));
+}
+
+function closeInlinePicker({ restoreSlash = false, refocus = true } = {}) {
+  const ctx = inlinePicker;
+  if (!ctx) return;
+  inlinePicker = null;
+  $('#inline-link-picker').hidden = true;
+  if (restoreSlash && ctx.range) {
+    try {
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(ctx.range);
+      ctx.range.insertNode(document.createTextNode('/'));
+      ctx.field.dispatchEvent(new Event('input', { bubbles: true }));
+      if (refocus) ctx.field.focus({ preventScroll: true });
+    } catch { /* field changed */ }
+  } else if (refocus) {
+    try { ctx.field.focus({ preventScroll: true }); } catch { /* ignore */ }
+  }
+}
+
+function inlinePickerBack() {
+  if (!inlinePicker) return;
+  if (inlinePicker.level === 'item') {
+    inlinePicker.level = 'folder';
+    renderInlinePicker();
+    return;
+  }
+  if (inlinePicker.level === 'folder') {
+    inlinePicker.level = 'tenant';
+    inlinePicker.tenant = null;
+    inlinePicker.folderId = null;
+    renderInlinePicker();
+    return;
+  }
+  closeInlinePicker({ restoreSlash: true });
+}
+
+function positionInlinePicker() {
+  if (!inlinePicker) return;
+  const picker = $('#inline-link-picker');
+  picker.hidden = false;
+  const rect = inlinePicker.range.getBoundingClientRect();
+  const width = picker.offsetWidth || 300;
+  const height = picker.offsetHeight || 250;
+  const left = Math.max(8, Math.min(window.innerWidth - width - 8, rect.left || 8));
+  let top = rect.bottom + 6;
+  if (top + height > window.innerHeight - 8) top = Math.max(8, rect.top - height - 6);
+  picker.style.left = `${left}px`;
+  picker.style.top = `${top}px`;
+}
+
+function renderInlinePicker() {
+  if (!inlinePicker) return;
+  const picker = $('#inline-link-picker');
+  const list = $('#inline-link-list');
+  const title = $('#inline-link-title');
+  const back = $('#inline-link-back');
+  const { level, tenant, folderId } = inlinePicker;
+  back.hidden = level === 'tenant';
+  if (level === 'tenant') title.textContent = 'Link to';
+  else if (level === 'folder') title.textContent = ({ reminders: 'Reminders', notes: 'Notes', docs: 'Documents' })[tenant];
+  else title.textContent = listById(folderId) ? listById(folderId).name : 'Items';
+  list.replaceChildren();
+  const addRow = (label, meta, onClick) => {
+    const row = el('button', { type: 'button', class: 'inline-link-row', onclick: onClick }, [
+      el('span', { text: label }),
+      meta ? el('small', { text: meta }) : null,
+    ]);
+    list.append(row);
+    return row;
+  };
+  if (level === 'tenant') {
+    addRow('Reminders', '', () => { inlinePicker.tenant = 'reminders'; inlinePicker.level = 'folder'; renderInlinePicker(); });
+    addRow('Notes', '', () => { inlinePicker.tenant = 'notes'; inlinePicker.level = 'folder'; renderInlinePicker(); });
+    addRow('Documents', '', () => { inlinePicker.tenant = 'docs'; inlinePicker.level = 'folder'; renderInlinePicker(); });
+  } else if (level === 'folder') {
+    for (const folder of foldersFor(tenant)) {
+      addRow(folder.name, '', () => { inlinePicker.folderId = folder.id; inlinePicker.level = 'item'; renderInlinePicker(); });
+    }
+    if (!foldersFor(tenant).length) list.append(el('p', { class: 'inline-link-empty', text: 'No folders yet.' }));
+  } else {
+    const items = inlinePickerItems();
+    for (const item of items) {
+      addRow(item.title, item.completed ? 'Completed' : '', () => insertInlineLink(item.type, item.id));
+    }
+    if (!items.length) list.append(el('p', { class: 'inline-link-empty', text: 'No items in this folder.' }));
+  }
+  requestAnimationFrame(positionInlinePicker);
+}
+
+function openInlinePicker(field, range, source) {
+  inlinePicker = { field, range, source, level: 'tenant', tenant: null, folderId: null };
+  $('#inline-link-picker').hidden = false;
+  renderInlinePicker();
+}
+
+function insertInlineLink(type, id) {
+  const ctx = inlinePicker;
+  if (!ctx) return;
+  inlinePicker = null;
+  $('#inline-link-picker').hidden = true;
+  const range = ctx.range;
+  try {
+    range.deleteContents();
+    const anchor = wsLinkAnchor(type, id);
+    const space = document.createTextNode(' ');
+    const frag = document.createDocumentFragment();
+    frag.append(anchor, space);
+    range.insertNode(frag);
+    const selection = window.getSelection();
+    const after = document.createRange();
+    after.setStart(space, 1);
+    after.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(after);
+    ctx.field.focus({ preventScroll: true });
+    ctx.field.dispatchEvent(new Event('input', { bubbles: true }));
+  } catch {
+    toast('Could not insert link');
+  }
+}
+
+function maybeOpenInlinePicker(field) {
+  if (inlinePicker) return;
+  const selection = window.getSelection();
+  if (!selection || !selection.rangeCount || !selection.isCollapsed) return;
+  const range = selection.getRangeAt(0);
+  const node = range.startContainer;
+  if (node.nodeType !== Node.TEXT_NODE || range.startOffset < 1) return;
+  const text = node.nodeValue || '';
+  const offset = range.startOffset;
+  if (text[offset - 1] !== '/') return;
+  const before = offset > 1 ? text[offset - 2] : '';
+  if (before && !/\s/.test(before)) return;
+  const slash = document.createRange();
+  slash.setStart(node, offset - 1);
+  slash.setEnd(node, offset);
+  slash.deleteContents();
+  const caret = document.createRange();
+  caret.setStart(node, offset - 1);
+  caret.collapse(true);
+  selection.removeAllRanges();
+  selection.addRange(caret);
+  openInlinePicker(field, caret.cloneRange(), inlineSource(field));
+}
+
+function navigateInlineTarget(type, id) {
+  const target = wsLinkTarget(type, id);
+  if (!target) return toast('Linked item is unavailable');
+  pendingInlineFocus = { type, id };
+  if (type === 'reminder') {
+    const folderId = target.list_id;
+    pendingInlineFocus.completed = Boolean(target.completed);
+    state.tenant = 'reminders';
+    if (state.view === folderId) {
+      state.showCompleted = Boolean(target.completed);
+      render();
+    } else {
+      go('list/' + folderId);
+    }
+    return;
+  }
+  if (type === 'note') {
+    const next = 'notes-folder-' + target.folder_id;
+    state.tenant = 'notes';
+    if (state.view === next) render(); else go('notes/folder/' + target.folder_id);
+  } else {
+    const next = 'docs-folder-' + target.folder_id;
+    state.tenant = 'docs';
+    if (state.view === next) render(); else go('docs/folder/' + target.folder_id);
+  }
+}
+
+let pendingInlineFocus = null;
+
+function applyPendingInlineFocus() {
+  if (!pendingInlineFocus) return;
+  const { type, id } = pendingInlineFocus;
+  const selector = type === 'reminder' ? `[data-reminder-id="${id}"]`
+    : type === 'note' ? `[data-note-id="${id}"]` : `[data-doc-id="${id}"]`;
+  const row = document.querySelector(selector);
+  if (!row) {
+    if (type !== 'reminder' && cardBatch && cardBatch.shown < cardBatch.items.length) {
+      loadCardBatch();
+      setTimeout(applyPendingInlineFocus, 80);
+      return;
+    }
+    pendingInlineFocus = null;
+    toast('Linked item is not in this folder');
+    return;
+  }
+  pendingInlineFocus = null;
+  row.scrollIntoView({ block: 'center' });
+  row.classList.add('inline-target-highlight');
+  setTimeout(() => row.classList.remove('inline-target-highlight'), 2200);
+}
+
+function escapeBack() {
+  if (inlinePicker) { inlinePickerBack(); return true; }
+  const menu = getAccountMenu();
+  if (menu && !menu.hidden) { closeAccountMenu(); return true; }
+  const openSheets = $$('.sheet').filter((sheet) => !sheet.hidden);
+  if (openSheets.length) { requestSheetClose(openSheets[openSheets.length - 1]); return true; }
+  const homeSearch = $('#search-form');
+  const mainSearch = $('#main-search-form');
+  if (state.search || homeSearch.classList.contains('open') || mainSearch.classList.contains('open')) {
+    closeSearchOverlay(true);
+    return true;
+  }
+  if (state.selection.active) { exitSelection(); return true; }
+  if (document.body.dataset.screen === 'detail') { go('home'); return true; }
+  return false;
+}
+
 const FINE_POINTER = window.matchMedia('(pointer: fine)');
 const IS_MAC = /Mac|iPhone|iPad|iPod/.test(navigator.platform || navigator.userAgent);
 const shortcutSearchKey = $('#shortcut-search-key');
@@ -9093,6 +9439,51 @@ $('#search-form').addEventListener('submit', (event) => {
   $('#search').blur();
 });
 
+$('#inline-link-back').addEventListener('click', inlinePickerBack);
+$('#inline-link-close').addEventListener('click', () => closeInlinePicker({ restoreSlash: true }));
+
+document.addEventListener('input', (event) => {
+  const field = event.target.closest && event.target.closest(INLINE_FIELDS);
+  if (field) maybeOpenInlinePicker(field);
+});
+
+document.addEventListener('keydown', (event) => {
+  if (!inlinePicker) return;
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    inlinePickerBack();
+    return;
+  }
+  const rows = $$('.inline-link-row', $('#inline-link-list'));
+  if (!rows.length) return;
+  let index = rows.indexOf(document.activeElement);
+  if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+    event.preventDefault();
+    index = event.key === 'ArrowDown' ? Math.min(rows.length - 1, index + 1) : Math.max(0, index - 1);
+    rows[index].focus();
+  } else if (event.key === 'Enter' && document.activeElement.classList.contains('inline-link-row')) {
+    event.preventDefault();
+    document.activeElement.click();
+  }
+});
+
+document.addEventListener('pointerdown', (event) => {
+  if (!inlinePicker) return;
+  if (event.target.closest('#inline-link-picker')) return;
+  closeInlinePicker({ restoreSlash: true, refocus: false });
+});
+
+document.addEventListener('click', (event) => {
+  const link = event.target.closest && event.target.closest('.ws-inline-link[data-ws-link]');
+  if (!link) return;
+  event.preventDefault();
+  event.stopPropagation();
+  if (link.closest(INLINE_FIELDS)) return;
+  const [type, id] = link.dataset.wsLink.split(':');
+  navigateInlineTarget(type, id);
+});
+
 $('#editor-form').addEventListener('submit', saveEditor);
 $('#note-form').addEventListener('submit', saveNote);
 $('#n-title').addEventListener('input', autoGrowNoteTitle);
@@ -9210,7 +9601,12 @@ imageViewerBody.addEventListener('pointerup', (event) => {
 });
 imageViewerBody.addEventListener('pointercancel', () => { imageSwipeStart = null; });
 document.addEventListener('keydown', (event) => {
-  if (event.key === 'Escape' && state.selection.active) exitSelection();
+  if (event.key === 'Escape') {
+    if (!FINE_POINTER.matches) return;
+    event.preventDefault();
+    escapeBack();
+    return;
+  }
   if (!$('#image-sheet').hidden) {
     if (event.key === 'ArrowLeft') { event.preventDefault(); stepImage(-1); }
     if (event.key === 'ArrowRight') { event.preventDefault(); stepImage(1); }

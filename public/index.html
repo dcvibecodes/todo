@@ -390,7 +390,7 @@
         <div id="e-more" class="e-more">
         <div class="e-more-inner">
         <div class="editor-fields">
-          <textarea id="e-notes" class="e-notes" placeholder="Notes &amp; URL" rows="2" maxlength="50000"></textarea>
+          <div id="e-notes" class="e-notes inline-text-field" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Notes and URL" data-placeholder="Notes &amp; URL"></div>
           <div id="e-notes-links" class="ed-note-links" aria-label="Links in notes" hidden></div>
         </div>
 
@@ -660,7 +660,7 @@
         </div>
         <div class="ed-section">
           <div class="ed-section-label">Description</div>
-          <textarea id="doc-description" class="doc-description-input" rows="3" maxlength="1000" placeholder="Add a description"></textarea>
+          <div id="doc-description" class="doc-description-input inline-text-field" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Description" data-placeholder="Add a description"></div>
           <p id="doc-description-count" class="doc-description-count">0 / 1000</p>
         </div>
         <div class="ed-section">
@@ -1055,6 +1055,15 @@ curl -X PATCH -H "Authorization: Bearer $TOKEN" \
     </div>
   </div>
 
+  <div id="inline-link-picker" class="inline-link-picker" hidden role="dialog" aria-label="Insert a link">
+    <header class="inline-link-head">
+      <button type="button" id="inline-link-back" class="inline-link-back" aria-label="Back one level">‹</button>
+      <span id="inline-link-title">Link to</span>
+      <button type="button" id="inline-link-close" class="inline-link-close" aria-label="Close link picker">&times;</button>
+    </header>
+    <div id="inline-link-list" class="inline-link-list"></div>
+  </div>
+
   <div id="account-menu" class="account-menu" hidden>
     <button type="button" id="account-notifications" class="text-btn">
       <span class="foot-ic"><svg class="ic"><use href="#i-bell"/></svg></span>
@@ -1079,7 +1088,7 @@ curl -X PATCH -H "Authorization: Bearer $TOKEN" \
       <span class="foot-ic"><svg class="ic"><use href="#i-logout"/></svg></span>
       <span>Log out</span>
     </button>
-    <div class="account-menu-shortcuts" aria-label="Keyboard shortcuts">N New · R Refresh · <span id="shortcut-search-key">Ctrl K</span> Search</div>
+    <div class="account-menu-shortcuts" aria-label="Keyboard shortcuts">N New · R Refresh · <span id="shortcut-search-key">Ctrl K</span> Search · Esc Back</div>
   </div>
 
   <div id="pull-refresh" class="pull-refresh" aria-hidden="true">
