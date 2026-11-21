@@ -1947,6 +1947,11 @@ async function main() {
         notes: 'title + body',
         docs: 'filename only',
       },
+      reminder_links: {
+        write_fields: ['linked_reminder_ids', 'linked_note_ids', 'linked_doc_ids'],
+        read_field: 'links',
+        inline_token: '[[ws:reminder|note|doc:ID]]',
+      },
       json_backup: { includes_uploaded_files: false },
     });
   });
@@ -2805,6 +2810,133 @@ async function main() {
     completed_at, urgent, repeat_rule, time_model, time_zone, snoozed_until,
     notified_at, last_push_at, push_count, sort_order, created_at, updated_at, revision`;
 
+  const INLINE_LINK_RE = /\[\[ws:(reminder|note|doc):(\d+)\]\]/g;
+  const LINK_FIELDS = {
+    reminder: 'linked_reminder_ids',
+    note: 'linked_note_ids',
+    doc: 'linked_doc_ids',
+  };
+
+  function linkWriteError(message) {
+    return Object.assign(new Error(message), { status: 400 });
+  }
+
+  function linkedIdsFrom(body, type) {
+    const value = body[LINK_FIELDS[type]];
+    if (value === undefined) return [];
+    if (!Array.isArray(value) || value.some((id) => !Number.isInteger(id) || id <= 0)) {
+      throw linkWriteError(`${LINK_FIELDS[type]} must be an array of positive integer IDs`);
+    }
+    if (new Set(value).size !== value.length) {
+      throw linkWriteError(`${LINK_FIELDS[type]} contains duplicate IDs`);
+    }
+    return value;
+  }
+
+  function hasLinkedFields(body) {
+    return ['reminder', 'note', 'doc'].some((type) => body[LINK_FIELDS[type]] !== undefined);
+  }
+
+  async function validateLinkedTargets(type, ids) {
+    if (!ids.length) return;
+    const holes = ids.map(() => '?').join(',');
+    const rows = type === 'doc'
+      ? await db.all(
+        `SELECT id FROM attachments WHERE id IN (${holes}) AND owner_type = 'doc' AND deleted_at IS NULL`,
+        ids
+      )
+      : await db.all(
+        `SELECT id FROM ${type === 'reminder' ? 'reminders' : 'notes'}
+         WHERE id IN (${holes}) AND deleted_at IS NULL`,
+        ids
+      );
+    if (rows.length !== ids.length) throw linkWriteError('One or more linked items are unavailable');
+  }
+
+  function appendLinkedTokens(notes, body) {
+    const groups = ['reminder', 'note', 'doc'].map((type) => linkedIdsFrom(body, type));
+    const additions = [];
+    for (const [index, type] of ['reminder', 'note', 'doc'].entries()) {
+      for (const id of groups[index]) {
+        const token = `[[ws:${type}:${id}]]`;
+        if (!additions.includes(token)) additions.push(token);
+      }
+    }
+    if (!additions.length) return body.notes;
+    const base = String(notes || '').trimEnd();
+    const missing = additions.filter((token) => !base.includes(token));
+    if (!missing.length) return base;
+    const next = base ? `${base} ${missing.join(' ')}` : missing.join(' ');
+    if (next.length > NOTES_MAX) throw linkWriteError('Notes are too long after adding links');
+    return next;
+  }
+
+  async function applyLinkedFields(body, currentNotes = '') {
+    if (!hasLinkedFields(body)) return body;
+    for (const type of ['reminder', 'note', 'doc']) {
+      await validateLinkedTargets(type, linkedIdsFrom(body, type));
+    }
+    const notes = appendLinkedTokens(
+      body.notes !== undefined ? body.notes : currentNotes,
+      body
+    );
+    return notes === body.notes ? body : { ...body, notes };
+  }
+
+  async function attachInlineLinks(reminders, token = null) {
+    const allowed = token
+      ? new Set([
+        'reminder',
+        ...(tokenHas(token, 'notes:read') ? ['note'] : []),
+        ...(tokenHas(token, 'docs:read') ? ['doc'] : []),
+      ])
+      : new Set(['reminder', 'note', 'doc']);
+    const refsByType = { reminder: new Set(), note: new Set(), doc: new Set() };
+    const order = new Map();
+    for (const reminder of reminders) {
+      const refs = [];
+      for (const match of String(reminder.notes || '').matchAll(INLINE_LINK_RE)) {
+        const type = match[1];
+        const id = Number(match[2]);
+        if (!allowed.has(type)) continue;
+        const key = `${type}:${id}`;
+        if (!order.has(key)) order.set(key, { type, id });
+        refs.push(key);
+      }
+      reminder._linkRefs = [...new Set(refs)];
+    }
+    for (const ref of order.values()) refsByType[ref.type].add(ref.id);
+    const targets = new Map();
+    for (const type of ['reminder', 'note', 'doc']) {
+      const ids = [...refsByType[type]];
+      if (!ids.length) continue;
+      const holes = ids.map(() => '?').join(',');
+      const rows = type === 'doc'
+        ? await db.all(`SELECT id, name AS title, deleted_at FROM attachments WHERE id IN (${holes}) AND owner_type = 'doc'`, ids)
+        : await db.all(`SELECT id, title, deleted_at FROM ${type === 'reminder' ? 'reminders' : 'notes'} WHERE id IN (${holes})`, ids);
+      for (const row of rows) {
+        targets.set(`${type}:${row.id}`, {
+          target_type: type,
+          target_id: row.id,
+          title: row.title || null,
+          trashed: Boolean(row.deleted_at),
+        });
+      }
+    }
+    for (const reminder of reminders) {
+      reminder.links = (reminder._linkRefs || []).map((key) => (
+        targets.get(key) || {
+          target_type: key.split(':')[0],
+          target_id: Number(key.split(':')[1]),
+          title: null,
+          trashed: true,
+        }
+      ));
+      delete reminder._linkRefs;
+    }
+    return reminders;
+  }
+
   // Merge pending occurrence-only edits: an 'exception' row for the current
   // scheduled occurrence overrides the series values for display.
   async function applyOccurrenceOverrides(reminders) {
@@ -2897,6 +3029,7 @@ async function main() {
         || (file.owner_type === 'note' && tenants.has('notes'))
       ));
     }
+    await attachInlineLinks(reminders, req.token);
     res.json({
       lists: visibleLists,
       reminders,
@@ -3043,6 +3176,7 @@ async function main() {
       const reminders = await db.all(
         `SELECT ${REMINDER_COLUMNS} FROM reminders WHERE deleted_at IS NULL ORDER BY id ASC`
       );
+      await attachInlineLinks(reminders, req.token);
       return res.json({ reminders, complete: true, store_epoch: storeEpoch });
     }
     const conditions = ['deleted_at IS NULL'];
@@ -3076,6 +3210,7 @@ async function main() {
       `SELECT ${REMINDER_COLUMNS} FROM reminders ${where} ORDER BY sort_order, id LIMIT ?`,
       [...params, limit]
     );
+    await attachInlineLinks(reminders, req.token);
     res.json({ reminders, store_epoch: storeEpoch });
   });
 
@@ -3086,6 +3221,7 @@ async function main() {
       `SELECT ${REMINDER_COLUMNS} FROM reminders WHERE id = ? AND deleted_at IS NULL`, [id]
     );
     if (!reminder) return res.status(404).json({ error: 'Item not found' });
+    await attachInlineLinks([reminder], req.token);
     res.json({ reminder });
   });
 
@@ -4330,7 +4466,7 @@ async function main() {
   // default instead of hardcoding 'fixed'. Throws {status, message}.
   const CREATE_FIELDS = ['title', 'notes', 'list_id', 'list', 'due_at', 'has_time',
     'urgent', 'repeat_rule', 'repeat', 'time_model', 'time_zone', 'device_zone',
-    'idempotency_key', 'completed'];
+    'idempotency_key', 'completed', 'linked_reminder_ids', 'linked_note_ids', 'linked_doc_ids'];
   function failWith(status, message) {
     throw Object.assign(new Error(message), { status });
   }
@@ -4354,6 +4490,9 @@ async function main() {
       mustBe('time_model', (v) => typeof v === 'string');
       mustBe('time_zone', (v) => v === null || typeof v === 'string');
       mustBe('device_zone', (v) => typeof v === 'string');
+      for (const field of ['linked_reminder_ids', 'linked_note_ids', 'linked_doc_ids']) {
+        mustBe(field, (v) => Array.isArray(v) && v.every((id) => Number.isInteger(id) && id > 0));
+      }
     }
     const title = text(body.title, 500);
     if (!title) failWith(400, 'Title is required');
@@ -4454,7 +4593,8 @@ async function main() {
     // (coercing validation, legacy idempotency table, {id} shapes).
     if (!req.token || profile === 'legacy') {
       try {
-        const prep = await prepareReminderCreate(req.body, { strict: false, parity: false, isToken: Boolean(req.token) });
+        const createBody = await applyLinkedFields(req.body);
+        const prep = await prepareReminderCreate(createBody, { strict: false, parity: false, isToken: Boolean(req.token) });
         // Duplicate-safe creation: a retried request carrying the same
         // idempotency key returns the original reminder instead of a copy.
         const idempotencyKey = req.get('Idempotency-Key') || req.body.idempotency_key;
@@ -4469,7 +4609,7 @@ async function main() {
           }
         }
         const now = new Date().toISOString();
-        const createdId = await insertReminderRow(prep, req.body, now);
+        const createdId = await insertReminderRow(prep, createBody, now);
         if (idempotencyKey) {
           await db.run('INSERT OR IGNORE INTO idempotency_keys (key, reminder_id, created_at) VALUES (?, ?, ?)',
             [idempotencyKey, createdId, now]);
@@ -4495,10 +4635,12 @@ async function main() {
       key,
       fingerprint,
       execute: async () => {
-        const prep = await prepareReminderCreate(req.body, { strict: true, parity: true, isToken: true });
+        const createBody = await applyLinkedFields(req.body);
+        const prep = await prepareReminderCreate(createBody, { strict: true, parity: true, isToken: true });
         const now = new Date().toISOString();
-        const createdId = await insertReminderRow(prep, req.body, now);
+        const createdId = await insertReminderRow(prep, createBody, now);
         const reminder = await loadReminder(createdId);
+        if (reminder) await attachInlineLinks([reminder], req.token);
         return { status: 201, body: { id: createdId, reminder }, reminderId: createdId };
       },
     });
@@ -4509,7 +4651,8 @@ async function main() {
   // rejected naming the field. Session behavior (coercion) is untouched.
   const PATCH_FIELDS = ['title', 'notes', 'list_id', 'due_at', 'has_time', 'urgent',
     'repeat_rule', 'repeat', 'time_model', 'time_zone', 'completed', 'snoozed_until',
-    'scope', 'occurrence_at', 'base_revision', 'base_epoch'];
+    'scope', 'occurrence_at', 'base_revision', 'base_epoch',
+    'linked_reminder_ids', 'linked_note_ids', 'linked_doc_ids'];
   function requireBase(body) {
     if (!Number.isInteger(body.base_revision) || body.base_revision < 0
       || typeof body.base_epoch !== 'string' || !body.base_epoch) {
@@ -4537,6 +4680,9 @@ async function main() {
     mustBe('snoozed_until', (v) => v === null || typeof v === 'string');
     mustBe('scope', (v) => typeof v === 'string');
     mustBe('occurrence_at', (v) => typeof v === 'string');
+    for (const field of ['linked_reminder_ids', 'linked_note_ids', 'linked_doc_ids']) {
+      mustBe(field, (v) => Array.isArray(v) && v.every((id) => Number.isInteger(id) && id > 0));
+    }
     requireBase(body);
   }
   async function guardEpoch(baseEpoch) {
@@ -4623,6 +4769,17 @@ async function main() {
         if (scope !== 'series' && scope !== 'occurrence') {
           return { status: 400, body: { error: 'scope must be series or occurrence' } };
         }
+        if (scope === 'occurrence' && hasLinkedFields(body)) {
+          return { status: 400, body: { error: 'Linked items apply to the whole series' } };
+        }
+        let nextNotes = body.notes;
+        if (hasLinkedFields(body)) {
+          try {
+            nextNotes = (await applyLinkedFields(body, current.notes)).notes;
+          } catch (err) {
+            return { status: err.status || 400, body: { error: err.message } };
+          }
+        }
         const currentRule = parseRuleColumn(current.repeat_rule);
         const recurring = recurrence.isRecurringRule(currentRule);
 
@@ -4644,7 +4801,7 @@ async function main() {
             if (!title) return { status: 400, body: { error: 'Title is required' } };
             overrides.title = title;
           }
-          if (body.notes !== undefined) overrides.notes = text(body.notes, NOTES_MAX);
+          if (nextNotes !== undefined) overrides.notes = text(nextNotes, NOTES_MAX);
           if (body.list_id !== undefined) {
             const list = await db.get("SELECT id FROM lists WHERE id = ? AND tenant = 'reminders'", [body.list_id]);
             if (!list) return { status: 400, body: { error: 'Choose a valid list' } };
@@ -4677,9 +4834,9 @@ async function main() {
           fields.push('title = ?');
           params.push(title);
         }
-        if (body.notes !== undefined) {
+        if (nextNotes !== undefined) {
           fields.push('notes = ?');
-          params.push(text(body.notes, NOTES_MAX));
+          params.push(text(nextNotes, NOTES_MAX));
         }
         if (body.list_id !== undefined) {
           const list = await db.get("SELECT id FROM lists WHERE id = ? AND tenant = 'reminders'", [body.list_id]);
@@ -4796,6 +4953,7 @@ async function main() {
           );
         }
         const reminder = await loadReminder(id);
+        if (reminder) await attachInlineLinks([reminder], req.token);
         return { status: 200, body: { ok: true, dueChanged, reminder }, reminderId: id };
       },
     });
