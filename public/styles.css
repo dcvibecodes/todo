@@ -5133,3 +5133,21 @@ body.selection-mode .fab { display: none; }
   100% { background: transparent; }
 }
 @media (prefers-reduced-motion: reduce) { .inline-target-highlight { animation: none; background: color-mix(in srgb, var(--accent) 8%, transparent); } }
+
+/* Internal links must keep their dotted treatment through more specific link rules. */
+.reminder-notes a.ws-inline-link,
+.note-rich a.ws-inline-link,
+#doc-description a.ws-inline-link,
+.doc-description a.ws-inline-link,
+#e-notes a.ws-inline-link {
+  color: var(--accent);
+  text-decoration-line: underline;
+  text-decoration-style: dotted;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 3px;
+}
+.inline-link-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  background: var(--fill);
+}

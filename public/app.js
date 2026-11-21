@@ -3644,6 +3644,10 @@ function markInlineTokens(text) {
 function setInlineField(node, value) {
   if (!node) return;
   node.replaceChildren(markInlineTokens(value));
+  const last = node.lastElementChild || node.lastChild;
+  if (last && last.nodeType === Node.ELEMENT_NODE && last.matches('a.ws-inline-link')) {
+    node.append(document.createTextNode('\u00A0\u200B'));
+  }
 }
 
 function inlineFieldValue(node) {
@@ -3665,7 +3669,7 @@ function inlineFieldValue(node) {
     if (current.tagName === 'DIV' || current.tagName === 'P') out += '\n';
   };
   Array.from(node.childNodes).forEach(walk);
-  return out.replace(/\n$/, '');
+  return out.replace(/\u200B/g, '').replace(/\n$/, '');
 }
 
 function noteMarkdownHtml(value) {
@@ -3772,6 +3776,7 @@ function normalizeNoteHtml(value) {
     return inner;
   };
   return Array.from(root.childNodes).map(walk).join('')
+    .replace(/\u200B/g, '')
     .replace(/(?:\s*<br>){3,}/g, '<br><br>')
     .replace(/^(?:\s*<br>)+/, '')
     .replace(/(?:\s*<br>)+$/, '');
@@ -8957,6 +8962,7 @@ $('#fab-add').addEventListener('click', addNewItemForTenant);
 /* ---------------- Inline slash links ---------------- */
 
 let inlinePicker = null;
+let suppressInlineTrigger = false;
 const INLINE_FIELDS = '#e-notes, #n-body, #doc-description';
 
 function inlineSource(field) {
@@ -8990,13 +8996,22 @@ function closeInlinePicker({ restoreSlash = false, refocus = true } = {}) {
   $('#inline-link-picker').hidden = true;
   if (restoreSlash && ctx.range) {
     try {
+      suppressInlineTrigger = true;
       const selection = window.getSelection();
       selection.removeAllRanges();
       selection.addRange(ctx.range);
-      ctx.range.insertNode(document.createTextNode('/'));
+      const slash = document.createTextNode('/');
+      ctx.range.insertNode(slash);
+      const after = document.createRange();
+      after.setStart(slash, 1);
+      after.collapse(true);
+      selection.removeAllRanges();
+      selection.addRange(after);
       ctx.field.dispatchEvent(new Event('input', { bubbles: true }));
       if (refocus) ctx.field.focus({ preventScroll: true });
-    } catch { /* field changed */ }
+    } catch { /* field changed */ } finally {
+      suppressInlineTrigger = false;
+    }
   } else if (refocus) {
     try { ctx.field.focus({ preventScroll: true }); } catch { /* ignore */ }
   }
@@ -9023,10 +9038,10 @@ function positionInlinePicker() {
   if (!inlinePicker) return;
   const picker = $('#inline-link-picker');
   picker.hidden = false;
-  const rect = inlinePicker.range.getBoundingClientRect();
+  const rect = inlinePicker.anchorRect;
   const width = picker.offsetWidth || 300;
   const height = picker.offsetHeight || 250;
-  const left = Math.max(8, Math.min(window.innerWidth - width - 8, rect.left || 8));
+  const left = Math.max(8, Math.min(window.innerWidth - width - 8, rect.left));
   let top = rect.bottom + 6;
   if (top + height > window.innerHeight - 8) top = Math.max(8, rect.top - height - 6);
   picker.style.left = `${left}px`;
@@ -9037,6 +9052,7 @@ function renderInlinePicker() {
   if (!inlinePicker) return;
   const picker = $('#inline-link-picker');
   const list = $('#inline-link-list');
+  list.setAttribute('role', 'listbox');
   const title = $('#inline-link-title');
   const back = $('#inline-link-back');
   const { level, tenant, folderId } = inlinePicker;
@@ -9046,7 +9062,7 @@ function renderInlinePicker() {
   else title.textContent = listById(folderId) ? listById(folderId).name : 'Items';
   list.replaceChildren();
   const addRow = (label, meta, onClick) => {
-    const row = el('button', { type: 'button', class: 'inline-link-row', onclick: onClick }, [
+    const row = el('button', { type: 'button', class: 'inline-link-row', role: 'option', onclick: onClick }, [
       el('span', { text: label }),
       meta ? el('small', { text: meta }) : null,
     ]);
@@ -9069,11 +9085,15 @@ function renderInlinePicker() {
     }
     if (!items.length) list.append(el('p', { class: 'inline-link-empty', text: 'No items in this folder.' }));
   }
-  requestAnimationFrame(positionInlinePicker);
+  requestAnimationFrame(() => {
+    positionInlinePicker();
+    const first = list.querySelector('.inline-link-row');
+    if (first) first.focus({ preventScroll: true });
+  });
 }
 
-function openInlinePicker(field, range, source) {
-  inlinePicker = { field, range, source, level: 'tenant', tenant: null, folderId: null };
+function openInlinePicker(field, range, anchorRect, source) {
+  inlinePicker = { field, range, anchorRect, source, level: 'tenant', tenant: null, folderId: null };
   $('#inline-link-picker').hidden = false;
   renderInlinePicker();
 }
@@ -9087,13 +9107,13 @@ function insertInlineLink(type, id) {
   try {
     range.deleteContents();
     const anchor = wsLinkAnchor(type, id);
-    const space = document.createTextNode(' ');
+    const space = document.createTextNode('\u00A0\u200B');
     const frag = document.createDocumentFragment();
     frag.append(anchor, space);
     range.insertNode(frag);
     const selection = window.getSelection();
     const after = document.createRange();
-    after.setStart(space, 1);
+    after.setStart(space, space.length);
     after.collapse(true);
     selection.removeAllRanges();
     selection.addRange(after);
@@ -9105,7 +9125,7 @@ function insertInlineLink(type, id) {
 }
 
 function maybeOpenInlinePicker(field) {
-  if (inlinePicker) return;
+  if (inlinePicker || suppressInlineTrigger) return;
   const selection = window.getSelection();
   if (!selection || !selection.rangeCount || !selection.isCollapsed) return;
   const range = selection.getRangeAt(0);
@@ -9116,6 +9136,11 @@ function maybeOpenInlinePicker(field) {
   if (text[offset - 1] !== '/') return;
   const before = offset > 1 ? text[offset - 2] : '';
   if (before && !/\s/.test(before)) return;
+  const caretRect = range.getClientRects()[0] || range.getBoundingClientRect();
+  const fieldRect = field.getBoundingClientRect();
+  const anchorRect = (caretRect.width || caretRect.height)
+    ? caretRect
+    : { left: fieldRect.left + 18, top: fieldRect.top + 18, bottom: fieldRect.top + 40 };
   const slash = document.createRange();
   slash.setStart(node, offset - 1);
   slash.setEnd(node, offset);
@@ -9125,7 +9150,7 @@ function maybeOpenInlinePicker(field) {
   caret.collapse(true);
   selection.removeAllRanges();
   selection.addRange(caret);
-  openInlinePicker(field, caret.cloneRange(), inlineSource(field));
+  openInlinePicker(field, caret.cloneRange(), anchorRect, inlineSource(field));
 }
 
 function navigateInlineTarget(type, id) {
@@ -9460,8 +9485,10 @@ document.addEventListener('keydown', (event) => {
   let index = rows.indexOf(document.activeElement);
   if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
     event.preventDefault();
-    index = event.key === 'ArrowDown' ? Math.min(rows.length - 1, index + 1) : Math.max(0, index - 1);
-    rows[index].focus();
+    if (event.key === 'ArrowDown') index = index < 0 ? 0 : (index + 1) % rows.length;
+    else index = index <= 0 ? rows.length - 1 : index - 1;
+    rows[index].focus({ preventScroll: true });
+    rows[index].scrollIntoView({ block: 'nearest' });
   } else if (event.key === 'Enter' && document.activeElement.classList.contains('inline-link-row')) {
     event.preventDefault();
     document.activeElement.click();
