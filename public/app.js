@@ -1023,12 +1023,13 @@ function pullAllowed() {
   if (!PULL_MEDIA.matches) return false;
   if (!state.authenticated || refreshing || pullBusy) return false;
   if (document.body.classList.contains('sheet-open')) return false;
-  if (listDrag) return false;
+  if (listDrag || manualItemDrag) return false;
   return true;
 }
 
 function onPullStart(event) {
   if (event.touches.length !== 1) return;
+  if (event.target.closest && event.target.closest('.manual-order-grip')) return;
   const scroller = event.currentTarget;
   if (!pullAllowed()) return;
   const chain = pullScrollChain(event.target, scroller);
@@ -4332,17 +4333,101 @@ function manualRowIds(row, kind) {
 function updateManualMoveButtons(row) {
   const rows = manualRowsFor(row);
   const index = rows.indexOf(row);
-  const up = row.querySelector('.manual-order-move[data-dir="up"]');
-  const down = row.querySelector('.manual-order-move[data-dir="down"]');
   const top = row.querySelector('.manual-order-move[data-dir="top"]');
   const bottom = row.querySelector('.manual-order-move[data-dir="bottom"]');
-  if (up) up.disabled = index <= 0;
-  if (down) down.disabled = index < 0 || index >= rows.length - 1;
   if (top) top.disabled = index <= 0;
   if (bottom) bottom.disabled = index < 0 || index >= rows.length - 1;
 }
 
 let manualOrderSaving = false;
+let manualItemDrag = null;
+
+function cleanupManualItemDrag() {
+  if (!manualItemDrag) return;
+  const drag = manualItemDrag;
+  manualItemDrag = null;
+  window.removeEventListener('pointermove', drag.onMove);
+  window.removeEventListener('pointerup', drag.onUp);
+  window.removeEventListener('pointercancel', drag.onCancel);
+  try { drag.grip.releasePointerCapture(drag.pointerId); } catch { /* already released */ }
+  drag.ghost.remove();
+  drag.row.classList.remove('item-dragging');
+  manualRowsFor(drag.row).forEach((node) => node.classList.remove('drop-before', 'drop-after'));
+  document.body.classList.remove('item-drag-active');
+}
+
+function startManualItemDrag(event, row, kind, grip) {
+  if (manualOrderSaving || manualItemDrag) return;
+  if (event.button !== undefined && event.button > 0) return;
+  const rows = manualRowsFor(row);
+  if (rows.length < 2) return;
+  event.preventDefault();
+  event.stopPropagation();
+  const rect = row.getBoundingClientRect();
+  const ghost = row.cloneNode(true);
+  ghost.classList.add('item-drag-ghost');
+  ghost.classList.remove('entering', 'done');
+  ghost.style.width = `${rect.width}px`;
+  ghost.style.height = `${rect.height}px`;
+  ghost.style.left = `${rect.left}px`;
+  ghost.style.top = `${rect.top}px`;
+  document.body.append(ghost);
+  row.classList.add('item-dragging');
+  document.body.classList.add('item-drag-active');
+  const drag = {
+    row,
+    kind,
+    grip,
+    ghost,
+    pointerId: event.pointerId,
+    startY: event.clientY,
+    startTop: rect.top,
+    height: rect.height,
+    targetIndex: rows.indexOf(row),
+    onMove: null,
+    onUp: null,
+    onCancel: null,
+  };
+  manualItemDrag = drag;
+  try { grip.setPointerCapture(event.pointerId); } catch { /* ignore */ }
+
+  drag.onMove = (moveEvent) => {
+    if (!manualItemDrag || moveEvent.pointerId !== drag.pointerId) return;
+    moveEvent.preventDefault();
+    const dy = moveEvent.clientY - drag.startY;
+    drag.ghost.style.top = `${drag.startTop + dy}px`;
+    const center = drag.startTop + drag.height / 2 + dy;
+    const siblings = manualRowsFor(row).filter((node) => node !== row);
+    let index = siblings.length;
+    for (let i = 0; i < siblings.length; i += 1) {
+      const box = siblings[i].getBoundingClientRect();
+      if (center < box.top + box.height / 2) { index = i; break; }
+    }
+    drag.targetIndex = index;
+    manualRowsFor(row).forEach((node) => node.classList.remove('drop-before', 'drop-after'));
+    if (index < siblings.length) siblings[index].classList.add('drop-before');
+    else if (siblings.length) siblings[siblings.length - 1].classList.add('drop-after');
+  };
+
+  drag.onUp = (upEvent) => {
+    if (!manualItemDrag || upEvent.pointerId !== drag.pointerId) return;
+    const siblings = manualRowsFor(row).filter((node) => node !== row);
+    const index = Math.max(0, Math.min(drag.targetIndex, siblings.length));
+    const originalIndex = manualRowsFor(row).indexOf(row);
+    cleanupManualItemDrag();
+    if (index === originalIndex) return;
+    animateManualRows(row, () => {
+      if (index >= siblings.length) row.parentElement.append(row);
+      else siblings[index].before(row);
+    });
+    persistManualRowOrder(kind, row);
+  };
+
+  drag.onCancel = () => cleanupManualItemDrag();
+  window.addEventListener('pointermove', drag.onMove, { passive: false });
+  window.addEventListener('pointerup', drag.onUp);
+  window.addEventListener('pointercancel', drag.onCancel);
+}
 
 async function persistManualRowOrder(kind, row) {
   if (manualOrderSaving) return;
@@ -4373,35 +4458,6 @@ async function persistManualRowOrder(kind, row) {
   }
 }
 
-function moveManualRow(row, kind, direction) {
-  if (manualOrderSaving) return;
-  const rows = manualRowsFor(row);
-  const index = rows.indexOf(row);
-  const target = rows[index + direction];
-  if (!target) return;
-  animateManualRows(row, () => {
-    if (direction < 0) row.parentElement.insertBefore(row, target);
-    else target.after(row);
-  });
-  persistManualRowOrder(kind, row);
-}
-
-function animateManualRows(row, mutate) {
-  if (!row || !row.parentElement) return;
-  const rows = manualRowsFor(row);
-  const before = new Map(rows.map((node) => [node, node.getBoundingClientRect()]));
-  mutate();
-  if (MOTION_REDUCED.matches) return;
-  for (const [node, from] of before) {
-    const to = node.getBoundingClientRect();
-    const dy = from.top - to.top;
-    if (Math.abs(dy) < 1) continue;
-    node.animate(
-      [{ transform: `translateY(${dy}px)` }, { transform: 'none' }],
-      { duration: 220, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' }
-    );
-  }
-}
 
 function moveManualRowToEdge(row, kind, edge) {
   if (manualOrderSaving) return;
@@ -4424,19 +4480,12 @@ function attachManualOrderControls(row, kind, id, label) {
   if (!manualModeForView(state.view)) return;
   const content = row.querySelector('.swipe-content');
   if (!content) return;
-  const up = el('button', {
+  const grip = el('button', {
     type: 'button',
-    class: 'manual-order-move',
-    'data-dir': 'up',
-    'aria-label': `Move ${label} up one`,
-    html: ICON('chevron', 'ic'),
-  });
-  const down = el('button', {
-    type: 'button',
-    class: 'manual-order-move',
-    'data-dir': 'down',
-    'aria-label': `Move ${label} down one`,
-    html: ICON('chevron', 'ic'),
+    class: 'manual-order-grip',
+    title: 'Drag to reorder',
+    'aria-label': `Reorder ${label}: drag, or use the top and bottom buttons`,
+    html: ICON('grip', 'ic'),
   });
   const top = el('button', {
     type: 'button',
@@ -4452,10 +4501,10 @@ function attachManualOrderControls(row, kind, id, label) {
     'aria-label': `Move ${label} to the bottom`,
     html: ICON('chevrons', 'ic'),
   });
-  const controls = el('div', { class: 'manual-order-controls' }, [top, up, down, bottom]);
+  const controls = el('div', { class: 'manual-order-controls' }, [grip, top, bottom]);
   content.prepend(controls);
-  up.addEventListener('click', (event) => { event.stopPropagation(); moveManualRow(row, kind, -1); });
-  down.addEventListener('click', (event) => { event.stopPropagation(); moveManualRow(row, kind, 1); });
+  grip.addEventListener('pointerdown', (event) => startManualItemDrag(event, row, kind, grip));
+  grip.addEventListener('click', (event) => { event.preventDefault(); event.stopPropagation(); });
   top.addEventListener('click', (event) => { event.stopPropagation(); moveManualRowToEdge(row, kind, 'top'); });
   bottom.addEventListener('click', (event) => { event.stopPropagation(); moveManualRowToEdge(row, kind, 'bottom'); });
   requestAnimationFrame(() => updateManualMoveButtons(row));
