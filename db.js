@@ -356,17 +356,6 @@ async function init() {
   await run('CREATE INDEX IF NOT EXISTS idx_attachments_deleted ON attachments(deleted_at)');
   await run('UPDATE attachments SET stored_size = size WHERE stored_size IS NULL');
   await run('UPDATE attachments SET original_size = size WHERE original_size IS NULL');
-  await run(`CREATE TABLE IF NOT EXISTS item_links (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    source_type TEXT NOT NULL CHECK (source_type IN ('reminder','note')),
-    source_id INTEGER NOT NULL,
-    target_type TEXT NOT NULL CHECK (target_type IN ('note','doc')),
-    target_id INTEGER NOT NULL,
-    created_at TEXT NOT NULL,
-    UNIQUE(source_type, source_id, target_type, target_id)
-  )`);
-  await run('CREATE INDEX IF NOT EXISTS idx_item_links_source ON item_links(source_type, source_id)');
-  await run('CREATE INDEX IF NOT EXISTS idx_item_links_target ON item_links(target_type, target_id)');
   await run(`CREATE TABLE IF NOT EXISTS push_subscriptions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     endpoint TEXT UNIQUE NOT NULL,
