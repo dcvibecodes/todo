@@ -4327,7 +4327,15 @@ async function main() {
           fields.push('revision = revision + 1');
           params.push(id);
           await db.run(`UPDATE attachments SET ${fields.join(', ')} WHERE id = ?`, params);
-          return { status: 200, body: { ok: true, name: nextName, folder_id: nextFolder, description: nextDescription } };
+          const updated = { id, name: nextName, folder_id: nextFolder, description: nextDescription };
+          await attachInlineLinks([updated], req.token, 'description');
+          return { status: 200, body: {
+            ok: true,
+            name: nextName,
+            folder_id: nextFolder,
+            description: nextDescription,
+            links: updated.links,
+          } };
         },
       });
     }
@@ -4345,7 +4353,15 @@ async function main() {
     fields.push('revision = revision + 1');
     params.push(id);
     await db.run(`UPDATE attachments SET ${fields.join(', ')} WHERE id = ?`, params);
-    res.json({ ok: true, name: nextName, folder_id: nextFolder, description: nextDescription });
+    const updated = { id, name: nextName, folder_id: nextFolder, description: nextDescription };
+    await attachInlineLinks([updated], null, 'description');
+    res.json({
+      ok: true,
+      name: nextName,
+      folder_id: nextFolder,
+      description: nextDescription,
+      links: updated.links,
+    });
   });
 
   app.delete('/api/docs/:id', async (req, res) => {
