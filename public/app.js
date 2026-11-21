@@ -1118,6 +1118,7 @@ async function runPullRefresh() {
   pill.style.transform = 'translate(-50%, 0)';
   if (label) label.textContent = 'Refreshing…';
 
+  const startedAt = Date.now();
   await refreshState();
   const remaining = PULL_MIN_SPIN - (Date.now() - startedAt);
   if (remaining > 0) await new Promise((resolve) => setTimeout(resolve, remaining));
@@ -6605,6 +6606,7 @@ async function saveEditor(event) {
     if (!editingSeries) body.completed = $('#e-completed').checked;
   }
 
+  const startedAt = Date.now();
   setEditorSubmitting(true);
   let savedId = state.editingId;
   try {
@@ -7478,6 +7480,7 @@ async function saveList(event, options = {}) {
     : (system
       ? { color: state.selectedColor }
       : { name, color: state.selectedColor, tenant: state.listTenant });
+  const startedAt = Date.now();
   let created = null;
   let result = null;
   listSaving = true;
@@ -8283,6 +8286,7 @@ async function saveAppSettings() {
   if (!serverChanged && !bodySizeChanged && !appearanceDirty && !sortChanged) return;
 
   const saveBtn = $('#settings-save');
+  const startedAt = Date.now();
   settingsSaving = true;
   saveBtn.textContent = 'Saving...';
   saveBtn.disabled = true;

@@ -52,6 +52,8 @@
   --icon-size: 36px;
   --icon-size-touch: 40px;
   --settings-control-width: 170px;
+  --sheet-gutter: 18px;
+  --sheet-content-inset: 14px;
   --sidebar-width: 280px;
   --list-red: var(--red);
   --list-rose: var(--rose);
@@ -2074,18 +2076,28 @@ body.sheet-open .sidebar {
   position: sticky;
   top: 0;
   z-index: 1;
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
-  justify-content: space-between;
   gap: 10px;
-  padding: 13px 16px;
+  padding: 13px var(--sheet-gutter);
   background: var(--elev);
   border-bottom: 1px solid var(--line-soft);
   font-size: 0.875rem;
   font-weight: 600;
 }
+.sheet-head > :first-child { justify-self: start; }
+.sheet-head > :last-child { justify-self: end; }
+.sheet-head > span {
+  min-width: 0;
+  justify-self: center;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
-.sheet-head .text-btn { padding: 4px 2px; color: var(--text-2); font-size: 0.8125rem; }
+.sheet-head .text-btn { padding: 4px 0; color: var(--text-2); font-size: 0.8125rem; }
 .sheet-head .text-btn:hover { background: transparent; color: var(--text); }
 .sheet-head .strong { color: var(--accent); font-weight: 600; }
 /* The editor and Settings primary action swaps to "Adding..."/"Saving...";
@@ -2094,18 +2106,10 @@ body.sheet-open .sidebar {
 .sheet-head #settings-save,
 .sheet-head #list-save { min-width: 64px; justify-content: flex-end; }
 .sheet-head #trash-empty { min-width: 112px; justify-content: flex-end; white-space: nowrap; }
-.trash-card .sheet-head > span {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  white-space: nowrap;
-  pointer-events: none;
-}
 #trash-sheet .sheet-body { padding-top: 8px; }
 
 .sheet-body {
-  padding: 16px 18px calc(20px + env(safe-area-inset-bottom));
+  padding: 16px var(--sheet-gutter) calc(20px + env(safe-area-inset-bottom));
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -2175,7 +2179,7 @@ body.sheet-open .sidebar {
 #editor .editor-head {
   background: var(--elev);
   border-bottom: 0;
-  padding: 12px 16px 4px;
+  padding: 12px var(--sheet-gutter) 4px;
 }
 
 .editor-head > span {
@@ -2186,7 +2190,7 @@ body.sheet-open .sidebar {
 
 #editor .editor-body {
   gap: 18px;
-  padding: 10px 18px calc(26px + env(safe-area-inset-bottom));
+  padding: 10px var(--sheet-gutter) calc(26px + env(safe-area-inset-bottom));
 }
 
 .editor-fields {
@@ -2255,7 +2259,7 @@ body.sheet-open .sidebar {
 }
 
 .ed-section-label {
-  padding: 0 4px;
+  padding: 0 var(--sheet-content-inset);
   font-size: 0.72rem;
   font-weight: 600;
   letter-spacing: 0.5px;
@@ -2438,6 +2442,18 @@ body.sheet-open .sidebar {
   color: var(--text-3);
 }
 .ed-hint.ed-warning { color: var(--red); }
+#editor .ed-hint,
+#note-editor .ed-hint,
+#doc-sheet .ed-hint {
+  margin-inline: var(--sheet-content-inset);
+}
+#editor .ed-section > .notify-hint,
+#note-editor .ed-section > .notify-hint,
+#doc-sheet .ed-section > .notify-hint,
+.attach-list > .notify-hint {
+  margin-inline: var(--sheet-content-inset);
+}
+#e-notes-links { padding-inline: var(--sheet-content-inset); }
 
 .ed-list-row { cursor: pointer; }
 
@@ -3344,6 +3360,11 @@ body.sheet-open .sidebar {
 }
 
 .e-more-toggle[aria-expanded="true"] .ic { transform: rotate(90deg); }
+#editor .e-more-toggle,
+#note-editor .e-more-toggle {
+  margin-left: calc(var(--sheet-content-inset) - 8px);
+}
+
 
 /* The optional fields collapse to zero height; the grid-rows trick animates
    the expand without measuring anything in JS. */
@@ -3645,7 +3666,7 @@ body.sheet-open .sidebar {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 7px 10px;
+  padding: 7px 14px;
   border: 1px solid var(--line-soft);
   border-radius: 8px;
   background: var(--surface);
@@ -3699,7 +3720,7 @@ body.sheet-open .sidebar {
   align-items: center;
   gap: 6px;
   margin-top: 8px;
-  padding: 8px 12px;
+  padding: 8px 14px;
   border: 1px dashed var(--line);
   border-radius: 8px;
   color: var(--text-2);
@@ -3854,7 +3875,7 @@ body.sheet-open .sidebar {
   flex-wrap: wrap;
   gap: 6px;
   margin: 0;
-  padding: 4px 0 6px;
+  padding: 4px 12px 6px;
   background: var(--elev);
   border-bottom: 1px solid var(--line-soft);
 }
@@ -3883,6 +3904,7 @@ body.sheet-open .sidebar {
 
 .note-editor-hint {
   margin: 0;
+  padding-inline: 12px;
   color: var(--text-3);
   font-size: 0.7rem;
   line-height: 1.4;
@@ -3894,6 +3916,7 @@ body.sheet-open .sidebar {
   flex-wrap: wrap;
   gap: 6px;
   align-items: center;
+  padding-inline: 12px;
 }
 
 .note-link-row input {
@@ -4323,6 +4346,11 @@ button.link-chip { border: 0; font-family: inherit; cursor: pointer; }
 }
 
 .doc-storage { margin-bottom: 8px; }
+#doc-storage {
+  margin-left: var(--sheet-content-inset);
+  margin-right: var(--sheet-content-inset);
+}
+
 
 .doc-actions {
   display: flex;
@@ -4471,7 +4499,7 @@ button.link-chip { border: 0; font-family: inherit; cursor: pointer; }
   width: 100%;
   min-height: 72px;
   max-height: 30dvh;
-  padding: 10px 12px;
+  padding: 10px 14px;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: var(--elev);
