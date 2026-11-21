@@ -1118,7 +1118,6 @@ async function runPullRefresh() {
   pill.style.transform = 'translate(-50%, 0)';
   if (label) label.textContent = 'Refreshing…';
 
-  const startedAt = Date.now();
   await refreshState();
   const remaining = PULL_MIN_SPIN - (Date.now() - startedAt);
   if (remaining > 0) await new Promise((resolve) => setTimeout(resolve, remaining));
@@ -5800,27 +5799,18 @@ function escapeHtml(value) {
 // twice, silently skipping an occurrence).
 const completingInFlight = new Set();
 
-// Keep the check feedback on screen long enough to finish before the row moves
-// (the halo runs for 0.23s, with a little buffer).
-const TOGGLE_FEEDBACK_MS = 245;
-
 async function toggleCompleted(reminder, row) {
   // Optimistic feedback only: the check fills/unfills while the request is
   // already in flight. A failure re-renders the row's real state.
   if (completingInFlight.has(reminder.id)) return;
   completingInFlight.add(reminder.id);
   const undoing = Boolean(reminder.completed);
-  const startedAt = Date.now();
   if (row) row.classList.add(undoing ? 'uncompleting' : 'completing');
   try {
     const result = await api('/api/reminders/' + reminder.id, {
       method: 'PATCH',
       body: { completed: !reminder.completed },
     });
-    if (row) {
-      const remaining = TOGGLE_FEEDBACK_MS - (Date.now() - startedAt);
-      if (remaining > 0) await new Promise((resolve) => setTimeout(resolve, remaining));
-    }
     await loadState();
     requestRowAnimation(0.72);
     render();
@@ -6615,7 +6605,6 @@ async function saveEditor(event) {
     if (!editingSeries) body.completed = $('#e-completed').checked;
   }
 
-  const startedAt = Date.now();
   setEditorSubmitting(true);
   let savedId = state.editingId;
   try {
@@ -7489,7 +7478,6 @@ async function saveList(event, options = {}) {
     : (system
       ? { color: state.selectedColor }
       : { name, color: state.selectedColor, tenant: state.listTenant });
-  const startedAt = Date.now();
   let created = null;
   let result = null;
   listSaving = true;
@@ -8295,7 +8283,6 @@ async function saveAppSettings() {
   if (!serverChanged && !bodySizeChanged && !appearanceDirty && !sortChanged) return;
 
   const saveBtn = $('#settings-save');
-  const startedAt = Date.now();
   settingsSaving = true;
   saveBtn.textContent = 'Saving...';
   saveBtn.disabled = true;

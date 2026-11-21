@@ -1337,6 +1337,11 @@ body.flipping .reminder-group { overflow: visible; }
   font-size: 0.75rem;
   font-weight: 500;
 }
+.retention-dot {
+  flex: none;
+  color: var(--text-3);
+  font-size: 0.75rem;
+}
 .retention-change {
   flex: none;
   padding: 0 2px;
