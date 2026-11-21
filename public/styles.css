@@ -3875,9 +3875,9 @@ body.sheet-open .sidebar {
   flex-wrap: wrap;
   gap: 6px;
   margin: 0;
-  padding: 4px 12px 6px;
+  padding: 6px 0;
   background: var(--elev);
-  border-bottom: 1px solid var(--line-soft);
+  border-bottom: 0;
 }
 
 .note-format-btn {
@@ -3916,7 +3916,7 @@ body.sheet-open .sidebar {
   flex-wrap: wrap;
   gap: 6px;
   align-items: center;
-  padding-inline: 12px;
+  padding-inline: 0;
 }
 
 .note-link-row input {
