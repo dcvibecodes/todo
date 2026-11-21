@@ -5677,6 +5677,20 @@ function cleanupRemovedRow(row) {
   }
   if (section && !section.querySelector('.reminder')) section.remove();
 
+  // A folder's completed view is not an empty open folder. Never derive its
+  // copy from the open items, and return to the open view automatically when
+  // the last completed row is removed.
+  if (state.showCompleted && typeof view === 'number') {
+    if (!completedInList(view).length) {
+      state.showCompleted = false;
+      renderMain();
+      return;
+    }
+    updateViewCount();
+    syncCompletedFilter();
+    return;
+  }
+
   const rowCount = content.querySelectorAll('.reminder').length;
   if (typeof view === 'number') {
     const activeGroup = Array.from(content.children)
