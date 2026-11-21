@@ -2551,6 +2551,9 @@ function cleanupListDrag() {
   window.removeEventListener('pointermove', drag.onMove);
   window.removeEventListener('pointerup', drag.onUp);
   window.removeEventListener('pointercancel', drag.onCancel);
+  window.removeEventListener('touchmove', drag.onTouchMove);
+  window.removeEventListener('touchend', drag.onTouchEnd);
+  window.removeEventListener('touchcancel', drag.onTouchCancel);
   try { drag.grip.releasePointerCapture(drag.pointerId); } catch { /* already released */ }
   drag.ghost.remove();
   drag.row.classList.remove('dragging');
@@ -2592,6 +2595,9 @@ function startListDrag(event, list, row, grip) {
     onMove: null,
     onUp: null,
     onCancel: null,
+    onTouchMove: null,
+    onTouchEnd: null,
+    onTouchCancel: null,
   };
   listDrag = drag;
   dragTouchGuard = true;
@@ -4391,10 +4397,9 @@ function startManualItemDrag(event, row, kind, grip) {
   manualItemDrag = drag;
   try { grip.setPointerCapture(event.pointerId); } catch { /* ignore */ }
 
-  drag.onMove = (moveEvent) => {
-    if (!manualItemDrag || moveEvent.pointerId !== drag.pointerId) return;
-    moveEvent.preventDefault();
-    const dy = moveEvent.clientY - drag.startY;
+  const updateDrag = (clientY) => {
+    if (!manualItemDrag) return;
+    const dy = clientY - drag.startY;
     drag.ghost.style.top = `${drag.startTop + dy}px`;
     const center = drag.startTop + drag.height / 2 + dy;
     const siblings = manualRowsFor(row).filter((node) => node !== row);
@@ -4409,8 +4414,15 @@ function startManualItemDrag(event, row, kind, grip) {
     else if (siblings.length) siblings[siblings.length - 1].classList.add('drop-after');
   };
 
-  drag.onUp = (upEvent) => {
-    if (!manualItemDrag || upEvent.pointerId !== drag.pointerId) return;
+  drag.onMove = (moveEvent) => {
+    if (!manualItemDrag || moveEvent.pointerId !== drag.pointerId) return;
+    moveEvent.preventDefault();
+    updateDrag(moveEvent.clientY);
+  };
+
+  const finishDrag = (endEvent) => {
+    if (!manualItemDrag) return;
+    if (endEvent && endEvent.type.startsWith('pointer') && endEvent.pointerId !== drag.pointerId) return;
     const siblings = manualRowsFor(row).filter((node) => node !== row);
     const index = Math.max(0, Math.min(drag.targetIndex, siblings.length));
     const originalIndex = manualRowsFor(row).indexOf(row);
@@ -4423,10 +4435,22 @@ function startManualItemDrag(event, row, kind, grip) {
     persistManualRowOrder(kind, row);
   };
 
-  drag.onCancel = () => cleanupManualItemDrag();
+  drag.onUp = finishDrag;
+  drag.onCancel = finishDrag;
+  drag.onTouchMove = (touchEvent) => {
+    if (!manualItemDrag) return;
+    touchEvent.preventDefault();
+    const touch = touchEvent.touches[0];
+    if (touch) updateDrag(touch.clientY);
+  };
+  drag.onTouchEnd = () => finishDrag();
+  drag.onTouchCancel = () => finishDrag();
   window.addEventListener('pointermove', drag.onMove, { passive: false });
   window.addEventListener('pointerup', drag.onUp);
   window.addEventListener('pointercancel', drag.onCancel);
+  window.addEventListener('touchmove', drag.onTouchMove, { passive: false });
+  window.addEventListener('touchend', drag.onTouchEnd);
+  window.addEventListener('touchcancel', drag.onTouchCancel);
 }
 
 async function persistManualRowOrder(kind, row) {
@@ -4458,6 +4482,23 @@ async function persistManualRowOrder(kind, row) {
   }
 }
 
+
+function animateManualRows(row, mutate) {
+  if (!row || !row.parentElement) return;
+  const rows = manualRowsFor(row);
+  const before = new Map(rows.map((node) => [node, node.getBoundingClientRect()]));
+  mutate();
+  if (MOTION_REDUCED.matches) return;
+  for (const [node, from] of before) {
+    const to = node.getBoundingClientRect();
+    const dy = from.top - to.top;
+    if (Math.abs(dy) < 1) continue;
+    node.animate(
+      [{ transform: `translateY(${dy}px)` }, { transform: 'none' }],
+      { duration: 220, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' }
+    );
+  }
+}
 
 function moveManualRowToEdge(row, kind, edge) {
   if (manualOrderSaving) return;

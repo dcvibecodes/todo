@@ -5247,8 +5247,8 @@ body.selection-mode .manual-order-controls { display: none; }
 .manual-order-grip .ic { width: 14px; height: 14px; }
 .manual-order-controls { width: 26px; }
 .reminder.item-dragging { opacity: 0.3; }
-.reminder.drop-before { box-shadow: inset 0 2px 0 var(--accent); }
-.reminder.drop-after { box-shadow: inset 0 -2px 0 var(--accent); }
+.reminder.drop-before .swipe-content { box-shadow: inset 0 3px 0 var(--text-2); }
+.reminder.drop-after .swipe-content { box-shadow: inset 0 -3px 0 var(--text-2); }
 .item-drag-ghost {
   position: fixed;
   z-index: 100;
