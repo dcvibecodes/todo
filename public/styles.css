@@ -5178,19 +5178,17 @@ body.selection-mode .fab { display: none; }
   background: var(--fill);
 }
 .manual-order-controls {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0;
+  display: grid;
+  grid-template-columns: repeat(2, 26px);
+  gap: 1px;
   flex: none;
-  width: 24px;
+  width: 53px;
   align-self: flex-start;
   margin: -4px 0;
 }
-.manual-order-grip,
 .manual-order-move {
-  width: 24px;
-  height: 24px;
+  width: 26px;
+  height: 26px;
   display: grid;
   place-items: center;
   padding: 0;
@@ -5199,14 +5197,16 @@ body.selection-mode .fab { display: none; }
   background: transparent;
   color: var(--text-3);
 }
-.manual-order-grip { cursor: grab; touch-action: none; opacity: 0.62; }
-.manual-order-grip:active { cursor: grabbing; }
 .manual-order-move .ic { width: 13px; height: 13px; }
 .manual-order-move[data-dir="up"] .ic { transform: rotate(-90deg); }
 .manual-order-move[data-dir="down"] .ic { transform: rotate(90deg); }
+.manual-order-move[data-dir="top"] .ic { transform: rotate(180deg); }
 .manual-order-move:disabled { opacity: 0.25; }
-.manual-order-grip:hover,
 .manual-order-move:hover:not(:disabled) { background: var(--fill); color: var(--text); }
-.item-dragging { opacity: 0.45; }
-.item-drag-active { user-select: none; }
 body.selection-mode .manual-order-controls { display: none; }
+@media (pointer: coarse) {
+  .manual-order-controls { grid-template-columns: repeat(2, 30px); width: 61px; }
+  .manual-order-move { width: 30px; height: 30px; }
+  .manual-order-move .ic { width: 15px; height: 15px; }
+}
+.sort-manual-order { white-space: nowrap; }
