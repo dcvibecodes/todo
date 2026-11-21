@@ -5210,3 +5210,21 @@ body.selection-mode .manual-order-controls { display: none; }
   .manual-order-move .ic { width: 15px; height: 15px; }
 }
 .sort-manual-order { white-space: nowrap; }
+
+/* Pill/circular hover surfaces for compact actions, matching the row icons. */
+.primary-btn,
+.secondary-btn,
+.text-btn,
+.danger-btn,
+.small-btn,
+.sort-select-btn,
+.sort-manual-order,
+.note-format-btn,
+.e-more-toggle,
+.new-list-btn,
+.list-grip,
+.manual-order-move,
+.inline-link-back,
+.inline-link-close {
+  border-radius: 999px;
+}
