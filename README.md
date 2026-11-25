@@ -2,6 +2,13 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v5.13.0
+
+- **Move picker replaces card drag** - The **Move to folder** icon now opens the folder picker; card drag-to-folder is removed. Folder reorder grips and file/image drag-out remain.
+- **Desktop actions are 2×2** - Copy/Edit sit above Delete/Move on web cards, using less horizontal space without one tall column. Mobile stays unchanged.
+- **Day Peek is preview-only** - Expanded day-card rows no longer show Copy, Edit or Delete, and swipe-delete/selection is disabled there. The checkbox, note expansion, links and image previews remain on both web and mobile.
+- Service worker cache bumped to `workspace-v5.13.0`.
+
 ## What's New in v5.12.0
 
 - **Move cards through a folder picker or drag** - The card drag grip is replaced by a distinct **Move to folder** icon. Dragging it still moves the card to a folder; clicking it opens a folder picker (current folder checked, Escape/outside-click closes). Folder rows keep their separate six-dot reorder grip.

@@ -998,12 +998,10 @@ body.gate-open {
 .list-row.drop-before { box-shadow: inset 0 2px 0 var(--accent); }
 .list-row.drop-after { box-shadow: inset 0 -2px 0 var(--accent); }
 
-.list-row.drop-target,
 .list-row.file-drop-target {
   background: color-mix(in srgb, var(--accent) 12%, var(--surface));
   box-shadow: inset 0 0 0 2px var(--accent);
 }
-.list-row.drop-target .list-name,
 .list-row.file-drop-target .list-name { font-weight: 600; }
 
 .list-drag-ghost {
@@ -1522,6 +1520,15 @@ body.flipping .reminder-group { overflow: visible; }
   flex: none;
   gap: 8px;
 }
+@media (min-width: 900px) {
+  .row-tools {
+    display: grid;
+    grid-template-columns: repeat(2, 34px);
+    align-content: center;
+    justify-items: center;
+    gap: 2px;
+  }
+}
 
 .item-move-control {
   display: none;
@@ -1535,7 +1542,7 @@ body.flipping .reminder-group { overflow: visible; }
   background: transparent;
   color: var(--text-3);
   opacity: 0.6;
-  cursor: grab;
+  cursor: pointer;
   touch-action: none;
   user-select: none;
   transition: opacity 0.15s, background 0.15s, color 0.15s;
@@ -1544,7 +1551,6 @@ body.flipping .reminder-group { overflow: visible; }
 .reminder:hover .item-move-control { opacity: 0.9; }
 .item-move-control:hover { background: var(--fill); color: var(--text); opacity: 1; }
 .item-move-control:focus-visible { opacity: 1; background: var(--fill); color: var(--text); }
-.item-move-control:active { cursor: grabbing; }
 @media (min-width: 900px) and (pointer: fine) {
   .item-move-control { display: grid; }
 }

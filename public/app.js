@@ -3912,7 +3912,6 @@ function renderSidebar() {
         el('span', { class: 'list-progress-counts', text: `${open} open \u00b7 ${done} done` })
       );
     }
-    attachFolderDropTarget(row, list);
     wrap.append(row);
   }
 
@@ -4831,29 +4830,15 @@ function docRow(doc, options = {}) {
   return row;
 }
 
-let itemDrag = null;
-let itemDropRow = null;
-let itemDragSuppressClickUntil = 0;
 let fileDragSuppressClickUntil = 0;
 let movePicker = null;
 
-function initItemDrag() {
+function initFileDragSuppression() {
   document.addEventListener('click', (event) => {
-    if (performance.now() >= Math.max(itemDragSuppressClickUntil, fileDragSuppressClickUntil)) return;
+    if (performance.now() >= fileDragSuppressClickUntil) return;
     event.preventDefault();
     event.stopPropagation();
   }, true);
-  document.addEventListener('dragover', (event) => {
-    if (!itemDrag || !(event.target instanceof Element)) return;
-    if (event.target.closest('#lists .list-row[data-list-id]')) return;
-    if (event.dataTransfer) event.dataTransfer.dropEffect = 'none';
-  });
-  document.addEventListener('drop', (event) => {
-    if (!itemDrag) return;
-    if (event.target instanceof Element && event.target.closest('#lists .list-row[data-list-id]')) return;
-    event.preventDefault();
-    finishItemDrag();
-  });
 }
 
 function setFileDragData(event, file, element) {
@@ -4990,7 +4975,6 @@ function makeItemMoveControl(row, item) {
   if (!tools || tools.querySelector('.item-move-control')) return;
   const control = el('span', {
     class: 'item-move-control',
-    draggable: 'true',
     role: 'button',
     tabindex: '0',
     title: 'Move to folder',
@@ -5011,77 +4995,6 @@ function makeItemMoveControl(row, item) {
     event.preventDefault();
     event.stopPropagation();
     openMovePicker(control, item);
-  });
-  control.addEventListener('dragstart', (event) => {
-    if (!isSplitLayout() || state.selection.active || row.classList.contains('swipe-open')) {
-      event.preventDefault();
-      return;
-    }
-    if (event.dataTransfer) {
-      try {
-        event.dataTransfer.effectAllowed = 'move';
-        event.dataTransfer.setData('application/x-todo-item', JSON.stringify(item));
-        const rect = row.getBoundingClientRect();
-        event.dataTransfer.setDragImage(row, event.clientX - rect.left, event.clientY - rect.top);
-      } catch { /* ignore */ }
-    }
-    beginItemDrag(row, item);
-  });
-  control.addEventListener('dragend', () => {
-    finishItemDrag();
-  });
-}
-
-function beginItemDrag(row, item) {
-  clearItemDropHighlight();
-  itemDrag = { ...item, row };
-  document.body.classList.add('item-drag-active');
-  row.classList.add('item-dragging');
-}
-
-function finishItemDrag() {
-  if (!itemDrag) return;
-  itemDrag.row.classList.remove('item-dragging');
-  itemDrag = null;
-  document.body.classList.remove('item-drag-active');
-  clearItemDropHighlight();
-  itemDragSuppressClickUntil = performance.now() + 400;
-}
-
-function clearItemDropHighlight() {
-  if (itemDropRow) itemDropRow.classList.remove('drop-target');
-  itemDropRow = null;
-}
-
-function attachFolderDropTarget(row, list) {
-  row.addEventListener('dragover', (event) => {
-    if (!itemDrag) return;
-    event.preventDefault();
-    const valid = tenantOf(list) === itemDrag.tenant && list.id !== itemDrag.folderId;
-    if (event.dataTransfer) event.dataTransfer.dropEffect = valid ? 'move' : 'none';
-    if (!valid) {
-      if (itemDropRow === row) clearItemDropHighlight();
-      return;
-    }
-    if (itemDropRow !== row) {
-      clearItemDropHighlight();
-      itemDropRow = row;
-      row.classList.add('drop-target');
-    }
-  });
-  row.addEventListener('dragleave', (event) => {
-    if (itemDropRow !== row) return;
-    if (event.relatedTarget instanceof Node && row.contains(event.relatedTarget)) return;
-    clearItemDropHighlight();
-  });
-  row.addEventListener('drop', (event) => {
-    if (!itemDrag) return;
-    event.preventDefault();
-    event.stopPropagation();
-    const drag = itemDrag;
-    finishItemDrag();
-    if (drag.tenant !== tenantOf(list) || drag.folderId === list.id) return;
-    moveItemToFolder(drag, list);
   });
 }
 
@@ -6444,7 +6357,6 @@ function docsFileDropEligible() {
   return state.authenticated
     && state.tenant === 'docs'
     && isSplitLayout()
-    && !itemDrag
     && !$$('.sheet').some((sheet) => !sheet.hidden);
 }
 
@@ -6493,7 +6405,7 @@ function showDocsDrop(event) {
 function attachFileDropZone(zone, onFiles) {
   if (!zone) return;
   zone.addEventListener('dragover', (event) => {
-    if (!docsDropHasFiles(event) || itemDrag) return;
+    if (!docsDropHasFiles(event)) return;
     event.preventDefault();
     event.stopPropagation();
     if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
@@ -6504,7 +6416,7 @@ function attachFileDropZone(zone, onFiles) {
     zone.classList.remove('attach-drop-target');
   });
   zone.addEventListener('drop', (event) => {
-    if (!docsDropHasFiles(event) || itemDrag) return;
+    if (!docsDropHasFiles(event)) return;
     event.preventDefault();
     event.stopPropagation();
     zone.classList.remove('attach-drop-target');
@@ -6932,6 +6844,7 @@ function syncNoteExpanders() {
 }
 
 function reminderRow(reminder, options = {}) {
+  const dayPreview = Boolean(options.dayPeek);
   const list = listById(reminder.list_id);
   const color = colorVar(list ? list.color : 'blue');
   const due = formatDue(reminder);
@@ -7188,7 +7101,7 @@ function reminderRow(reminder, options = {}) {
     el('span', { html: ICON('x', 'ic') }),
   ]);
 
-  const content = el('div', { class: 'swipe-content' }, [check, body, tools]);
+  const content = el('div', { class: 'swipe-content' }, dayPreview ? [check, body] : [check, body, tools]);
   const background = el('div', { class: 'swipe-bg', 'aria-hidden': 'true' }, [deleteAction]);
 
   // A title-only row (no meta, notes, or links) has a body shorter than the
@@ -7201,6 +7114,7 @@ function reminderRow(reminder, options = {}) {
       + (state.justAddedId === reminder.id ? ' entering' : ''),
     style: { '--c': color },
     'data-reminder-id': reminder.id,
+    'data-day-preview': dayPreview ? 'true' : null,
     onclick: (event) => {
       // A swipe or scroll that just ended must not select/expand a note.
       if (event.target.closest('a, button, input, textarea, select')) return;
@@ -7225,15 +7139,15 @@ function reminderRow(reminder, options = {}) {
       if (!note) return;
       toggleNoteForRow(row, note);
     },
-  }, [background, content]);
-  row.append(el('span', { class: 'selection-check', 'aria-hidden': 'true', html: ICON('check', 'ic') }));
-  attachSelectionLongPress(row, 'reminders', reminder.id);
-  if (!options.dayPeek) {
+  }, dayPreview ? [content] : [background, content]);
+  if (!dayPreview) {
+    row.append(el('span', { class: 'selection-check', 'aria-hidden': 'true', html: ICON('check', 'ic') }));
+    attachSelectionLongPress(row, 'reminders', reminder.id);
     makeItemMoveControl(row, {
       type: 'reminder', id: reminder.id, folderId: reminder.list_id, tenant: 'reminders', label: reminder.title,
     });
+    attachManualOrderControls(row, 'reminder', reminder.id, reminder.title);
   }
-  attachManualOrderControls(row, 'reminder', reminder.id, reminder.title);
   return row;
 }
 
@@ -9666,7 +9580,7 @@ $('#content').addEventListener('pointerdown', (event) => {
     if (!node.contains(event.target)) resetSwipe(node);
   });
   const row = event.target.closest('.reminder');
-  if (!row || event.target.closest('a, button, input, textarea, select, .attachment-thumbs')) {
+  if (!row || row.dataset.dayPreview || event.target.closest('a, button, input, textarea, select, .attachment-thumbs')) {
     swipe = null;
     return;
   }
@@ -11579,7 +11493,7 @@ buildTokenAccessEditor($('#token-access-new'));
 
 initPullToRefresh();
 initDayPeek();
-initItemDrag();
+initFileDragSuppression();
 initMovePicker();
 initScratchpad();
 initSidebarResizer();
