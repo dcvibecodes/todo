@@ -2,6 +2,12 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v5.10.0
+
+- **Compact density is one row per element** - In Compact, card titles, note previews, Doc descriptions, metadata/due lines and link/file chip rows no longer wrap. Long text ellipsizes or clips; separate link/file chips stay on one clipped row, and image thumbnails keep their existing one-row layout with overflow count. Long-note expansion still works, and Comfortable density is unchanged. The existing Settings → Density control remains the only toggle.
+- **C toggles density** - Plain **C** on a fine-pointer desktop toggles Compact/Comfortable outside text fields and editors, persists for the device, and shows the current value when Settings opens.
+- Service worker cache bumped to `workspace-v5.10.0`.
+
 ## What's New in v5.9.0
 
 - **Token access now uses the Settings Save button** - Editing an existing token's profile, tenant access, delete flags or extra scopes stages the change and enables the top **Save**; the separate Save Access button is gone. Save applies the Settings changes and token access together, while Cancel/Escape discards them. Generate and Revoke remain immediate actions. Also fixed the density control so it enables Save immediately, and audited the remaining Settings form controls.

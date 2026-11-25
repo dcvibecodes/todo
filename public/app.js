@@ -285,6 +285,17 @@ function applyDensity(animate = false) {
   return localStorage.getItem(DENSITY_KEY) === 'compact' ? 'compact' : 'comfortable';
 }
 
+function toggleDensity() {
+  const current = localStorage.getItem(DENSITY_KEY) === 'compact' ? 'compact' : 'comfortable';
+  const next = current === 'compact' ? 'comfortable' : 'compact';
+  localStorage.setItem(DENSITY_KEY, next);
+  applyDensity(true);
+  const select = $('#set-density');
+  if (select) select.value = next;
+  if (settingsSnapshot) updateSettingsDirty();
+  toast(`${next === 'compact' ? 'Compact' : 'Comfortable'} density`);
+}
+
 function updateBadge() {
   try {
     const limit = endOfToday();
@@ -10689,6 +10700,10 @@ document.addEventListener('keydown', (event) => {
     event.preventDefault();
     closeAccountMenu();
     openScratchpad();
+  } else if (key === 'c') {
+    event.preventDefault();
+    closeAccountMenu();
+    toggleDensity();
   } else if (key === 'r') {
     event.preventDefault();
     closeAccountMenu();

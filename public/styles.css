@@ -3330,7 +3330,55 @@ body.sheet-open .sidebar {
 [data-density="compact"] .reminder-due { font-size: 0.7rem; }
 [data-density="compact"] .reminder-meta { font-size: 0.7rem; gap: 8px; }
 [data-density="compact"] .reminder-notes { font-size: 0.75rem; }
-[data-density="compact"] .reminder-title { font-size: 0.90625rem; }
+[data-density="compact"] .reminder-title {
+  display: block;
+  overflow: hidden;
+  overflow-wrap: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.90625rem;
+}
+[data-density="compact"] .reminder-notes:not(.is-expanded) {
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  max-height: calc(1.4em + 1px);
+  overflow: hidden;
+  white-space: normal;
+}
+[data-density="compact"] .reminder-meta {
+  flex-wrap: nowrap;
+  overflow: hidden;
+  white-space: nowrap;
+}
+[data-density="compact"] .reminder-meta > * {
+  flex: 0 0 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+[data-density="compact"] .reminder-due {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+[data-density="compact"] .doc-folder,
+[data-density="compact"] .doc-added {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+[data-density="compact"] .doc-description {
+  -webkit-line-clamp: 1;
+  max-height: calc(1.35em + 1px);
+}
+[data-density="compact"] .reminder-links {
+  flex-wrap: nowrap;
+  overflow: hidden;
+}
+[data-density="compact"] .reminder-links .link-chip { flex: 0 0 auto; }
 [data-density="compact"] .note-row .reminder-note-preview .note-md-heading { line-height: calc(0.75rem * 1.4); }
 [data-density="compact"] .check { width: 16px; height: 16px; }
 [data-density="compact"] .check .ic { width: 9px; height: 9px; }
