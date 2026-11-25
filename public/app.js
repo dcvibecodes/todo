@@ -6252,6 +6252,41 @@ function showDocsDrop(event) {
   return folder;
 }
 
+function attachFileDropZone(zone, onFiles) {
+  if (!zone) return;
+  zone.addEventListener('dragover', (event) => {
+    if (!docsDropHasFiles(event) || itemDrag) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
+    zone.classList.add('attach-drop-target');
+  });
+  zone.addEventListener('dragleave', (event) => {
+    if (event.relatedTarget instanceof Node && zone.contains(event.relatedTarget)) return;
+    zone.classList.remove('attach-drop-target');
+  });
+  zone.addEventListener('drop', (event) => {
+    if (!docsDropHasFiles(event) || itemDrag) return;
+    event.preventDefault();
+    event.stopPropagation();
+    zone.classList.remove('attach-drop-target');
+    const files = Array.from(event.dataTransfer.files || []);
+    if (files.length) onFiles(files);
+  });
+  window.addEventListener('blur', () => zone.classList.remove('attach-drop-target'));
+}
+
+function initAttachmentDropZones() {
+  attachFileDropZone($('#e-attachments')?.closest('.ed-section'), (files) => {
+    state.editorPendingFiles.push(...files);
+    renderEditorAttachments();
+  });
+  attachFileDropZone($('#n-attachments')?.closest('.ed-section'), (files) => {
+    state.notePendingFiles.push(...files);
+    renderNoteAttachments();
+  });
+}
+
 function initDocsFileDrop() {
   document.addEventListener('dragenter', (event) => {
     if (!docsFileDropEligible() || !docsDropHasFiles(event)) return;
@@ -11037,6 +11072,7 @@ $('#n-files').addEventListener('change', (event) => {
   event.target.value = '';
   renderNoteAttachments();
 });
+initAttachmentDropZones();
 $('#docs-file-input').addEventListener('change', (event) => {
   const files = Array.from(event.target.files || []);
   event.target.value = '';

@@ -2418,6 +2418,13 @@ body.sheet-open .sidebar {
   gap: 8px;
 }
 
+.ed-section.attach-drop-target {
+  outline: 2px dashed var(--accent);
+  outline-offset: 4px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+
 .ed-section-label {
   padding: 0 var(--sheet-content-inset);
   font-size: 0.72rem;
