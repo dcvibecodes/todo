@@ -4983,7 +4983,9 @@ function makeItemMoveControl(row, item) {
     'aria-expanded': 'false',
     html: ICON('move-folder', 'ic'),
   });
-  tools.append(control);
+  const remove = tools.querySelector('.row-delete');
+  if (remove) tools.insertBefore(control, remove);
+  else tools.append(control);
   control.addEventListener('click', (event) => {
     event.preventDefault();
     event.stopPropagation();
