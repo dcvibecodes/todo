@@ -2,6 +2,11 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v5.6.1
+
+- **Day-strip labels switch together** - If any weekday label would need shortening in the current folder-pane width, all seven switch to single initials; otherwise all keep their three-letter labels. No mixed one-letter/three-letter row.
+- Service worker cache bumped to `workspace-v5.6.1`.
+
 ## What's New in v5.6.0
 
 - **Token folders, backup and batch** - Existing API keys can be granted three new opt-in permissions in Settings without rotating the key: **Folders** (create/rename/delete/reorder folders in all tenants), **Backup** (`GET /api/export/token` returns the same JSON as Settings backup), and **Batch** (`POST /api/batch` applies creates/updates across reminders, notes and docs atomically with one Idempotency-Key). Batch validation reports per-item errors and still enforces each tenant's write scope. There is still no token trash purge.

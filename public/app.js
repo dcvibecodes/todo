@@ -3549,13 +3549,16 @@ function updateDayStrip() {
 let dayStripLabelFrame = 0;
 
 function syncDayStripLabels() {
-  for (const label of $$('#day-strip .day-weekday')) {
+  const labels = $$('#day-strip .day-weekday');
+  let compact = false;
+  for (const label of labels) {
+    label.textContent = label.dataset.full || label.textContent || '';
+    if (label.clientWidth > 0 && label.scrollWidth > label.clientWidth + 1) compact = true;
+  }
+  if (!compact) return;
+  for (const label of labels) {
     const full = label.dataset.full || label.textContent || '';
-    const initial = label.dataset.initial || full.charAt(0);
-    label.textContent = full;
-    if (label.clientWidth > 0 && label.scrollWidth > label.clientWidth + 1) {
-      label.textContent = initial;
-    }
+    label.textContent = label.dataset.initial || full.charAt(0);
   }
 }
 
