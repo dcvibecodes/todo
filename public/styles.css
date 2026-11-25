@@ -54,7 +54,7 @@
   --settings-control-width: 170px;
   --sheet-gutter: 18px;
   --sheet-content-inset: 14px;
-  --sidebar-width: 280px;
+  --sidebar-width: 320px;
   --list-red: var(--red);
   --list-rose: var(--rose);
   --list-orange: var(--orange);
@@ -3022,6 +3022,10 @@ body.sheet-open .sidebar {
 
   .sidebar::-webkit-scrollbar { display: none; width: 0; height: 0; }
 
+  /* Search, refresh and the menu belong to the main pane on desktop. */
+  .sidebar-head .head-actions,
+  .sidebar-head .search-bar-overlay { display: none; }
+
   .sidebar .sidebar-foot { display: none; }
 
   /* The right pane takes the remaining width and owns its own scroller. */
@@ -3048,7 +3052,6 @@ body.sheet-open .sidebar {
   .back-btn { display: none; }
 
   #menu-btn { display: grid; }
-  #sidebar-menu-btn { display: grid; }
 
   .sort-bar { margin: 0 24px; }
 
@@ -3537,6 +3540,7 @@ body.sheet-open .sidebar {
 }
 
 .tenant-btn {
+  min-width: 0;
   min-height: 34px;
   padding: 0 6px;
   border: 0;
@@ -3546,6 +3550,9 @@ body.sheet-open .sidebar {
   font-family: inherit;
   font-size: 0.8125rem;
   font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   cursor: pointer;
 }
 

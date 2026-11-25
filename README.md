@@ -2,6 +2,12 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v5.0.1
+
+- **Desktop actions only in the main pane** - Search, refresh and the menu no longer appear in both panes. The left pane is folders only; the right pane owns those actions.
+- **Wider folder pane** - The desktop left pane grows from 280 px to 320 px so the Reminders / Notes / Docs tabs have room to breathe. Tenant labels also clip with an ellipsis instead of bleeding into a neighbour.
+- Service worker cache bumped to `workspace-v5.0.1`.
+
 ## What's New in v5.0.0
 
 - **Desktop master-detail layout** - At 900 px and wider, the folder pane stays visible on the left while cards open on the right. Both panes scroll independently inside a centered 1500 px shell. Mobile keeps the one-screen-at-a-time Home/detail flow with Back and the slide animation.
