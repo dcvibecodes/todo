@@ -2,6 +2,11 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v5.9.0
+
+- **Token access now uses the Settings Save button** - Editing an existing token's profile, tenant access, delete flags or extra scopes stages the change and enables the top **Save**; the separate Save Access button is gone. Save applies the Settings changes and token access together, while Cancel/Escape discards them. Generate and Revoke remain immediate actions. Also fixed the density control so it enables Save immediately, and audited the remaining Settings form controls.
+- Service worker cache bumped to `workspace-v5.9.0`.
+
 ## What's New in v5.8.0
 
 - **Drop files into reminder and note attachments** - In the reminder and note edit sheets, drag files onto the Attachments section to stage them exactly like Add Files. A dashed highlight marks the drop area; files still upload only on Save, with the same limits, progress and image/PDF handling as the picker. Mobile keeps the file picker.

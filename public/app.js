@@ -9583,6 +9583,7 @@ const SETTINGS_UPLOAD_KEYS = ['optimize_uploads'];
 let settingsSnapshot = null;
 let sortSnapshot = null;
 let appearanceSnapshot = null;
+let tokenAccessSnapshot = new Map();
 let settingsSaving = false;
 
 function appearanceValues() {
@@ -9663,6 +9664,7 @@ function updateSettingsDirty(preserveMessage = false) {
   const current = settingsValues();
   const dirty = appearanceIsDirty()
     || sortIsDirty()
+    || tokenAccessIsDirty()
     || Object.keys(current).some((key) => current[key] !== settingsSnapshot[key]);
   $('#settings-save').disabled = settingsSaving || !dirty;
   if (dirty && !preserveMessage) $('#settings-msg').hidden = true;
@@ -9737,7 +9739,9 @@ async function saveAppSettings() {
   const serverChanged = defaultsChanged || notifyChanged || progressChanged || uploadChanged;
   const appearanceDirty = appearanceIsDirty();
   const sortChanged = sortIsDirty();
-  if (!serverChanged && !bodySizeChanged && !appearanceDirty && !sortChanged) return;
+  const tokenChanges = tokenAccessChanges();
+  const tokensChanged = tokenChanges.length > 0;
+  if (!serverChanged && !bodySizeChanged && !appearanceDirty && !sortChanged && !tokensChanged) return;
 
   const saveBtn = $('#settings-save');
   const startedAt = Date.now();
@@ -9794,6 +9798,25 @@ async function saveAppSettings() {
       message = message
         ? `${message} Sorting applied to all folders and views.`
         : 'Saved — sorting applied to all folders.';
+    }
+    if (tokensChanged) {
+      try {
+        for (const change of tokenChanges) {
+          await api('/api/tokens/' + change.id + '/profile', {
+            method: 'POST', body: { profile: change.profile },
+          });
+          await api('/api/tokens/' + change.id + '/permissions', {
+            method: 'POST', body: { permissions: change.permissions },
+          });
+        }
+        await renderTokenList();
+        message = message
+          ? `${message} Token access updated.`
+          : 'Saved — token access updated.';
+      } catch (err) {
+        settingsMessage(err.message);
+        return;
+      }
     }
     if (appearanceDirty) {
       message = message
@@ -9889,6 +9912,42 @@ function tokenAccessValues(container) {
   return { profile, permissions };
 }
 
+function tokenPermissionsKey(permissions) {
+  return [...permissions].sort().join('\n');
+}
+
+function captureTokenAccessSnapshot() {
+  const next = new Map();
+  for (const grid of $$('#token-list .token-access-grid[data-token-id]')) {
+    const id = Number(grid.dataset.tokenId);
+    if (!id) continue;
+    const values = tokenAccessValues(grid);
+    next.set(id, {
+      profile: values.profile,
+      permissionsKey: tokenPermissionsKey(values.permissions),
+    });
+  }
+  tokenAccessSnapshot = next;
+}
+
+function tokenAccessChanges() {
+  const changes = [];
+  for (const grid of $$('#token-list .token-access-grid[data-token-id]')) {
+    const id = Number(grid.dataset.tokenId);
+    const snapshot = tokenAccessSnapshot.get(id);
+    if (!snapshot) continue;
+    const values = tokenAccessValues(grid);
+    if (values.profile === snapshot.profile
+      && tokenPermissionsKey(values.permissions) === snapshot.permissionsKey) continue;
+    changes.push({ id, profile: values.profile, permissions: values.permissions });
+  }
+  return changes;
+}
+
+function tokenAccessIsDirty() {
+  return tokenAccessChanges().length > 0;
+}
+
 function tokenAccessSummary(token) {
   const reminders = tokenLevelFor('reminders', token) === 'write' ? 'read + write' : 'read';
   const parts = [`Reminders ${reminders}`];
@@ -9920,6 +9979,7 @@ async function renderTokenList() {
     wrap.append(el('p', { class: 'form-msg', text: err.message }));
     return;
   }
+  tokenAccessSnapshot = new Map();
   if (!tokens.length) {
     wrap.append(el('p', { class: 'notify-hint', text: 'No tokens yet.' }));
     return;
@@ -9971,36 +10031,20 @@ async function renderTokenList() {
         }
       });
 
-      const accessGrid = el('div', { class: 'token-access-grid' });
+      const accessGrid = el('div', {
+        class: 'token-access-grid',
+        'data-token-id': String(token.id),
+      });
       buildTokenAccessEditor(accessGrid, token);
-      const accessSave = el('button', {
-        type: 'button',
-        class: 'secondary-btn small-btn',
-        text: 'Save access',
-        'aria-label': `Save access for ${tokenName}`,
-      });
-      accessSave.addEventListener('click', async () => {
-        accessSave.disabled = true;
-        try {
-          const values = tokenAccessValues(accessGrid);
-          await api('/api/tokens/' + token.id + '/profile', { method: 'POST', body: { profile: values.profile } });
-          await api('/api/tokens/' + token.id + '/permissions', { method: 'POST', body: { permissions: values.permissions } });
-          await renderTokenList();
-          toast('Token access saved');
-        } catch (err) {
-          toast(err.message);
-        } finally {
-          accessSave.disabled = false;
-        }
-      });
+      accessGrid.addEventListener('change', () => updateSettingsDirty());
       row.append(revokeButton, el('details', { class: 'token-scope-details' }, [
         el('summary', { text: `Access: ${summary}` }),
         accessGrid,
-        accessSave,
       ]));
     }
     wrap.append(row);
   }
+  captureTokenAccessSnapshot();
 }
 
 async function generateToken() {
@@ -10310,6 +10354,7 @@ $('#set-density').addEventListener('change', () => {
   const density = $('#set-density').value === 'compact' ? 'compact' : 'comfortable';
   localStorage.setItem(DENSITY_KEY, density);
   applyDensity(true);
+  updateSettingsDirty();
 });
 $('#set-list-progress').addEventListener('change', () => {
   previewListProgress($('#set-list-progress').value);
