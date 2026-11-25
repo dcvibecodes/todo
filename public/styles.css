@@ -2022,8 +2022,97 @@ body.sheet-open .fab {
 .fab:active { transform: scale(0.95); }
 .fab .ic { width: 26px; height: 26px; }
 
+/* Tenant-agnostic scratch pad: a smaller secondary button directly above
+   the add button, with a small anchored popover rather than a sheet. */
+.scratch-fab {
+  position: fixed;
+  right: 28px;
+  bottom: calc(96px + env(safe-area-inset-bottom));
+  z-index: 40;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--elev);
+  color: var(--text-2);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18), 0 2px 6px rgba(0, 0, 0, 0.12);
+  transition: background 0.15s, color 0.15s, transform 0.15s, box-shadow 0.15s, opacity 0.15s;
+}
+.scratch-fab:hover {
+  background: var(--surface);
+  color: var(--text);
+  transform: translateY(-1px);
+  box-shadow: 0 11px 28px rgba(0, 0, 0, 0.2), 0 3px 7px rgba(0, 0, 0, 0.14);
+}
+.scratch-fab:active { transform: scale(0.95); }
+.scratch-fab .ic { width: 19px; height: 19px; }
+body.scratchpad-open .scratch-fab { background: var(--fill); color: var(--text); }
+body.sheet-open .scratch-fab,
+body.selection-mode .scratch-fab {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.scratch-pop {
+  position: fixed;
+  right: 28px;
+  bottom: calc(152px + env(safe-area-inset-bottom));
+  z-index: 45;
+  width: min(360px, calc(100vw - 40px));
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--elev);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.22);
+}
+
+.scratch-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.scratch-title {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+.scratch-status {
+  margin-left: auto;
+  min-height: 1em;
+  font-size: 0.78rem;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.scratch-status.is-saved { color: var(--green); }
+.scratch-status.is-error { color: var(--red); }
+
+.scratch-text {
+  width: 100%;
+  height: 190px;
+  min-height: 140px;
+  max-height: 50dvh;
+  padding: 10px 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  line-height: 1.5;
+  resize: vertical;
+}
+.scratch-text:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .fab, .fab:hover, .fab:active { transition: none; transform: none; }
+  .fab, .fab:hover, .fab:active,
+  .scratch-fab, .scratch-fab:hover, .scratch-fab:active { transition: none; transform: none; }
 }
 
 /* ---------- Sheets ---------- */
@@ -3069,6 +3158,11 @@ body.sheet-open .sidebar {
     right: max(28px, calc((100vw - min(1500px, 100vw)) / 2 + 28px));
   }
 
+  .scratch-fab,
+  .scratch-pop {
+    right: max(28px, calc((100vw - min(1500px, 100vw)) / 2 + 28px));
+  }
+
   /* Centre the bulk-action pill over the right pane, not the whole window. */
   .selection-actions {
     left: calc(50% + (var(--sidebar-width) / 2));
@@ -3230,6 +3324,21 @@ body.sheet-open .sidebar {
     bottom: calc(20px + env(safe-area-inset-bottom));
   }
 
+  .scratch-fab {
+    right: 20px;
+    bottom: calc(86px + env(safe-area-inset-bottom));
+  }
+
+  .scratch-pop {
+    right: 20px;
+    bottom: calc(140px + env(safe-area-inset-bottom));
+    width: min(360px, calc(100vw - 40px));
+  }
+
+  .scratch-text {
+    height: 160px;
+    min-height: 130px;
+  }
 
   #editor .editor-card {
     height: 94dvh;

@@ -507,6 +507,271 @@ function toast(message, actionLabel, action) {
   toastTimer = setTimeout(() => hideToast(), action ? 10000 : 3200);
 }
 
+/* ---------------- Scratch pad ---------------- */
+
+const SCRATCHPAD_MAX = 200000;
+const scratchpadState = {
+  open: false,
+  loaded: false,
+  text: '',
+  savedText: '',
+  saving: false,
+  saveAgain: false,
+  savePromise: null,
+  interval: null,
+  statusTimer: null,
+  fetchSeq: 0,
+  epoch: 0,
+};
+
+function scratchpadElements() {
+  return {
+    button: $('#scratchpad-btn'),
+    pop: $('#scratchpad-pop'),
+    field: $('#scratchpad-text'),
+    status: $('#scratchpad-status'),
+  };
+}
+
+function setScratchpadStatus(message, kind = '') {
+  const { status } = scratchpadElements();
+  if (!status) return;
+  clearTimeout(scratchpadState.statusTimer);
+  status.textContent = message;
+  status.classList.toggle('is-saved', kind === 'saved');
+  status.classList.toggle('is-error', kind === 'error');
+  if (kind === 'saved') {
+    scratchpadState.statusTimer = setTimeout(() => {
+      if (status.textContent === 'Saved') status.textContent = '';
+    }, 1800);
+  }
+}
+
+function scratchpadHasChanges() {
+  return scratchpadState.text !== scratchpadState.savedText;
+}
+
+function syncScratchpadViewport() {
+  const { pop } = scratchpadElements();
+  if (!pop || !scratchpadState.open) return;
+  const viewport = window.visualViewport;
+  if (!viewport) {
+    pop.style.bottom = '';
+    return;
+  }
+  const hiddenBottom = Math.max(0, window.innerHeight - viewport.height);
+  const mobile = window.matchMedia('(max-width: 899px)').matches;
+  // Lift the popover above the on-screen keyboard instead of letting the
+  // lower half of the writing area sit underneath it.
+  pop.style.bottom = mobile && hiddenBottom > 80 ? `${Math.round(hiddenBottom + 12)}px` : '';
+}
+
+function readScratchpadField() {
+  const { field } = scratchpadElements();
+  if (field && !field.disabled) scratchpadState.text = field.value;
+  return field;
+}
+
+async function loadScratchpad({ initial = false } = {}) {
+  const seq = ++scratchpadState.fetchSeq;
+  const epoch = scratchpadState.epoch;
+  const localText = scratchpadState.text;
+  const localSaved = scratchpadState.savedText;
+  const wasClean = localText === localSaved;
+  try {
+    const data = await api('/api/scratchpad');
+    if (seq !== scratchpadState.fetchSeq || epoch !== scratchpadState.epoch) return false;
+    const text = typeof data.text === 'string' ? data.text : '';
+    const { field } = scratchpadElements();
+    if (field && Number.isFinite(data.max_length)) field.maxLength = data.max_length;
+    scratchpadState.loaded = true;
+    if (initial || (wasClean && scratchpadState.text === localText && scratchpadState.savedText === localSaved)) {
+      scratchpadState.text = text;
+      scratchpadState.savedText = text;
+      if (field) { field.value = text; field.disabled = false; }
+      if (scratchpadState.open) setScratchpadStatus('', '');
+    }
+    return true;
+  } catch {
+    if (seq !== scratchpadState.fetchSeq || epoch !== scratchpadState.epoch) return false;
+    if (initial) {
+      const { field } = scratchpadElements();
+      if (field) field.disabled = false;
+      if (scratchpadState.open) setScratchpadStatus('Could not load', 'error');
+    } else if (scratchpadState.open) {
+      setScratchpadStatus('Could not refresh', 'error');
+    }
+    return false;
+  }
+}
+
+function saveScratchpad({ keepalive = false, retryIfBusy = false } = {}) {
+  if (!state.authenticated) return Promise.resolve(false);
+  readScratchpadField();
+  if (!scratchpadHasChanges()) return Promise.resolve(true);
+  if (scratchpadState.saving) {
+    if (retryIfBusy) scratchpadState.saveAgain = true;
+    return scratchpadState.savePromise || Promise.resolve(false);
+  }
+
+  const epoch = scratchpadState.epoch;
+  const text = scratchpadState.text;
+  scratchpadState.saving = true;
+  scratchpadState.saveAgain = false;
+  if (scratchpadState.open) setScratchpadStatus('Saving…');
+
+  const headers = { 'Content-Type': 'application/json' };
+  if (state.csrfToken) headers['X-CSRF-Token'] = state.csrfToken;
+  const init = {
+    method: 'PATCH',
+    credentials: 'same-origin',
+    headers,
+    body: JSON.stringify({ text }),
+  };
+  if (keepalive && text.length < 60000) init.keepalive = true;
+
+  const promise = (async () => {
+    try {
+      const response = await fetch('/api/scratchpad', init);
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Could not save scratch pad');
+      if (epoch !== scratchpadState.epoch) return false;
+      scratchpadState.loaded = true;
+      scratchpadState.savedText = text;
+      if (scratchpadState.open) {
+        if (scratchpadState.text === text) setScratchpadStatus('Saved', 'saved');
+        else setScratchpadStatus('');
+      }
+      return true;
+    } catch {
+      if (epoch !== scratchpadState.epoch) return false;
+      if (scratchpadState.open) setScratchpadStatus('Could not save', 'error');
+      else toast('Scratch pad could not be saved');
+      return false;
+    } finally {
+      if (epoch === scratchpadState.epoch) {
+        scratchpadState.saving = false;
+        scratchpadState.savePromise = null;
+        if (scratchpadState.saveAgain) {
+          scratchpadState.saveAgain = false;
+          if (scratchpadHasChanges()) saveScratchpad();
+        }
+      }
+    }
+  })();
+  scratchpadState.savePromise = promise;
+  return promise;
+}
+
+function flushScratchpad({ keepalive = false } = {}) {
+  readScratchpadField();
+  return saveScratchpad({ keepalive, retryIfBusy: true });
+}
+
+async function flushScratchpadAndWait() {
+  await flushScratchpad();
+  if (scratchpadHasChanges()) await flushScratchpad();
+}
+
+async function openScratchpad() {
+  if (!state.authenticated) return;
+  const { button, pop, field } = scratchpadElements();
+  if (!pop || !field) return;
+  if (scratchpadState.open) {
+    field.focus();
+    return;
+  }
+
+  scratchpadState.open = true;
+  pop.hidden = false;
+  if (button) button.setAttribute('aria-expanded', 'true');
+  document.body.classList.add('scratchpad-open');
+  syncScratchpadViewport();
+  clearInterval(scratchpadState.interval);
+  scratchpadState.interval = setInterval(() => {
+    if (scratchpadState.open && scratchpadHasChanges()) saveScratchpad();
+  }, 5000);
+
+  const initial = !scratchpadState.loaded;
+  field.value = scratchpadState.text;
+  field.disabled = initial;
+  setScratchpadStatus(initial ? 'Loading…' : '');
+  await loadScratchpad({ initial });
+  if (!scratchpadState.open) return;
+  field.disabled = false;
+  field.focus();
+}
+
+function closeScratchpad({ save = true } = {}) {
+  if (!scratchpadState.open) return;
+  readScratchpadField();
+  scratchpadState.open = false;
+  clearInterval(scratchpadState.interval);
+  scratchpadState.interval = null;
+  const { button, pop } = scratchpadElements();
+  if (pop) { pop.hidden = true; pop.style.bottom = ''; }
+  if (button) button.setAttribute('aria-expanded', 'false');
+  document.body.classList.remove('scratchpad-open');
+  setScratchpadStatus('');
+  if (save) flushScratchpad();
+}
+
+function resetScratchpadState() {
+  scratchpadState.epoch += 1;
+  scratchpadState.fetchSeq += 1;
+  scratchpadState.open = false;
+  scratchpadState.loaded = false;
+  scratchpadState.text = '';
+  scratchpadState.savedText = '';
+  scratchpadState.saving = false;
+  scratchpadState.saveAgain = false;
+  scratchpadState.savePromise = null;
+  clearInterval(scratchpadState.interval);
+  scratchpadState.interval = null;
+  clearTimeout(scratchpadState.statusTimer);
+  const { button, pop, field, status } = scratchpadElements();
+  if (pop) { pop.hidden = true; pop.style.bottom = ''; }
+  if (button) button.setAttribute('aria-expanded', 'false');
+  if (field) { field.value = ''; field.disabled = false; }
+  if (status) { status.textContent = ''; status.classList.remove('is-saved', 'is-error'); }
+  document.body.classList.remove('scratchpad-open');
+}
+
+function initScratchpad() {
+  const { button, field } = scratchpadElements();
+  if (!button || !field) return;
+  field.maxLength = SCRATCHPAD_MAX;
+  button.addEventListener('click', (event) => {
+    event.stopPropagation();
+    openScratchpad();
+  });
+  field.addEventListener('input', () => {
+    scratchpadState.text = field.value;
+    setScratchpadStatus('');
+  });
+  document.addEventListener('pointerdown', (event) => {
+    if (!scratchpadState.open) return;
+    if (!(event.target instanceof Element)) return;
+    if (event.target.closest('#scratchpad-pop, #scratchpad-btn')) return;
+    closeScratchpad();
+  }, true);
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape' || !scratchpadState.open) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    closeScratchpad();
+  }, true);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') flushScratchpad({ keepalive: true });
+  });
+  window.addEventListener('pagehide', () => flushScratchpad({ keepalive: true }));
+  window.addEventListener('blur', () => flushScratchpad());
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', syncScratchpadViewport);
+    window.visualViewport.addEventListener('scroll', syncScratchpadViewport);
+  }
+}
+
 function showFieldError(input, messageNode, message) {
   messageNode.textContent = message;
   messageNode.hidden = false;
@@ -698,6 +963,7 @@ function hideUsernameGate() {
 }
 
 function showAuth() {
+  resetScratchpadState();
   state.authenticated = false;
   state.needsUsername = false;
   hideUsernameGate();
@@ -871,6 +1137,7 @@ function renderSkeletons() {
 }
 
 async function logout() {
+  await flushScratchpadAndWait();
   try {
     await api('/api/logout', { method: 'POST' });
   } catch { /* ignore */ }
@@ -8435,6 +8702,7 @@ function finishSheetClose(sheet) {
 }
 
 function openSheet(selector) {
+  if (scratchpadState.open) closeScratchpad();
   if (!$$('.sheet').some((sheet) => !sheet.hidden)) {
     lastFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   }
@@ -10414,6 +10682,7 @@ buildTokenAccessEditor($('#token-access-new'));
 initPullToRefresh();
 initDayPeek();
 initItemDrag();
+initScratchpad();
 function onScrollActivity() {
   lastNoteScrollAt = Date.now();
 }

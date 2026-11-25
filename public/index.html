@@ -355,9 +355,19 @@
       <div id="content" class="content"></div>
     </main>
 
+    <button id="scratchpad-btn" class="scratch-fab" type="button" aria-label="Scratch pad" title="Scratch pad" aria-haspopup="dialog" aria-controls="scratchpad-pop" aria-expanded="false">
+      <svg class="ic"><use href="#i-note"/></svg>
+    </button>
     <button id="fab-add" class="fab" aria-label="New Item" title="New Item">
       <svg class="ic"><use href="#i-plus"/></svg>
     </button>
+    <div id="scratchpad-pop" class="scratch-pop" role="dialog" aria-labelledby="scratchpad-title" hidden>
+      <div class="scratch-head">
+        <span id="scratchpad-title" class="scratch-title">Scratch pad</span>
+        <span id="scratchpad-status" class="scratch-status" role="status" aria-live="polite"></span>
+      </div>
+      <textarea id="scratchpad-text" class="scratch-text" maxlength="200000" placeholder="Write a quick note…" aria-label="Scratch pad text"></textarea>
+    </div>
     <div id="selection-actions" class="selection-actions" hidden>
       <button type="button" id="selection-complete" class="selection-action" hidden>Complete</button>
       <button type="button" id="selection-uncomplete" class="selection-action" hidden>Uncomplete</button>

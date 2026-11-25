@@ -1989,6 +1989,40 @@ async function main() {
     next();
   });
 
+  // One tenant-agnostic scratch pad per user. It deliberately lives outside
+  // notes/folders, so it never appears in lists, counts, search or backups of
+  // tenant items.
+  app.get('/api/scratchpad', async (req, res) => {
+    const row = await db.get(
+      'SELECT text, updated_at FROM scratchpad WHERE user_id = ?',
+      [req.session.userId]
+    );
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({
+      text: row ? row.text : '',
+      updated_at: row ? row.updated_at : null,
+      max_length: NOTE_BODY_MAX,
+    });
+  });
+
+  app.patch('/api/scratchpad', async (req, res) => {
+    const body = req.body || {};
+    if (typeof body.text !== 'string') {
+      return res.status(400).json({ error: 'Scratch pad text must be text' });
+    }
+    if (body.text.length > NOTE_BODY_MAX) {
+      return res.status(400).json({ error: `Scratch pad is limited to ${NOTE_BODY_MAX} characters` });
+    }
+    const now = new Date().toISOString();
+    await db.run(
+      `INSERT INTO scratchpad (user_id, text, updated_at) VALUES (?, ?, ?)
+       ON CONFLICT(user_id) DO UPDATE SET text = excluded.text, updated_at = excluded.updated_at`,
+      [req.session.userId, body.text, now]
+    );
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({ ok: true, updated_at: now });
+  });
+
   app.post('/api/password', authLimiter, async (req, res) => {
     const current = String(req.body.current_password || '');
     const next = String(req.body.new_password || '');
@@ -2336,6 +2370,10 @@ async function main() {
          completed_at, created_at FROM reminder_occurrences ORDER BY id`
     );
     const notes = await db.all('SELECT id, folder_id, title, body, body_format, manual_position, created_at, updated_at FROM notes WHERE deleted_at IS NULL ORDER BY id');
+    const scratchpad = await db.get(
+      'SELECT text, updated_at FROM scratchpad WHERE user_id = ?',
+      [req.session.userId]
+    );
     res.json({
       app: 'todo',
       format: 1,
@@ -2353,6 +2391,9 @@ async function main() {
       reminders,
       occurrences,
       notes,
+      scratchpad: scratchpad
+        ? { text: scratchpad.text, updated_at: scratchpad.updated_at }
+        : { text: '', updated_at: null },
     });
   });
 
@@ -2494,6 +2535,13 @@ async function main() {
         knownNotes.add(note.id);
         counts.notesAdded += 1;
       } catch { counts.notesSkipped += 1; }
+    }
+    if (data.scratchpad && typeof data.scratchpad.text === 'string') {
+      await db.run(
+        `INSERT INTO scratchpad (user_id, text, updated_at) VALUES (?, ?, ?)
+         ON CONFLICT(user_id) DO UPDATE SET text = excluded.text, updated_at = excluded.updated_at`,
+        [req.session.userId, data.scratchpad.text.slice(0, NOTE_BODY_MAX), new Date().toISOString()]
+      );
     }
     await db.setSetting('store_epoch', crypto.randomBytes(16).toString('hex'));
     res.json({ ok: true, ...counts });

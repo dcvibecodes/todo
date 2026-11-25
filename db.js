@@ -114,6 +114,12 @@ async function init() {
     expires INTEGER NOT NULL
   )`);
   await run('CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires)');
+  // Tenant-agnostic quick notes. One row per user, never a note record.
+  await run(`CREATE TABLE IF NOT EXISTS scratchpad (
+    user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    text TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL
+  )`);
   await run(`CREATE TABLE IF NOT EXISTS lists (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
