@@ -228,6 +228,10 @@ function execFileAsync(command, args, options) {
   });
 }
 
+function imageMagickCommand() {
+  return process.env.IMAGEMAGICK_BIN || (process.platform === 'win32' ? 'magick' : 'convert');
+}
+
 async function optimizeImage(filePath, name) {
   const ext = path.extname(name).toLowerCase();
   if (!IMAGE_COMPRESSION_EXTENSIONS.has(ext)) return { status: 'skipped-type' };
@@ -239,7 +243,7 @@ async function optimizeImage(filePath, name) {
   }
   if (!matches) return { status: 'skipped-invalid' };
   const temp = `${filePath}.opt-${crypto.randomUUID()}${ext}`;
-  const command = process.env.IMAGEMAGICK_BIN || 'convert';
+  const command = imageMagickCommand();
   const args = [
     '-limit', 'area', '60000000',
     '-limit', 'memory', '256MiB',
@@ -348,7 +352,7 @@ async function convertHeicUpload(file, name, optimizeLossy) {
   }
   const outName = path.parse(file.filename).name + '.jpg';
   const outPath = path.join(UPLOAD_DIR, outName);
-  const command = process.env.IMAGEMAGICK_BIN || 'convert';
+  const command = imageMagickCommand();
   const args = [
     '-limit', 'area', '60000000',
     '-limit', 'memory', '256MiB',
@@ -452,7 +456,7 @@ async function ensureThumbnail(file, width) {
   const existing = await fs.promises.stat(output).catch(() => null);
   if (existing && existing.mtimeMs >= stat.mtimeMs) return output;
   const temp = `${output}.tmp-${crypto.randomUUID()}.webp`;
-  const command = process.env.IMAGEMAGICK_BIN || 'convert';
+  const command = imageMagickCommand();
   const args = [
     '-limit', 'area', '60000000',
     '-limit', 'memory', '256MiB',
@@ -470,6 +474,11 @@ async function ensureThumbnail(file, width) {
     return output;
   } catch (err) {
     await fs.promises.unlink(temp).catch(() => {});
+    if (err && err.code === 'ENOENT' && String(err.syscall || '').startsWith('spawn')) {
+      const missing = new Error('ImageMagick is not available');
+      missing.code = 'IMAGEMAGICK_UNAVAILABLE';
+      throw missing;
+    }
     throw err;
   }
 }
@@ -4519,7 +4528,12 @@ async function main() {
     let thumb;
     try {
       thumb = await ensureThumbnail(file, width);
-    } catch {
+    } catch (err) {
+      if (err && err.code === 'IMAGEMAGICK_UNAVAILABLE') {
+        res.setHeader('Cache-Control', 'private, no-store');
+        res.setHeader('Vary', 'Cookie, Authorization');
+        return res.redirect(302, `/api/files/${id}/preview`);
+      }
       return res.status(415).json({ error: 'Thumbnail is not available for this file' });
     }
     const [sourceStat, thumbStat] = await Promise.all([

@@ -2,6 +2,12 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v5.14.0
+
+- **Image previews work without ImageMagick** - When the ImageMagick command is unavailable, image thumbnail requests now redirect to the existing authenticated full-image preview instead of showing the grey image icon. Uploads keep the original file. The fallback fires only when the command is missing; a conversion error still uses the normal grey-icon fallback. Windows now looks for `magick` instead of accidentally invoking Windows' built-in `convert.exe`; Linux/macOS keep `convert`, and `IMAGEMAGICK_BIN` still overrides both.
+- **Includes the startup view-title fix** from v5.13.3, so the PWA no longer flashes the hardcoded **Today** header before restoring the saved folder.
+- Service worker cache bumped to `workspace-v5.14.0`.
+
 ## What's New in v5.13.3
 
 - **No startup view-title flash** - The installed/mobile app no longer briefly shows the hardcoded **Today** header before restoring the saved folder. The header title and count stay hidden while the loading skeleton runs, then appear with the remembered Docs/Notes/Reminders view. The skeleton also chooses the correct Home/detail screen before the shell becomes visible, avoiding a flash of the wrong screen.
