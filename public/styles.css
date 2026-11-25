@@ -1528,6 +1528,16 @@ body.flipping .reminder-group { overflow: visible; }
     justify-items: center;
     gap: 2px;
   }
+  .row-tools.delete-confirming .item-move-control { display: none; }
+  .row-tools.delete-confirming .row-delete.confirming {
+    grid-column: 1 / -1;
+    width: 100%;
+    min-width: 0;
+    padding: 0 6px;
+    justify-self: stretch;
+    font-size: 0.6875rem;
+    white-space: nowrap;
+  }
 }
 
 .item-move-control {

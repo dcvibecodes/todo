@@ -2,6 +2,11 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v5.13.2
+
+- **Delete confirmation fits the action grid** - On desktop, arming Delete briefly hides Move to folder and lets the red **Confirm?** button span the full bottom action row inside the card, so it no longer overlaps Move or crosses the border. Confirming deletes; cancel/outside-click/timeout restores Copy/Edit/Move/Delete.
+- Service worker cache bumped to `workspace-v5.13.2`.
+
 ## What's New in v5.13.1
 
 - **Action order: Copy, Edit, Move to folder, Delete** - The Move to folder icon now sits before Delete, so Delete is the last action in both the desktop 2×2 grid and the mobile action stack.

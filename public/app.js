@@ -6057,6 +6057,7 @@ function armInlineDelete(button, row, label) {
   }
   button.dataset.confirm = '1';
   button.classList.add('confirming');
+  button.closest('.row-tools')?.classList.add('delete-confirming');
   button.textContent = 'Confirm?';
   button.setAttribute('aria-label', `Confirm delete ${label}`);
   button._confirmTimer = setTimeout(() => resetRowDelete(button), INLINE_CONFIRM_MS);
@@ -7158,6 +7159,7 @@ function resetRowDelete(button) {
   clearTimeout(button._confirmTimer);
   button.dataset.confirm = '';
   button.classList.remove('confirming');
+  button.closest('.row-tools')?.classList.remove('delete-confirming');
   button.innerHTML = ICON('x', 'ic');
   button.setAttribute('aria-label', button.dataset.origLabel || 'Delete item');
 }
@@ -7174,6 +7176,7 @@ function handleRowDelete(reminder, button) {
     if (!button.dataset.origLabel) button.dataset.origLabel = button.getAttribute('aria-label') || 'Delete item';
     button.dataset.confirm = '1';
     button.classList.add('confirming');
+    button.closest('.row-tools')?.classList.add('delete-confirming');
     button.textContent = 'Confirm?';
     button.setAttribute('aria-label', 'Confirm delete');
     clearTimeout(button._confirmTimer);
@@ -7335,6 +7338,8 @@ function restoreDeletingRow(row) {
   if (content) content.style.transform = '';
   delete row.dataset.deleting;
   resetSwipe(row);
+  const deleteButton = row.querySelector('.row-delete');
+  if (deleteButton) resetRowDelete(deleteButton);
 }
 
 function deleteReminderInline(reminder, row) {
