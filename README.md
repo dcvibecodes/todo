@@ -2,6 +2,12 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v5.5.0
+
+- **More sidebar resize room** - The desktop folder pane now drags between 256 px and 416 px instead of 320-416 px. The default stays 320 px, widths persist per device, and the tenant tabs tighten their text at the narrow end so all three labels stay readable.
+- **Two-row Notes & URL field** - The reminder editor's note field opens at two full text rows so a quick note and a URL fit without resizing. It stays vertically resizable with the same maximum height.
+- Service worker cache bumped to `workspace-v5.5.0`.
+
 ## What's New in v5.4.0
 
 - **Scratch pad polish** - The scratch button is now centered under the same vertical axis as the add button. The pop-up opens much wider and taller, has a visible close button, locks background scrolling, grows upward as you type, and includes a touch/mouse corner grip for resizing. Drag it by the header to reposition it; the position is remembered per device and clamped on screen after keyboard or window changes. The field stays above the on-screen keyboard. **S** opens the scratch pad on desktop.

@@ -1068,8 +1068,9 @@ function initScratchpad() {
 
 /* ---------------- Resizable desktop folders pane ---------------- */
 
-const SIDEBAR_MIN_WIDTH = 320;
+const SIDEBAR_MIN_WIDTH = 256;
 const SIDEBAR_MAX_WIDTH = 416;
+const SIDEBAR_DEFAULT_WIDTH = 320;
 const SIDEBAR_WIDTH_KEY = 'todo.sidebarWidth';
 
 function clampSidebarWidth(width) {
@@ -1079,6 +1080,7 @@ function clampSidebarWidth(width) {
 function applySidebarWidth(width, { persist = false } = {}) {
   const next = clampSidebarWidth(width);
   document.documentElement.style.setProperty('--sidebar-width', `${next}px`);
+  document.body.classList.toggle('sidebar-narrow', next < 300);
   const handle = $('#sidebar-resizer');
   if (handle) handle.setAttribute('aria-valuenow', String(next));
   if (persist) {
@@ -1089,7 +1091,7 @@ function applySidebarWidth(width, { persist = false } = {}) {
 
 function storedSidebarWidth() {
   const value = Number(localStorage.getItem(SIDEBAR_WIDTH_KEY));
-  return Number.isFinite(value) ? clampSidebarWidth(value) : SIDEBAR_MIN_WIDTH;
+  return Number.isFinite(value) ? clampSidebarWidth(value) : SIDEBAR_DEFAULT_WIDTH;
 }
 
 function initSidebarResizer() {

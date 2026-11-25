@@ -2381,10 +2381,10 @@ body.sheet-open .sidebar {
 }
 
 #editor .e-notes {
-  min-height: 48px;
+  min-height: calc(3em + 26px);
   max-height: 30dvh;
   font-size: 17.2px;
-  resize: none;
+  resize: vertical;
   overflow-y: auto;
 }
 
@@ -3192,6 +3192,16 @@ body.sheet-open .sidebar {
   body.sidebar-resizing .sidebar-resizer::after { opacity: 1; }
   body.sidebar-resizing { cursor: col-resize; user-select: none; }
   body.sidebar-resizing * { cursor: col-resize !important; }
+
+  /* Keep all three tenant labels readable at the narrowest pane width. */
+  body.sidebar-narrow .tenant-switch {
+    padding: 2px;
+    gap: 1px;
+  }
+  body.sidebar-narrow .tenant-btn {
+    font-size: 0.71875rem;
+    padding: 0 3px;
+  }
 
   /* The left pane is always visible and scrolls on its own. */
   .sidebar {

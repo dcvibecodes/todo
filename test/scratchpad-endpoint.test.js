@@ -166,6 +166,9 @@ test('scratch pad entry point, close, resize grip and pane divider are served', 
   assert.match(html, /id="scratchpad-close"/);
   assert.match(html, /id="scratchpad-resize"/);
   assert.match(html, /id="sidebar-resizer"/);
+  assert.match(html, /aria-valuemin="256"/);
+  assert.match(html, /aria-valuemax="416"/);
+  assert.match(html, /id="e-notes"/);
   assert.match(html, /S Scratch pad/);
 });
 
