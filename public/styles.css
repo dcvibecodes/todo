@@ -995,6 +995,12 @@ body.gate-open {
 .list-row.drop-before { box-shadow: inset 0 2px 0 var(--accent); }
 .list-row.drop-after { box-shadow: inset 0 -2px 0 var(--accent); }
 
+.list-row.drop-target {
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+.list-row.drop-target .list-name { font-weight: 600; }
+
 .list-drag-ghost {
   position: fixed;
   z-index: 100;
@@ -1106,10 +1112,6 @@ body.list-dragging .list-grip { cursor: grabbing; }
 
 .back-btn .ic { width: 18px; height: 18px; }
 .back-btn:hover { color: var(--text); }
-
-.sidebar-toggle { display: none; flex: none; }
-.sidebar-toggle .ic { width: 18px; height: 18px; transform: rotate(180deg); }
-body.sidebar-collapsed .sidebar-toggle .ic { transform: none; }
 
 .title-wrap {
   flex: 1;
@@ -3026,8 +3028,6 @@ body.sheet-open .sidebar {
 
   .sidebar::-webkit-scrollbar { display: none; width: 0; height: 0; }
 
-  body.sidebar-collapsed .sidebar { display: none; }
-
   /* Search, refresh and the menu belong to the main pane on desktop. */
   .sidebar-head .head-actions,
   .sidebar-head .search-bar-overlay { display: none; }
@@ -3056,7 +3056,6 @@ body.sheet-open .sidebar {
   }
 
   .back-btn { display: none; }
-  .sidebar-toggle { display: grid; }
 
   #menu-btn { display: grid; }
 
@@ -3074,8 +3073,6 @@ body.sheet-open .sidebar {
   .selection-actions {
     left: calc(50% + (var(--sidebar-width) / 2));
   }
-
-  body.sidebar-collapsed .selection-actions { left: 50%; }
 
   .content {
     width: 100%;
@@ -5074,9 +5071,6 @@ body.selection-mode .fab { display: none; }
 }
 @media (pointer: coarse) {
   .account-menu-shortcuts { display: none; }
-}
-@media (max-width: 899px) {
-  .shortcut-sidebar-hint { display: none; }
 }
 
 /* Inline slash-linking */

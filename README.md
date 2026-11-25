@@ -2,15 +2,11 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
-## What's New in v5.1.1
+## What's New in v5.2.0
 
-- **Visible sidebar toggle** - A chevron at the left edge of the main pane hides and shows the desktop folder pane. It points left when the pane is open and right when it is hidden, and its tooltip/label updates to match.
-- Service worker cache bumped to `workspace-v5.1.1`.
-
-## What's New in v5.1.0
-
-- **Toggle the desktop side pane** - **Cmd/Ctrl-B** hides or shows the left folder pane on desktop. The card pane expands to fill the shell while it is hidden. The shortcut is desktop-only and is ignored inside text fields and editors.
-- Service worker cache bumped to `workspace-v5.1.0`.
+- **Drag cards into folders** - On desktop, drag a reminder, note or document card from the right pane onto a folder in the left pane to move it. Hovered folders highlight, smart views reject drops, and dropping on the current folder or outside a folder does nothing. Only the desktop split layout with a mouse or trackpad is affected; mobile touch behaviour is unchanged.
+- **Removed the desktop sidebar toggle** - The Cmd/Ctrl-B shortcut and the main-header chevron are gone. The folder pane stays visible on desktop.
+- Service worker cache bumped to `workspace-v5.2.0`.
 
 ## What's New in v5.0.1
 

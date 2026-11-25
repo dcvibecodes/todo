@@ -1287,22 +1287,6 @@ function isSplitLayout() {
   return NAV_DESKTOP.matches;
 }
 
-function syncSidebarToggle() {
-  const button = $('#sidebar-toggle');
-  if (!button) return;
-  const collapsed = document.body.classList.contains('sidebar-collapsed');
-  const label = collapsed ? 'Show sidebar' : 'Hide sidebar';
-  button.title = label;
-  button.setAttribute('aria-label', label);
-  button.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
-}
-
-function toggleSidebarPane() {
-  if (!isSplitLayout()) return;
-  document.body.classList.toggle('sidebar-collapsed');
-  syncSidebarToggle();
-}
-
 // On phones both screens share the document scroller, so keep one position
 // per screen (the old nested scrollers each remembered their own).
 const screenScroll = { home: 0, detail: 0 };
@@ -3237,6 +3221,7 @@ function renderSidebar() {
         el('span', { class: 'list-progress-counts', text: `${open} open \u00b7 ${done} done` })
       );
     }
+    attachFolderDropTarget(row, list);
     wrap.append(row);
   }
 
@@ -4063,6 +4048,9 @@ function noteRow(note, options = {}) {
   });
   row.append(el('span', { class: 'selection-check', 'aria-hidden': 'true', html: ICON('check', 'ic') }));
   attachSelectionLongPress(row, 'notes', note.id);
+  makeItemDraggable(row, {
+    type: 'note', id: note.id, folderId: note.folder_id, tenant: 'notes', label: note.title,
+  });
   attachManualOrderControls(row, 'note', note.id, note.title);
   return row;
 }
@@ -4138,28 +4126,140 @@ function docRow(doc, options = {}) {
   });
   row.append(el('span', { class: 'selection-check', 'aria-hidden': 'true', html: ICON('check', 'ic') }));
   attachSelectionLongPress(row, 'docs', doc.id);
-  if (!manualModeForView(state.view)) makeDocDraggable(row, doc);
+  makeItemDraggable(row, {
+    type: 'doc', id: doc.id, folderId: doc.folder_id, tenant: 'docs', label: doc.name,
+  }, manualModeForView(state.view) ? {} : {
+    download: true, mime: doc.mime, name: doc.name,
+  });
   attachManualOrderControls(row, 'doc', doc.id, doc.name);
   return row;
 }
 
-function makeDocDraggable(row, doc) {
+let itemDrag = null;
+let itemDropRow = null;
+let itemDragSuppressClickUntil = 0;
+
+function initItemDrag() {
+  document.addEventListener('click', (event) => {
+    if (performance.now() >= itemDragSuppressClickUntil) return;
+    event.preventDefault();
+    event.stopPropagation();
+  }, true);
+  document.addEventListener('dragover', (event) => {
+    if (!itemDrag || !(event.target instanceof Element)) return;
+    if (event.target.closest('#lists .list-row[data-list-id]')) return;
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'none';
+  });
+  document.addEventListener('drop', (event) => {
+    if (!itemDrag) return;
+    if (event.target instanceof Element && event.target.closest('#lists .list-row[data-list-id]')) return;
+    event.preventDefault();
+    finishItemDrag();
+  });
+}
+
+function makeItemDraggable(row, item, options = {}) {
   if (!window.matchMedia('(pointer: fine)').matches) return;
   row.draggable = true;
+  row.addEventListener('pointerdown', (event) => {
+    row._itemDragOrigin = event.target;
+  }, { passive: true });
   row.addEventListener('dragstart', (event) => {
-    if (state.selection.active || event.target.closest('a, button, input, textarea, select')) {
+    if (!isSplitLayout() || state.selection.active || row.classList.contains('swipe-open')) {
       event.preventDefault();
       return;
     }
-    try {
-      event.dataTransfer.effectAllowed = 'copy';
-      event.dataTransfer.setData(
-        'DownloadURL',
-        `${doc.mime || 'application/octet-stream'}:${doc.name}:${location.origin}/api/files/${doc.id}`,
-      );
-    } catch { /* DownloadURL is a Chromium extension; Share/Download remain */ }
+    const origin = row._itemDragOrigin || event.target;
+    if (origin.closest('a, button, input, textarea, select, [contenteditable="true"], [contenteditable=""]')) {
+      event.preventDefault();
+      return;
+    }
+    if (event.dataTransfer) {
+      try {
+        event.dataTransfer.effectAllowed = options.download ? 'copyMove' : 'move';
+        event.dataTransfer.setData('application/x-todo-item', JSON.stringify(item));
+        if (options.download) {
+          event.dataTransfer.setData(
+            'DownloadURL',
+            `${options.mime || 'application/octet-stream'}:${options.name}:${location.origin}/api/files/${item.id}`,
+          );
+        }
+      } catch { /* DownloadURL is a Chromium extension; Share/Download remain */ }
+    }
+    beginItemDrag(row, item);
   });
-  row.addEventListener('dragend', () => { lastDocDragEnd = Date.now(); });
+  row.addEventListener('dragend', () => {
+    if (options.download) lastDocDragEnd = Date.now();
+    finishItemDrag();
+  });
+}
+
+function beginItemDrag(row, item) {
+  clearItemDropHighlight();
+  itemDrag = { ...item, row };
+  document.body.classList.add('item-drag-active');
+  row.classList.add('item-dragging');
+}
+
+function finishItemDrag() {
+  if (!itemDrag) return;
+  itemDrag.row.classList.remove('item-dragging');
+  itemDrag = null;
+  document.body.classList.remove('item-drag-active');
+  clearItemDropHighlight();
+  itemDragSuppressClickUntil = performance.now() + 400;
+}
+
+function clearItemDropHighlight() {
+  if (itemDropRow) itemDropRow.classList.remove('drop-target');
+  itemDropRow = null;
+}
+
+function attachFolderDropTarget(row, list) {
+  row.addEventListener('dragover', (event) => {
+    if (!itemDrag) return;
+    event.preventDefault();
+    const valid = tenantOf(list) === itemDrag.tenant && list.id !== itemDrag.folderId;
+    if (event.dataTransfer) event.dataTransfer.dropEffect = valid ? 'move' : 'none';
+    if (!valid) {
+      if (itemDropRow === row) clearItemDropHighlight();
+      return;
+    }
+    if (itemDropRow !== row) {
+      clearItemDropHighlight();
+      itemDropRow = row;
+      row.classList.add('drop-target');
+    }
+  });
+  row.addEventListener('dragleave', (event) => {
+    if (itemDropRow !== row) return;
+    if (event.relatedTarget instanceof Node && row.contains(event.relatedTarget)) return;
+    clearItemDropHighlight();
+  });
+  row.addEventListener('drop', (event) => {
+    if (!itemDrag) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const drag = itemDrag;
+    finishItemDrag();
+    if (drag.tenant !== tenantOf(list) || drag.folderId === list.id) return;
+    moveItemToFolder(drag, list);
+  });
+}
+
+async function moveItemToFolder(item, folder) {
+  const pathname = item.type === 'reminder' ? '/api/reminders/' + item.id
+    : item.type === 'note' ? '/api/notes/' + item.id : '/api/docs/' + item.id;
+  const body = item.type === 'reminder' ? { list_id: folder.id } : { folder_id: folder.id };
+  const noun = item.type === 'reminder' ? 'Reminder' : item.type === 'note' ? 'Note' : 'Document';
+  try {
+    await api(pathname, { method: 'PATCH', body });
+    await loadState();
+    render();
+    toast(`${noun} moved to ${folder.name}`);
+  } catch (err) {
+    toast(err.message);
+  }
 }
 
 function syncDocFolderVisual() {
@@ -6078,6 +6178,11 @@ function reminderRow(reminder, options = {}) {
   }, [background, content]);
   row.append(el('span', { class: 'selection-check', 'aria-hidden': 'true', html: ICON('check', 'ic') }));
   attachSelectionLongPress(row, 'reminders', reminder.id);
+  if (!options.dayPeek) {
+    makeItemDraggable(row, {
+      type: 'reminder', id: reminder.id, folderId: reminder.list_id, tenant: 'reminders', label: reminder.title,
+    });
+  }
   attachManualOrderControls(row, 'reminder', reminder.id, reminder.title);
   return row;
 }
@@ -9639,8 +9744,6 @@ const FINE_POINTER = window.matchMedia('(pointer: fine)');
 const IS_MAC = /Mac|iPhone|iPad|iPod/.test(navigator.platform || navigator.userAgent);
 const shortcutSearchKey = $('#shortcut-search-key');
 if (shortcutSearchKey) shortcutSearchKey.textContent = IS_MAC ? '⌘K' : 'Ctrl K';
-const shortcutSidebarKey = $('#shortcut-sidebar-key');
-if (shortcutSidebarKey) shortcutSidebarKey.textContent = IS_MAC ? '⌘B' : 'Ctrl B';
 
 function shortcutTextTarget(target) {
   return target instanceof Element
@@ -9664,16 +9767,6 @@ document.addEventListener('keydown', (event) => {
     return;
   }
 
-  const commandSidebar = (event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && key === 'b';
-  if (commandSidebar) {
-    if (event.repeat || !isSplitLayout()) return;
-    if (shortcutTextTarget(event.target) || shortcutTextTarget(document.activeElement)) return;
-    event.preventDefault();
-    closeAccountMenu();
-    toggleSidebarPane();
-    return;
-  }
-
   if (event.metaKey || event.ctrlKey || event.altKey || event.repeat) return;
   if (shortcutTextTarget(event.target) || shortcutTextTarget(document.activeElement)) return;
   if (key === 'n') {
@@ -9687,10 +9780,6 @@ document.addEventListener('keydown', (event) => {
   }
 });
 $('#menu-btn').addEventListener('click', handleMenuButton);
-$('#sidebar-toggle').addEventListener('click', () => {
-  closeAccountMenu();
-  toggleSidebarPane();
-});
 $('#sidebar-menu-btn').addEventListener('click', toggleAccountMenu);
 $('#account-notifications').addEventListener('click', () => { closeAccountMenu(); openNotifySheet(); });
 $('#account-storage').addEventListener('click', async () => {
@@ -10324,6 +10413,7 @@ buildTokenAccessEditor($('#token-access-new'));
 
 initPullToRefresh();
 initDayPeek();
+initItemDrag();
 function onScrollActivity() {
   lastNoteScrollAt = Date.now();
 }
