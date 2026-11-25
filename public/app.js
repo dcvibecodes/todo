@@ -6177,6 +6177,112 @@ function chooseDocsFiles() {
   input.click();
 }
 
+async function uploadDocsFiles(files, folderId) {
+  if (!files.length) return false;
+  const invalid = validateDocsFiles(files);
+  if (invalid) {
+    toast(invalid);
+    return false;
+  }
+  if (!folderId) {
+    toast('Create a Docs folder first');
+    return false;
+  }
+  try {
+    const result = await uploadFiles('/api/docs', files, { folder_id: folderId });
+    state.storage = null;
+    await loadState();
+    goOrRender('docs/folder/' + folderId);
+    const converted = (result.docs || []).filter((doc) => String(doc.optimization || '').startsWith('heic:')).length;
+    toast(`${files.length} file${files.length === 1 ? '' : 's'} added${converted ? ` · ${converted} HEIC converted to JPG` : ''}`);
+    return true;
+  } catch (err) {
+    toast(err.message);
+    return false;
+  }
+}
+
+function docsFileDropEligible() {
+  return state.authenticated
+    && state.tenant === 'docs'
+    && isSplitLayout()
+    && !itemDrag
+    && !$$('.sheet').some((sheet) => !sheet.hidden);
+}
+
+function docsDropHasFiles(event) {
+  return Boolean(event.dataTransfer
+    && Array.from(event.dataTransfer.types || []).includes('Files'));
+}
+
+function docsDropFolderFor(event) {
+  const row = event.target instanceof Element
+    ? event.target.closest('#lists .list-row[data-list-id]')
+    : null;
+  if (row) {
+    const list = listById(Number(row.dataset.listId));
+    if (list && tenantOf(list) === 'docs') return { folder: list, row };
+  }
+  const currentId = viewFolderId(state.view);
+  const current = currentId ? listById(currentId) : null;
+  if (current && tenantOf(current) === 'docs') return { folder: current, row: null };
+  return { folder: systemFolder('docs'), row: null };
+}
+
+let docsDropRow = null;
+let docsDropDepth = 0;
+
+function hideDocsDrop() {
+  docsDropDepth = 0;
+  if (docsDropRow) docsDropRow.classList.remove('file-drop-target');
+  docsDropRow = null;
+  const overlay = $('#docs-drop');
+  if (overlay) overlay.hidden = true;
+}
+
+function showDocsDrop(event) {
+  const { folder, row } = docsDropFolderFor(event);
+  if (docsDropRow && docsDropRow !== row) docsDropRow.classList.remove('file-drop-target');
+  if (row) row.classList.add('file-drop-target');
+  docsDropRow = row;
+  const overlay = $('#docs-drop');
+  const name = $('#docs-drop-folder');
+  if (name) name.textContent = folder ? folder.name : 'Docs';
+  if (overlay) overlay.hidden = false;
+  return folder;
+}
+
+function initDocsFileDrop() {
+  document.addEventListener('dragenter', (event) => {
+    if (!docsFileDropEligible() || !docsDropHasFiles(event)) return;
+    event.preventDefault();
+    docsDropDepth += 1;
+    showDocsDrop(event);
+  });
+  document.addEventListener('dragover', (event) => {
+    if (!docsFileDropEligible() || !docsDropHasFiles(event)) return;
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
+    showDocsDrop(event);
+  });
+  document.addEventListener('dragleave', (event) => {
+    if (!docsFileDropEligible() || !docsDropHasFiles(event)) return;
+    docsDropDepth = Math.max(0, docsDropDepth - 1);
+    if (!docsDropDepth) hideDocsDrop();
+  });
+  document.addEventListener('drop', (event) => {
+    if (!docsFileDropEligible() || !docsDropHasFiles(event)) return;
+    event.preventDefault();
+    const { folder } = docsDropFolderFor(event);
+    const files = Array.from(event.dataTransfer.files || []);
+    hideDocsDrop();
+    if (!folder) return toast('Create a Docs folder first');
+    uploadDocsFiles(files, folder.id);
+  });
+  window.addEventListener('dragend', hideDocsDrop);
+  window.addEventListener('blur', hideDocsDrop);
+}
+
 function emptyState(view) {
   // Warmer empty states with a primary action where one makes sense.
   let copy = {
@@ -10931,26 +11037,14 @@ $('#n-files').addEventListener('change', (event) => {
   event.target.value = '';
   renderNoteAttachments();
 });
-$('#docs-file-input').addEventListener('change', async (event) => {
+$('#docs-file-input').addEventListener('change', (event) => {
   const files = Array.from(event.target.files || []);
   event.target.value = '';
-  if (!files.length) return;
-  const invalid = validateDocsFiles(files);
-  if (invalid) return toast(invalid);
   const folderId = state.docsUploadFolder
     || (systemFolder('docs') ? systemFolder('docs').id : null);
-  if (!folderId) return toast('Create a Docs folder first');
-  try {
-    const result = await uploadFiles('/api/docs', files, { folder_id: folderId });
-    state.storage = null;
-    await loadState();
-    goOrRender('docs/folder/' + folderId);
-    const converted = (result.docs || []).filter((doc) => String(doc.optimization || '').startsWith('heic:')).length;
-    toast(`${files.length} file${files.length === 1 ? '' : 's'} added${converted ? ` · ${converted} HEIC converted to JPG` : ''}`);
-  } catch (err) {
-    toast(err.message);
-  }
+  uploadDocsFiles(files, folderId);
 });
+initDocsFileDrop();
 $('#e-delete').addEventListener('click', deleteReminder);
 $('#e-completed').addEventListener('change', syncRecordRows);
 $('#e-date-on').addEventListener('change', () => { syncDateTimeRows(); markScheduleManual(); });

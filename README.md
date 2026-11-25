@@ -2,6 +2,11 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v5.7.0
+
+- **Drag files into Docs on desktop** - In the Docs tenant, drag files from your computer over the app. Drop on a Docs folder row to upload into that folder, or anywhere else to use the current folder (or Unfiled). A drop-target overlay shows the destination, and uploads use the same validation, progress and HEIC handling as the file picker. Mobile is unchanged.
+- Service worker cache bumped to `workspace-v5.7.0`.
+
 ## What's New in v5.6.2
 
 - **Plain-text paste for reminder notes and Doc descriptions** - Pasting email or other rich HTML now inserts only the clipboard's plain text in the Reminders Notes & URL field and the Docs description field. Intentional spaces, indentation and blank lines are preserved exactly; the email's markup and layout whitespace are not. The Notes tenant body field keeps its existing plain-text behavior.

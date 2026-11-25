@@ -316,6 +316,7 @@ body.gate-open {
 }
 
 .sidebar-resizer { display: none; }
+.docs-drop { display: none; }
 
 .sidebar {
   width: var(--sidebar-width);
@@ -997,11 +998,13 @@ body.gate-open {
 .list-row.drop-before { box-shadow: inset 0 2px 0 var(--accent); }
 .list-row.drop-after { box-shadow: inset 0 -2px 0 var(--accent); }
 
-.list-row.drop-target {
+.list-row.drop-target,
+.list-row.file-drop-target {
   background: color-mix(in srgb, var(--accent) 12%, var(--surface));
   box-shadow: inset 0 0 0 2px var(--accent);
 }
-.list-row.drop-target .list-name { font-weight: 600; }
+.list-row.drop-target .list-name,
+.list-row.file-drop-target .list-name { font-weight: 600; }
 
 .list-drag-ghost {
   position: fixed;
@@ -3232,6 +3235,7 @@ body.sheet-open .sidebar {
 
   /* The right pane takes the remaining width and owns its own scroller. */
   .main {
+    position: relative;
     width: auto;
     max-width: none;
     min-width: 0;
@@ -3241,6 +3245,35 @@ body.sheet-open .sidebar {
     flex: 1 1 auto;
     overflow: hidden;
   }
+
+  .docs-drop {
+    position: absolute;
+    inset: 12px;
+    z-index: 25;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px dashed var(--accent);
+    border-radius: 18px;
+    background: color-mix(in srgb, var(--accent) 7%, var(--surface));
+    pointer-events: none;
+  }
+  .docs-drop-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 7px;
+    padding: 24px 34px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--elev);
+    color: var(--text);
+    text-align: center;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.22);
+  }
+  .docs-drop-card .ic { width: 30px; height: 30px; color: var(--accent); }
+  .docs-drop-title { font-size: 1rem; font-weight: 600; }
+  .docs-drop-folder { font-size: 0.8125rem; color: var(--text-3); }
 
   .main-top { flex: none; }
 
