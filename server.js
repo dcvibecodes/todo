@@ -15,6 +15,7 @@ const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
 const db = require('./db');
 const auth = require('./auth');
 const push = require('./push');
+const yazl = require('yazl');
 const SQLiteSessionStore = require('./session-store');
 const recurrence = require('./recurrence');
 const fuzzy = require('./public/fuzzy-search');
@@ -972,6 +973,7 @@ const TOKEN_SCOPES = new Set([
   'notes:read', 'notes:write', 'notes:delete',
   'docs:read', 'docs:write', 'docs:delete',
   'storage:read', 'search:read',
+  'folders', 'backup', 'batch',
 ]);
 
 function normalizeTokenPermissions(value) {
@@ -1863,6 +1865,7 @@ async function main() {
   const NOTE_ID = /^\/notes\/\d+$/;
   const NOTE_FILES = /^\/notes\/\d+\/attachments$/;
   const DOC_ID = /^\/docs\/\d+$/;
+  const LIST_ID = /^\/lists\/\d+$/;
 
   function tokenRouteAllowed(req, token) {
     const method = req.method;
@@ -1876,6 +1879,7 @@ async function main() {
       if (/^\/files\/\d+(\/preview|\/thumb)?$/.test(route)) return true;
       if (route === '/storage') return tokenHas(token, 'storage:read');
       if (route === '/search') return tokenHas(token, 'search:read');
+      if (route === '/export/token') return tokenHas(token, 'backup');
       return false;
     }
     if (method === 'POST') {
@@ -1886,21 +1890,26 @@ async function main() {
       if (route === '/notes') return tokenHas(token, 'notes:write');
       if (NOTE_FILES.test(route)) return tokenHas(token, 'notes:write');
       if (route === '/docs') return tokenHas(token, 'docs:write');
+      if (route === '/lists') return tokenHas(token, 'folders');
+      if (route === '/batch') return tokenHas(token, 'batch');
       return false;
     }
     if (method === 'PUT') {
       if (/^\/lists\/\d+\/manual-order$/.test(route)) return true;
+      if (route === '/lists/order') return tokenHas(token, 'folders');
       return false;
     }
     if (method === 'PATCH') {
       if (REMINDER_ID.test(route)) return tokenReminderWrite(token);
       if (NOTE_ID.test(route)) return tokenHas(token, 'notes:write') || token.profile === 'write';
       if (DOC_ID.test(route)) return tokenHas(token, 'docs:write') || token.profile === 'write';
+      if (LIST_ID.test(route)) return tokenHas(token, 'folders');
       return false;
     }
     if (method === 'DELETE') {
       if (NOTE_ID.test(route)) return tokenHas(token, 'notes:delete');
       if (DOC_ID.test(route)) return tokenHas(token, 'docs:delete');
+      if (LIST_ID.test(route)) return tokenHas(token, 'folders');
       if (/^\/attachments\/\d+$/.test(route)) {
         return tokenHas(token, 'notes:delete') || tokenHas(token, 'docs:delete');
       }
@@ -1925,6 +1934,9 @@ async function main() {
       docs: { read: true, write: true, delete: true },
       storage: { read: true, scoped: false },
       search: { read: true, scoped: false },
+      folders: { write: true },
+      backup: { read: true },
+      batch: { write: true },
     } : {
       reminders: { read: true, write: tokenReminderWrite(token), delete: false },
       notes: {
@@ -1939,12 +1951,15 @@ async function main() {
       },
       storage: { read: tokenHas(token, 'storage:read'), scoped: true },
       search: { read: tokenHas(token, 'search:read'), scoped: true },
+      folders: { write: tokenHas(token, 'folders') },
+      backup: { read: tokenHas(token, 'backup') },
+      batch: { write: tokenHas(token, 'batch') },
     };
     res.json({
       api_version: VERSION,
       authenticated_as: owner ? 'owner-session' : 'bearer-token',
       capabilities: caps,
-      limits: { upload_bytes: UPLOAD_MAX_BYTES, files_per_request: 10, max_batch_bytes: UPLOAD_MAX_BYTES * 10 },
+      limits: { upload_bytes: UPLOAD_MAX_BYTES, files_per_request: 10, max_batch_bytes: UPLOAD_MAX_BYTES * 10, batch_operations: BATCH_MAX_OPERATIONS },
       upload_compression: {
         optimize_images_and_pdfs: settings.optimize_uploads !== '0',
         text_gzip: true,
@@ -1964,7 +1979,7 @@ async function main() {
         read_field: 'links',
         inline_token: '[[ws:reminder|note|doc:ID]]',
       },
-      json_backup: { includes_uploaded_files: false },
+      json_backup: { includes_uploaded_files: false, token_endpoint: '/api/export/token' },
     });
   });
 
@@ -2358,8 +2373,7 @@ async function main() {
 
   // JSON backup in Settings. Secrets (password hash, VAPID keys, session
   // secret, API tokens) are never exported.
-  app.get('/api/export', async (req, res) => {
-    if (req.token) return denyToken(res);
+  async function buildExportPayload(userId) {
     const settings = await getSettings();
     const lists = await db.all('SELECT id, name, color, sort_order, completed_retention, manual_order, manual_order_revision, tenant, created_at FROM lists ORDER BY tenant, sort_order, id');
     const reminders = await db.all(`SELECT id, list_id, title, notes, due_at, has_time, completed,
@@ -2370,11 +2384,17 @@ async function main() {
          completed_at, created_at FROM reminder_occurrences ORDER BY id`
     );
     const notes = await db.all('SELECT id, folder_id, title, body, body_format, manual_position, created_at, updated_at FROM notes WHERE deleted_at IS NULL ORDER BY id');
-    const scratchpad = await db.get(
-      'SELECT text, updated_at FROM scratchpad WHERE user_id = ?',
-      [req.session.userId]
-    );
-    res.json({
+    const docs = await db.all(`SELECT id, folder_id, name, description, mime, size, stored_size,
+      original_size, compression, optimization, revision, manual_position, created_at, stored_name
+      FROM attachments WHERE owner_type = 'doc' AND deleted_at IS NULL ORDER BY id`);
+    const attachments = await db.all(`SELECT id, tenant, owner_type, owner_id, folder_id, name,
+      stored_name, mime, size, stored_size, original_size, compression, optimization,
+      revision, manual_position, created_at
+      FROM attachments WHERE owner_type IN ('reminder', 'note') AND deleted_at IS NULL ORDER BY id`);
+    const scratchpad = userId
+      ? await db.get('SELECT text, updated_at FROM scratchpad WHERE user_id = ?', [userId])
+      : null;
+    return {
       app: 'todo',
       format: 1,
       exported_at: new Date().toISOString(),
@@ -2391,10 +2411,161 @@ async function main() {
       reminders,
       occurrences,
       notes,
+      docs,
+      attachments,
       scratchpad: scratchpad
         ? { text: scratchpad.text, updated_at: scratchpad.updated_at }
         : { text: '', updated_at: null },
+    };
+  }
+
+  function csvCell(value) {
+    if (value === null || value === undefined) return '';
+    const raw = typeof value === 'object' ? JSON.stringify(value) : String(value);
+    return /[",\r\n]/.test(raw) ? `"${raw.replace(/"/g, '""')}"` : raw;
+  }
+
+  function csvText(headers, rows) {
+    const lines = [headers.map(csvCell).join(',')];
+    for (const row of rows) lines.push(headers.map((header) => csvCell(row[header])).join(','));
+    return '\ufeff' + lines.join('\r\n') + '\r\n';
+  }
+
+  function sendCsv(res, stem, headers, rows) {
+    const date = new Date().toISOString().slice(0, 10);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${stem}-${date}.csv"`);
+    res.setHeader('Cache-Control', 'no-store');
+    res.send(csvText(headers, rows));
+  }
+
+  const REMINDER_CSV_HEADERS = [
+    'tenant', 'id', 'list_id', 'folder_name', 'title', 'notes', 'due_at', 'has_time',
+    'completed', 'completed_at', 'urgent', 'repeat_rule', 'time_model', 'time_zone',
+    'snoozed_until', 'notified_at', 'last_push_at', 'push_count', 'sort_order',
+    'manual_position', 'revision', 'created_at', 'updated_at', 'links',
+  ];
+  const NOTE_CSV_HEADERS = [
+    'tenant', 'id', 'folder_id', 'folder_name', 'title', 'body', 'body_format',
+    'manual_position', 'revision', 'created_at', 'updated_at', 'links',
+  ];
+  const DOC_CSV_HEADERS = [
+    'tenant', 'id', 'folder_id', 'folder_name', 'name', 'description', 'mime', 'size',
+    'stored_size', 'original_size', 'compression', 'optimization', 'manual_position',
+    'revision', 'created_at', 'links',
+  ];
+  const ALL_CSV_HEADERS = [
+    'tenant', 'id', 'list_id', 'folder_id', 'folder_name', 'title', 'name', 'notes',
+    'body', 'body_format', 'description', 'due_at', 'has_time', 'completed',
+    'completed_at', 'urgent', 'repeat_rule', 'time_model', 'time_zone', 'snoozed_until',
+    'notified_at', 'last_push_at', 'push_count', 'sort_order', 'mime', 'size',
+    'stored_size', 'original_size', 'compression', 'optimization', 'manual_position',
+    'revision', 'created_at', 'updated_at', 'links',
+  ];
+
+  async function reminderCsvRows() {
+    const rows = await db.all(`
+      SELECT r.*, l.name AS folder_name
+      FROM reminders r JOIN lists l ON l.id = r.list_id
+      WHERE r.deleted_at IS NULL
+      ORDER BY l.sort_order, r.sort_order, r.id
+    `);
+    for (const row of rows) row.tenant = 'reminders';
+    await attachInlineLinks(rows, null);
+    return rows;
+  }
+
+  async function noteCsvRows() {
+    const rows = await db.all(`
+      SELECT n.*, l.name AS folder_name
+      FROM notes n JOIN lists l ON l.id = n.folder_id
+      WHERE n.deleted_at IS NULL
+      ORDER BY l.sort_order, n.id
+    `);
+    for (const row of rows) row.tenant = 'notes';
+    await attachInlineLinks(rows, null, 'body');
+    return rows;
+  }
+
+  async function docCsvRows() {
+    const rows = await db.all(`
+      SELECT a.*, l.name AS folder_name
+      FROM attachments a JOIN lists l ON l.id = a.folder_id
+      WHERE a.owner_type = 'doc' AND a.deleted_at IS NULL
+      ORDER BY l.sort_order, a.id
+    `);
+    for (const row of rows) row.tenant = 'docs';
+    await attachInlineLinks(rows, null, 'description');
+    return rows;
+  }
+
+  app.get('/api/export', async (req, res) => {
+    if (req.token) return denyToken(res);
+    res.setHeader('Cache-Control', 'no-store');
+    res.json(await buildExportPayload(req.session.userId));
+  });
+
+  app.get('/api/export/token', async (req, res) => {
+    if (!req.token) return denyToken(res);
+    const owner = await db.get('SELECT id FROM users ORDER BY id LIMIT 1');
+    if (!owner) return res.status(404).json({ error: 'No owner account' });
+    res.setHeader('Cache-Control', 'no-store');
+    res.json(await buildExportPayload(owner.id));
+  });
+
+  app.get('/api/export/reminders.csv', async (req, res) => {
+    if (req.token) return denyToken(res);
+    sendCsv(res, 'workspace-reminders', REMINDER_CSV_HEADERS, await reminderCsvRows());
+  });
+
+  app.get('/api/export/notes.csv', async (req, res) => {
+    if (req.token) return denyToken(res);
+    sendCsv(res, 'workspace-notes', NOTE_CSV_HEADERS, await noteCsvRows());
+  });
+
+  app.get('/api/export/docs.csv', async (req, res) => {
+    if (req.token) return denyToken(res);
+    sendCsv(res, 'workspace-docs', DOC_CSV_HEADERS, await docCsvRows());
+  });
+
+  app.get('/api/export/all.csv', async (req, res) => {
+    if (req.token) return denyToken(res);
+    const [reminders, notes, docs] = await Promise.all([reminderCsvRows(), noteCsvRows(), docCsvRows()]);
+    sendCsv(res, 'workspace-all-tenants', ALL_CSV_HEADERS, [...reminders, ...notes, ...docs]);
+  });
+
+  app.get('/api/export/complete', async (req, res) => {
+    if (req.token) return denyToken(res);
+    const payload = await buildExportPayload(req.session.userId);
+    const storedNames = new Set(
+      [...payload.docs, ...payload.attachments]
+        .map((item) => item.stored_name)
+        .filter(Boolean)
+    );
+    const date = new Date().toISOString().slice(0, 10);
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="workspace-complete-${date}.zip"`);
+    res.setHeader('Cache-Control', 'no-store');
+    const zip = new yazl.ZipFile();
+    zip.outputStream.on('error', (err) => {
+      if (!res.headersSent) res.status(500).json({ error: 'Could not create complete download' });
+      else res.destroy(err);
     });
+    zip.outputStream.pipe(res);
+    zip.addBuffer(Buffer.from(JSON.stringify(payload, null, 2)), 'workspace-data.json');
+    for (const rawName of storedNames) {
+      const storedName = path.basename(rawName);
+      if (storedName !== rawName) continue;
+      const filePath = path.join(UPLOAD_DIR, storedName);
+      if (fs.existsSync(filePath)) zip.addFile(filePath, `uploads/${storedName}`);
+    }
+    zip.addBuffer(Buffer.from(
+      'Workspace complete download\n\n'
+      + 'workspace-data.json contains folders, reminders, history, notes, docs metadata, attachments metadata and scratch pad text.\n'
+      + 'uploads/ contains every uploaded file, photo and attachment. The stored_name field in workspace-data.json maps each record to its file.\n'
+      + 'Secrets and application code are not included.\n'
+    ), 'README.txt');
+    zip.end();
   });
 
   // Import matches the export format. Merge-only and id-safe: rows whose id
@@ -5559,6 +5730,420 @@ async function main() {
       [now, now, id]
     );
     res.json({ ok: true, deleted: true, trashed: true });
+  });
+
+  const BATCH_MAX_OPERATIONS = 100;
+  const BATCH_REMINDER_UPDATE_FIELDS = new Set([
+    'title', 'notes', 'list_id', 'due_at', 'has_time', 'urgent',
+    'repeat_rule', 'repeat', 'time_model', 'time_zone', 'scope',
+    'base_revision', 'base_epoch',
+    'linked_reminder_ids', 'linked_note_ids', 'linked_doc_ids',
+  ]);
+  const BATCH_DOC_FIELDS = new Set(['name', 'description', 'folder_id', 'base_revision', 'base_epoch']);
+
+  function batchError(status, message) {
+    return Object.assign(new Error(message), { status });
+  }
+
+  function throwBatchGuard(guard) {
+    if (!guard) return;
+    throw batchError(guard.status || 400, (guard.body && guard.body.error) || 'Batch guard failed');
+  }
+
+  function batchWriteAllowed(token, type, action) {
+    if (type === 'reminder') return tokenReminderWrite(token);
+    if (type === 'note') {
+      if (action === 'create') return tokenHas(token, 'notes:write');
+      return tokenHas(token, 'notes:write') || token.profile === 'write';
+    }
+    if (type === 'doc') {
+      return action === 'update' && (tokenHas(token, 'docs:write') || token.profile === 'write');
+    }
+    return false;
+  }
+
+  async function prepareBatchOperation(op, index, token) {
+    if (!op || typeof op !== 'object' || Array.isArray(op)) {
+      throw batchError(400, 'Each operation must be an object');
+    }
+    const type = String(op.type || '');
+    const action = String(op.action || '');
+    if (!['reminder', 'note', 'doc'].includes(type)) {
+      throw batchError(400, 'type must be reminder, note or doc');
+    }
+    if (!['create', 'update'].includes(action)) {
+      throw batchError(400, 'action must be create or update');
+    }
+    if (!batchWriteAllowed(token, type, action)) {
+      throw batchError(403, `This token cannot ${action} ${type} items`);
+    }
+    const data = op.data === undefined ? {} : op.data;
+    if (!data || typeof data !== 'object' || Array.isArray(data)) {
+      throw batchError(400, 'data must be an object');
+    }
+    if (action === 'update') {
+      const id = Number(op.id);
+      if (!Number.isInteger(id) || id <= 0) throw batchError(400, 'id must be a positive integer');
+      op = { ...op, id };
+    }
+    if (type === 'doc' && action === 'create') {
+      throw batchError(400, 'Docs are created by uploading a file; batch supports doc updates only');
+    }
+
+    if (type === 'reminder' && action === 'create') {
+      if (data.completed) throw batchError(400, 'completed is not supported in batch creates');
+      const createBody = await applyLinkedFields({ ...data });
+      await validateInlineText(createBody.notes);
+      const prep = await prepareReminderCreate(createBody, { strict: true, parity: true, isToken: true });
+      return { index, type, action, createBody, prep };
+    }
+
+    if (type === 'reminder' && action === 'update') {
+      for (const key of Object.keys(data)) {
+        if (!BATCH_REMINDER_UPDATE_FIELDS.has(key)) throw batchError(400, `Unknown field: ${key}`);
+      }
+      if (data.completed !== undefined) throw batchError(400, 'completed is not supported in batch updates');
+      if (data.scope !== undefined && data.scope !== 'series') {
+        throw batchError(400, 'Only series edits are supported in batch updates');
+      }
+      validateWritePatch(data);
+      const id = op.id;
+      requireBase(data);
+      const current = await loadReminder(id);
+      if (!current) throw batchError(404, 'Item not found');
+      throwBatchGuard(await guardEpoch(data.base_epoch));
+      throwBatchGuard(await guardRevision(current, data.base_revision));
+
+      let nextNotes = data.notes;
+      if (hasLinkedFields(data)) {
+        nextNotes = (await applyLinkedFields(data, current.notes)).notes;
+      }
+      if (nextNotes !== undefined) await validateInlineText(nextNotes);
+
+      const settings = await getSettings();
+      const fields = [];
+      const params = [];
+      let attachmentFolderId = null;
+
+      if (data.title !== undefined) {
+        const title = text(data.title, 500);
+        if (!title) throw batchError(400, 'Title is required');
+        fields.push('title = ?');
+        params.push(title);
+      }
+      if (nextNotes !== undefined) {
+        fields.push('notes = ?');
+        params.push(text(nextNotes, NOTES_MAX));
+      }
+      if (data.list_id !== undefined) {
+        const list = await db.get("SELECT id FROM lists WHERE id = ? AND tenant = 'reminders'", [data.list_id]);
+        if (!list) throw batchError(400, 'Choose a valid list');
+        const manualPosition = await manualPositionForMove('reminders', data.list_id, current.list_id);
+        fields.push('list_id = ?');
+        params.push(data.list_id);
+        if (manualPosition !== undefined) {
+          fields.push('manual_position = ?');
+          params.push(manualPosition);
+        }
+        attachmentFolderId = data.list_id;
+      }
+      if (data.due_at !== undefined) {
+        const dueAt = normalizeDate(data.due_at);
+        if (dueAt === undefined) throw batchError(400, 'Invalid date');
+        const hasTime = dueAt && data.has_time ? 1 : 0;
+        fields.push('due_at = ?');
+        params.push(dueAt);
+        fields.push('has_time = ?');
+        params.push(hasTime);
+        fields.push('notified_at = NULL');
+        fields.push('last_push_at = NULL');
+        fields.push('push_count = 0');
+        fields.push('snoozed_until = NULL');
+      }
+      if (data.urgent !== undefined) {
+        fields.push('urgent = ?');
+        params.push(data.urgent ? 1 : 0);
+      }
+      const nextModel = data.time_model !== undefined ? String(data.time_model) : current.time_model;
+      const nextZone = data.time_zone !== undefined
+        ? (data.time_zone === null || data.time_zone === '' ? null : String(data.time_zone))
+        : current.time_zone;
+      if (data.time_model !== undefined) {
+        if (!TIME_MODELS.includes(nextModel)) throw batchError(400, 'time_model must be fixed, floating, or anchored');
+        if (nextModel === 'anchored' && !(nextZone && recurrence.isValidTimeZone(nextZone))) {
+          throw batchError(400, 'Zone-anchored items need a valid time_zone');
+        }
+        fields.push('time_model = ?');
+        params.push(nextModel);
+      }
+      if (data.time_zone !== undefined) {
+        if (nextZone && !recurrence.isValidTimeZone(nextZone)) throw batchError(400, 'Unknown time_zone');
+        fields.push('time_zone = ?');
+        params.push(nextZone);
+      }
+      if (data.repeat_rule !== undefined || data.repeat !== undefined) {
+        let rule;
+        try {
+          rule = recurrence.parseRepeatRule(data.repeat_rule ?? data.repeat ?? 'none');
+        } catch (err) {
+          throw batchError(err.status || 400, err.message || 'Invalid repeat rule');
+        }
+        const dueForAnchor = data.due_at !== undefined ? normalizeDate(data.due_at) : current.due_at;
+        if (recurrence.isRecurringRule(rule)) {
+          if (!dueForAnchor) throw batchError(400, 'Repeating items need a date');
+          rule = recurrence.anchorRule(rule, dueForAnchor, effectiveZoneFor({
+            time_model: nextModel,
+            time_zone: nextZone,
+          }, settings));
+        }
+        fields.push('repeat_rule = ?');
+        params.push(recurrence.encodeRepeatRule(rule));
+      }
+      if (!fields.length) throw batchError(400, 'Nothing to update');
+      return { index, type, action, id, fields, params, attachmentFolderId };
+    }
+
+    if (type === 'note' && action === 'create') {
+      const invalid = validateNoteWrite(data, { create: true });
+      if (invalid) throw batchError(400, invalid);
+      throwBatchGuard(await guardNoteEpoch(data.base_epoch));
+      const title = text(data.title, 500);
+      if (!title) throw batchError(400, 'Note title is required');
+      const sourceFormat = data.body_format === 'html' ? 'html' : 'text';
+      const prepared = await prepareNoteBodyForApi(
+        typeof data.body === 'string' ? data.body.slice(0, NOTE_BODY_MAX) : '',
+        sourceFormat,
+      );
+      const folderId = data.folder_id === undefined || data.folder_id === null
+        ? await systemFolderId('notes') : data.folder_id;
+      const folder = folderId ? await folderRow(folderId, 'notes') : null;
+      if (!folder) throw batchError(400, 'Choose a Notes folder');
+      return {
+        index, type, action, title, body: prepared.body, bodyFormat: prepared.bodyFormat, folderId: folder.id,
+      };
+    }
+
+    if (type === 'note' && action === 'update') {
+      const invalid = validateNoteWrite(data, { create: false });
+      if (invalid) throw batchError(400, invalid);
+      const id = op.id;
+      const current = await loadNoteRow(id);
+      if (!current) throw batchError(404, 'Note not found');
+      throwBatchGuard(await guardNoteEpoch(data.base_epoch));
+      if (current.revision !== data.base_revision) {
+        throw batchError(409, 'Note changed since your read');
+      }
+      const fields = [];
+      const params = [];
+      let attachmentFolderId = null;
+      if (data.title !== undefined) {
+        const title = text(data.title, 500);
+        if (!title) throw batchError(400, 'Note title is required');
+        fields.push('title = ?');
+        params.push(title);
+      }
+      if (data.body !== undefined) {
+        const sourceFormat = data.body_format !== undefined ? data.body_format : current.body_format;
+        const prepared = await prepareNoteBodyForApi(data.body.slice(0, NOTE_BODY_MAX), sourceFormat);
+        fields.push('body = ?');
+        params.push(prepared.body);
+        fields.push('body_format = ?');
+        params.push(prepared.bodyFormat);
+      } else if (data.body_format !== undefined) {
+        fields.push('body_format = ?');
+        params.push(data.body_format);
+      }
+      if (data.folder_id !== undefined) {
+        const folder = await folderRow(data.folder_id, 'notes');
+        if (!folder) throw batchError(400, 'Choose a Notes folder');
+        const manualPosition = await manualPositionForMove('notes', folder.id, current.folder_id);
+        fields.push('folder_id = ?');
+        params.push(folder.id);
+        if (manualPosition !== undefined) {
+          fields.push('manual_position = ?');
+          params.push(manualPosition);
+        }
+        attachmentFolderId = folder.id;
+      }
+      if (!fields.length) throw batchError(400, 'Nothing to update');
+      return { index, type, action, id, fields, params, attachmentFolderId };
+    }
+
+    if (type === 'doc' && action === 'update') {
+      for (const key of Object.keys(data)) {
+        if (!BATCH_DOC_FIELDS.has(key)) throw batchError(400, `Unknown field: ${key}`);
+      }
+      const id = op.id;
+      requireBase(data);
+      const current = await db.get(
+        "SELECT id, folder_id, name, description, stored_name, revision FROM attachments WHERE id = ? AND owner_type = 'doc' AND deleted_at IS NULL",
+        [id]
+      );
+      if (!current) throw batchError(404, 'File not found');
+      throwBatchGuard(await guardEpoch(data.base_epoch));
+      if (current.revision !== data.base_revision) throw batchError(409, 'File changed since your read');
+
+      const hasName = data.name !== undefined;
+      const hasFolder = data.folder_id !== undefined;
+      const hasDescription = data.description !== undefined;
+      if (!hasName && !hasFolder && !hasDescription) throw batchError(400, 'Nothing to update');
+      let nextName = current.name;
+      let nextMime = null;
+      let nextDescription = current.description || '';
+      let nextFolder = current.folder_id;
+      let nextManualPosition;
+      const fields = [];
+      const params = [];
+
+      if (hasDescription) {
+        if (typeof data.description !== 'string') throw batchError(400, 'Description must be text');
+        nextDescription = data.description.trim();
+        if (nextDescription.length > 1000) throw batchError(400, 'Description must be 1000 characters or fewer');
+        await validateInlineText(nextDescription);
+        fields.push('description = ?');
+        params.push(nextDescription);
+      }
+      if (hasName) {
+        const requested = typeof data.name === 'string' ? data.name.trim() : '';
+        if (!requested) throw batchError(400, 'File name is required');
+        nextName = cleanFileName(requested);
+        const originalExt = path.extname(current.name).toLowerCase();
+        if (path.extname(nextName).toLowerCase() !== originalExt) {
+          throw batchError(400, `Keep the ${originalExt} extension when renaming this file`);
+        }
+        const format = docFormatForName(nextName);
+        if (!format) throw batchError(400, docsFormatError());
+        let matches = true;
+        try {
+          matches = await docContentMatches(path.join(UPLOAD_DIR, current.stored_name), format);
+        } catch {
+          matches = false;
+        }
+        if (!matches) throw batchError(400, `File content does not match the ${format.label} extension: ${nextName}`);
+        nextMime = format.mime;
+        fields.push('name = ?');
+        params.push(nextName);
+        fields.push('mime = ?');
+        params.push(nextMime);
+      }
+      if (hasFolder) {
+        const folder = await folderRow(parseId(data.folder_id), 'docs');
+        if (!folder) throw batchError(400, 'Choose a Docs folder');
+        nextFolder = folder.id;
+        nextManualPosition = await manualPositionForMove('docs', folder.id, current.folder_id);
+        fields.push('folder_id = ?');
+        params.push(folder.id);
+        if (nextManualPosition !== undefined) {
+          fields.push('manual_position = ?');
+          params.push(nextManualPosition);
+        }
+      }
+      return { index, type, action, id, fields, params };
+    }
+
+    throw batchError(400, 'Unsupported batch operation');
+  }
+
+  async function applyBatchOperation(item, now) {
+    if (item.type === 'reminder' && item.action === 'create') {
+      return insertReminderRow(item.prep, item.createBody, now);
+    }
+    if (item.type === 'reminder' && item.action === 'update') {
+      const params = item.params.concat([now, item.id]);
+      await db.run(
+        `UPDATE reminders SET ${item.fields.join(', ')}, updated_at = ?, revision = revision + 1 WHERE id = ?`,
+        params,
+      );
+      if (item.attachmentFolderId) {
+        await db.run(
+          "UPDATE attachments SET folder_id = ? WHERE owner_type = 'reminder' AND owner_id = ?",
+          [item.attachmentFolderId, item.id],
+        );
+      }
+      return item.id;
+    }
+    if (item.type === 'note' && item.action === 'create') {
+      const manualPosition = await manualTopPosition('notes', item.folderId);
+      const result = await db.run(
+        'INSERT INTO notes (folder_id, title, body, body_format, manual_position, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [item.folderId, item.title, item.body, item.bodyFormat, manualPosition, now, now],
+      );
+      return result.lastID;
+    }
+    if (item.type === 'note' && item.action === 'update') {
+      const params = item.params.concat([now, item.id]);
+      await db.run(
+        `UPDATE notes SET ${item.fields.join(', ')}, updated_at = ?, revision = revision + 1 WHERE id = ?`,
+        params,
+      );
+      if (item.attachmentFolderId) {
+        await db.run(
+          "UPDATE attachments SET folder_id = ? WHERE owner_type = 'note' AND owner_id = ?",
+          [item.attachmentFolderId, item.id],
+        );
+      }
+      return item.id;
+    }
+    if (item.type === 'doc' && item.action === 'update') {
+      const params = item.params.concat([item.id]);
+      await db.run(
+        `UPDATE attachments SET ${item.fields.join(', ')}, revision = revision + 1 WHERE id = ?`,
+        params,
+      );
+      return item.id;
+    }
+    throw batchError(500, 'Unsupported batch operation');
+  }
+
+  app.post('/api/batch', async (req, res) => {
+    if (!req.token) return denyToken(res);
+    const operations = Array.isArray(req.body.operations) ? req.body.operations : null;
+    if (!operations || !operations.length) {
+      return res.status(400).json({ error: 'operations must be a non-empty array' });
+    }
+    if (operations.length > BATCH_MAX_OPERATIONS) {
+      return res.status(400).json({ error: `A batch can contain at most ${BATCH_MAX_OPERATIONS} operations` });
+    }
+    const key = idempotencyKeyFrom(req);
+    if (!key) return res.status(400).json({ error: 'Idempotency-Key header is required for API writes' });
+    return runTokenWrite(req, res, {
+      route: 'POST /api/batch',
+      key,
+      fingerprint: payloadFingerprint(req.body),
+      execute: async () => {
+        const errors = [];
+        const prepared = [];
+        for (let index = 0; index < operations.length; index += 1) {
+          try {
+            prepared.push(await prepareBatchOperation(operations[index], index, req.token));
+          } catch (err) {
+            errors.push({
+              index,
+              type: operations[index] && operations[index].type,
+              action: operations[index] && operations[index].action,
+              id: operations[index] && operations[index].id,
+              status: err.status || 400,
+              error: err.message || 'Invalid operation',
+            });
+          }
+        }
+        if (errors.length) {
+          const status = errors.some((item) => item.status === 403) ? 403 : 400;
+          return { status, body: { error: 'Batch validation failed', items: errors } };
+        }
+        const results = [];
+        const now = new Date().toISOString();
+        for (const item of prepared) {
+          try {
+            const id = await applyBatchOperation(item, now);
+            results.push({ index: item.index, type: item.type, action: item.action, id });
+          } catch (err) {
+            throw batchError(err.status || 500, `Batch item ${item.index} failed: ${err.message || 'Server error'}`);
+          }
+        }
+        return { status: 200, body: { ok: true, results } };
+      },
+    });
   });
 
   app.post('/api/push/subscribe', async (req, res) => {

@@ -1081,6 +1081,7 @@ function applySidebarWidth(width, { persist = false } = {}) {
   const next = clampSidebarWidth(width);
   document.documentElement.style.setProperty('--sidebar-width', `${next}px`);
   document.body.classList.toggle('sidebar-narrow', next < 300);
+  scheduleDayStripLabelSync();
   const handle = $('#sidebar-resizer');
   if (handle) handle.setAttribute('aria-valuenow', String(next));
   if (persist) {
@@ -3495,6 +3496,7 @@ function updateDayStrip() {
     strip.replaceChildren();
     for (const date of dates) {
       const key = localDateValue(date);
+      const shortWeekday = date.toLocaleDateString(undefined, { weekday: 'short' });
       const cell = el('button', {
         type: 'button',
         class: 'day-cell',
@@ -3502,7 +3504,12 @@ function updateDayStrip() {
         'aria-expanded': 'false',
         'aria-controls': 'day-card',
       }, [
-        el('span', { class: 'day-weekday', text: date.toLocaleDateString(undefined, { weekday: 'short' }) }),
+        el('span', {
+          class: 'day-weekday',
+          text: shortWeekday,
+          'data-full': shortWeekday,
+          'data-initial': shortWeekday.charAt(0),
+        }),
         el('span', { class: 'day-date', text: String(date.getDate()) }),
         el('span', { class: 'day-indicator' }),
       ]);
@@ -3536,6 +3543,28 @@ function updateDayStrip() {
     const label = dayPeekCellLabel(parseDayKey(key), key, count);
     cell.setAttribute('aria-label', isSelected ? `${label}, expanded` : label);
   }
+  scheduleDayStripLabelSync();
+}
+
+let dayStripLabelFrame = 0;
+
+function syncDayStripLabels() {
+  for (const label of $$('#day-strip .day-weekday')) {
+    const full = label.dataset.full || label.textContent || '';
+    const initial = label.dataset.initial || full.charAt(0);
+    label.textContent = full;
+    if (label.clientWidth > 0 && label.scrollWidth > label.clientWidth + 1) {
+      label.textContent = initial;
+    }
+  }
+}
+
+function scheduleDayStripLabelSync() {
+  if (dayStripLabelFrame) return;
+  dayStripLabelFrame = requestAnimationFrame(() => {
+    dayStripLabelFrame = 0;
+    syncDayStripLabels();
+  });
 }
 
 function homeScreenVisible() {
@@ -3706,6 +3735,10 @@ function checkDayRollover() {
 }
 
 function initDayPeek() {
+  window.addEventListener('resize', scheduleDayStripLabelSync);
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(scheduleDayStripLabelSync).catch(() => {});
+  }
   const card = $('#day-card');
   if (card) {
     card.addEventListener('transitionend', (event) => {
@@ -9643,7 +9676,14 @@ const TOKEN_ACCESS_TENANTS = [
   { key: 'notes', label: 'Notes', levels: [['none', 'No access'], ['read', 'Read only'], ['write', 'Read + write']], deletable: true },
   { key: 'docs', label: 'Docs', levels: [['none', 'No access'], ['read', 'Read only'], ['write', 'Read + write']], deletable: true },
 ];
-const TOKEN_OTHER_SCOPES = [['storage:read', 'Storage usage'], ['search:read', 'Search']];
+const TOKEN_OTHER_SCOPES = [
+  ['folders', 'Folders'],
+  ['backup', 'Backup'],
+  ['batch', 'Batch writes'],
+  ['storage:read', 'Storage usage'],
+  ['search:read', 'Search'],
+];
+const TOKEN_OTHER_LABELS = new Map(TOKEN_OTHER_SCOPES);
 
 function tokenLevelFor(tenant, token) {
   if (tenant === 'reminders') {
@@ -9718,8 +9758,9 @@ function tokenAccessSummary(token) {
     const label = level === 'write' ? 'read + write' : 'read only';
     parts.push(`${tenant === 'notes' ? 'Notes' : 'Docs'} ${label}${hasDelete ? ' + delete' : ''}`);
   }
-  const extras = (token.permissions || []).filter((scope) => scope === 'storage:read' || scope === 'search:read')
-    .map((scope) => scope === 'storage:read' ? 'Storage' : 'Search');
+  const extras = (token.permissions || [])
+    .filter((scope) => TOKEN_OTHER_LABELS.has(scope))
+    .map((scope) => TOKEN_OTHER_LABELS.get(scope));
   if (extras.length) parts.push(extras.join(' + '));
   return parts.join(' · ');
 }
@@ -9834,23 +9875,68 @@ async function generateToken() {
   }
 }
 
+async function downloadWorkspaceFile(pathname, fallbackName, successMessage) {
+  const res = await fetch(pathname, { credentials: 'same-origin' });
+  if (!res.ok) {
+    let message = 'Download failed';
+    try {
+      const data = await res.json();
+      if (data && data.error) message = data.error;
+    } catch { /* non-JSON error */ }
+    throw new Error(message);
+  }
+  const blob = await res.blob();
+  const disposition = res.headers.get('content-disposition') || '';
+  const match = disposition.match(/filename="([^"]+)"/i);
+  const name = match ? match[1] : fallbackName;
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = name;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+  if (successMessage) toast(successMessage);
+}
+
 async function exportBackup() {
   try {
-    const res = await fetch('/api/export', { credentials: 'same-origin' });
-    if (!res.ok) throw new Error('Export failed');
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `workspace-backup-${new Date().toISOString().slice(0, 10)}.json`;
-    document.body.append(link);
-    link.click();
-    link.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 5000);
-    toast('Backup downloaded');
+    await downloadWorkspaceFile(
+      '/api/export',
+      `workspace-backup-${new Date().toISOString().slice(0, 10)}.json`,
+      'Backup downloaded',
+    );
   } catch (err) {
     toast(err.message || 'Export failed');
   }
+}
+
+function openExports() {
+  closeAccountMenu();
+  openSheet('#exports-sheet');
+}
+
+async function runCsvExport(pathname, fallbackName) {
+  try {
+    await downloadWorkspaceFile(
+      pathname,
+      `${fallbackName}-${new Date().toISOString().slice(0, 10)}.csv`,
+      'CSV downloaded',
+    );
+  } catch (err) {
+    toast(err.message || 'Export failed');
+  }
+}
+
+function exportComplete() {
+  const link = document.createElement('a');
+  link.href = '/api/export/complete';
+  link.download = `workspace-complete-${new Date().toISOString().slice(0, 10)}.zip`;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  toast('Complete download started');
 }
 
 function importMessage(message, ok = false) {
@@ -10430,8 +10516,15 @@ $('#account-storage').addEventListener('click', async () => {
   if (summary) summary.scrollIntoView({ block: 'center', behavior: MOTION_REDUCED.matches ? 'auto' : 'smooth' });
 });
 $('#account-trash').addEventListener('click', () => { openTrashSheet(); });
+$('#account-exports').addEventListener('click', openExports);
 $('#account-settings').addEventListener('click', () => { closeAccountMenu(); openSettings(); });
 $('#account-logout').addEventListener('click', () => { closeAccountMenu(); logout(); });
+$('#export-reminders-csv').addEventListener('click', () => runCsvExport('/api/export/reminders.csv', 'workspace-reminders'));
+$('#export-notes-csv').addEventListener('click', () => runCsvExport('/api/export/notes.csv', 'workspace-notes'));
+$('#export-docs-csv').addEventListener('click', () => runCsvExport('/api/export/docs.csv', 'workspace-docs'));
+$('#export-all-csv').addEventListener('click', () => runCsvExport('/api/export/all.csv', 'workspace-all-tenants'));
+$('#export-json-backup').addEventListener('click', exportBackup);
+$('#export-complete-zip').addEventListener('click', exportComplete);
 $('#trash-empty').addEventListener('click', async () => {
   const button = $('#trash-empty');
   if (!trashEmptyArmed) {

@@ -853,6 +853,34 @@
     </div>
   </div>
 
+  <div id="exports-sheet" class="sheet" hidden>
+    <div class="sheet-backdrop" data-close></div>
+    <div class="sheet-card">
+      <header class="sheet-head">
+        <button type="button" class="text-btn" data-close>Close</button>
+        <span>Exports</span>
+        <span></span>
+      </header>
+      <div class="sheet-body">
+        <div class="settings-group exports-group">
+          <h3>Spreadsheets</h3>
+          <button type="button" id="export-reminders-csv" class="secondary-btn">Reminders CSV</button>
+          <button type="button" id="export-notes-csv" class="secondary-btn">Notes CSV</button>
+          <button type="button" id="export-docs-csv" class="secondary-btn">Docs CSV</button>
+          <button type="button" id="export-all-csv" class="secondary-btn">All tenants CSV</button>
+          <p class="notify-hint">One row per item with its folder, full untruncated text, dates and stored fields. UTF-8 CSV, ready for a spreadsheet. <strong>No attachments, photos or file bytes</strong> are included. The all-tenants file uses one combined set of columns with a <code>tenant</code> column.</p>
+        </div>
+        <div class="settings-group exports-group">
+          <h3>Backup</h3>
+          <button type="button" id="export-json-backup" class="secondary-btn">JSON backup</button>
+          <p class="notify-hint">Folders, reminder history, note text, doc and attachment metadata, and the scratch pad. Secrets and uploaded file bytes are excluded.</p>
+          <button type="button" id="export-complete-zip" class="secondary-btn">Complete Download (ZIP)</button>
+          <p class="notify-hint">A ZIP with the full JSON data <strong>plus every uploaded file, photo and attachment</strong> under <code>uploads/</code>. Use this when you need a complete copy, not just metadata.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div id="settings-sheet" class="sheet" hidden>
     <div class="sheet-backdrop" data-close></div>
     <div class="sheet-card">
@@ -999,17 +1027,17 @@
           <button type="button" id="import-btn" class="secondary-btn">Import backup…</button>
           <input id="import-file" type="file" accept="application/json,.json" hidden>
           <p id="import-msg" class="form-msg" hidden></p>
-          <p class="notify-hint">JSON backup includes folders, reminder history, note text and file metadata — <strong>not uploaded file bytes</strong>. For a complete restore, back up <code>data/todo.db</code> and <code>data/uploads</code> together.</p>
+          <p class="notify-hint">JSON backup includes folders, reminder history, note text and file metadata — <strong>not uploaded file bytes</strong>. Use Exports → Complete Download for a ZIP with every file, or back up <code>data/todo.db</code> and <code>data/uploads</code> together.</p>
         </div>
         <div class="settings-group">
           <h3>API tokens</h3>
-          <p class="notify-hint">Tokens let your other agents work with items — no browser needed. Access is set per tenant below. Read + write covers adding and editing; delete is a separate destructive permission for Notes and Docs. Reminders tokens cannot delete. Tokens still cannot manage folders, settings or the password.</p>
+          <p class="notify-hint">Tokens let your other agents work with items — no browser needed. Access is set per tenant below. Read + write covers adding and editing; delete is a separate destructive permission for Notes and Docs. Reminders tokens cannot delete. Folders, JSON backup and batch writes are separate opt-ins; settings and the password stay owner-only.</p>
           <label class="settings-row" for="token-name">
             <span>Name</span>
             <input id="token-name" type="text" placeholder="e.g. friday-agent" maxlength="80" autocomplete="off">
           </label>
           <div id="token-access-new" class="token-access-grid"></div>
-          <p class="notify-hint">Read + write covers adding and editing. Delete is a separate, destructive permission for Notes and Docs; Reminders tokens cannot delete items. Storage and Search are read-only extras.</p>
+          <p class="notify-hint">Read + write covers adding and editing. Delete is a separate, destructive permission for Notes and Docs; Reminders tokens cannot delete items. Storage and Search are read-only extras. Folders, Backup and Batch writes are separate opt-ins and can be added to an existing token.</p>
           <button type="button" id="token-generate" class="primary-btn">Generate token</button>
           <div id="token-once" class="token-once" hidden>
             <p class="notify-hint"><strong>Copy it now — it will never be shown again.</strong></p>
@@ -1039,7 +1067,23 @@ curl -H "Authorization: Bearer $TOKEN" "$HOST/api/reminders?q=Call%20mom"
 curl -X PATCH -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"completed":true}' \
-  $HOST/api/reminders/123</pre>
+  $HOST/api/reminders/123
+
+# create a folder (needs Folders permission)
+curl -X POST -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Agent inbox","tenant":"notes"}' \
+  $HOST/api/lists
+
+# JSON backup snapshot (needs Backup permission)
+curl -H "Authorization: Bearer $TOKEN" $HOST/api/export/token
+
+# atomic batch (needs Batch + the tenant write scope)
+curl -X POST -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: batch-001" \
+  -d '{"operations":[{"type":"reminder","action":"create","data":{"title":"Batch item","list":"Reminders"}}]}' \
+  $HOST/api/batch</pre>
           </details>
         </div>
         <div class="settings-group">
@@ -1103,6 +1147,10 @@ curl -X PATCH -H "Authorization: Bearer $TOKEN" \
       <span class="foot-ic"><svg class="ic"><use href="#i-archive"/></svg></span>
       <span>Trash</span>
       <span id="account-trash-count" class="storage-total"></span>
+    </button>
+    <button type="button" id="account-exports" class="text-btn">
+      <span class="foot-ic"><svg class="ic"><use href="#i-download"/></svg></span>
+      <span>Exports</span>
     </button>
     <button type="button" id="account-settings" class="text-btn">
       <span class="foot-ic"><svg class="ic"><use href="#i-settings"/></svg></span>
