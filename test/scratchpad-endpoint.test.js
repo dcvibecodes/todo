@@ -159,6 +159,16 @@ test('scratch pad restores from a JSON backup', async () => {
   assert.equal((await json('/api/scratchpad')).text, backupText);
 });
 
+test('scratch pad entry point, close, resize grip and pane divider are served', async () => {
+  const response = await request('/');
+  const html = await response.text();
+  assert.match(html, /id="scratchpad-btn"/);
+  assert.match(html, /id="scratchpad-close"/);
+  assert.match(html, /id="scratchpad-resize"/);
+  assert.match(html, /id="sidebar-resizer"/);
+  assert.match(html, /S Scratch pad/);
+});
+
 test('scratch pad survives sign-out and sign-in', async () => {
   const text = 'persists through auth';
   await json('/api/scratchpad', { method: 'PATCH', csrf: true, body: { text } });

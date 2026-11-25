@@ -286,6 +286,7 @@
         </button>
       </div>
     </aside>
+    <div id="sidebar-resizer" class="sidebar-resizer" role="separator" aria-orientation="vertical" aria-label="Resize folder pane" aria-valuemin="320" aria-valuemax="416" aria-valuenow="320" tabindex="0" title="Drag to resize"></div>
 
     <main class="main">
       <div class="main-top">
@@ -362,11 +363,19 @@
       <svg class="ic"><use href="#i-plus"/></svg>
     </button>
     <div id="scratchpad-pop" class="scratch-pop" role="dialog" aria-labelledby="scratchpad-title" hidden>
-      <div class="scratch-head">
+      <div id="scratchpad-head" class="scratch-head">
         <span id="scratchpad-title" class="scratch-title">Scratch pad</span>
         <span id="scratchpad-status" class="scratch-status" role="status" aria-live="polite"></span>
+        <button id="scratchpad-close" class="icon-btn small scratch-close" type="button" aria-label="Close scratch pad" title="Close">
+          <svg class="ic"><use href="#i-x"/></svg>
+        </button>
       </div>
-      <textarea id="scratchpad-text" class="scratch-text" maxlength="200000" placeholder="Write a quick note…" aria-label="Scratch pad text"></textarea>
+      <div class="scratch-field-wrap">
+        <textarea id="scratchpad-text" class="scratch-text" maxlength="200000" placeholder="Write a quick note…" aria-label="Scratch pad text"></textarea>
+        <button id="scratchpad-resize" class="scratch-resize" type="button" aria-label="Resize scratch pad" title="Drag to resize">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 13L13 3M7 13L13 7M11 13L13 11"/></svg>
+        </button>
+      </div>
     </div>
     <div id="selection-actions" class="selection-actions" hidden>
       <button type="button" id="selection-complete" class="selection-action" hidden>Complete</button>
@@ -1103,7 +1112,7 @@ curl -X PATCH -H "Authorization: Bearer $TOKEN" \
       <span class="foot-ic"><svg class="ic"><use href="#i-logout"/></svg></span>
       <span>Log out</span>
     </button>
-    <div class="account-menu-shortcuts" aria-label="Keyboard shortcuts">N New · R Refresh · <span id="shortcut-search-key">Ctrl K</span> Search · Esc Back</div>
+    <div class="account-menu-shortcuts" aria-label="Keyboard shortcuts">N New · S Scratch pad · R Refresh · <span id="shortcut-search-key">Ctrl K</span> Search · Esc Back</div>
   </div>
 
   <div id="pull-refresh" class="pull-refresh" aria-hidden="true">

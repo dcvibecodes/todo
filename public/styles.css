@@ -315,6 +315,8 @@ body.gate-open {
   width: 100%;
 }
 
+.sidebar-resizer { display: none; }
+
 .sidebar {
   width: var(--sidebar-width);
   flex: none;
@@ -2022,11 +2024,11 @@ body.sheet-open .fab {
 .fab:active { transform: scale(0.95); }
 .fab .ic { width: 26px; height: 26px; }
 
-/* Tenant-agnostic scratch pad: a smaller secondary button directly above
-   the add button, with a small anchored popover rather than a sheet. */
+/* Tenant-agnostic scratch pad: a smaller secondary button centered over the
+   add button, with a draggable popover rather than a sheet. */
 .scratch-fab {
   position: fixed;
-  right: 28px;
+  right: 34px; /* 28px FAB inset + (56px FAB - 44px button) / 2 */
   bottom: calc(96px + env(safe-area-inset-bottom));
   z-index: 40;
   width: 44px;
@@ -2057,10 +2059,12 @@ body.selection-mode .scratch-fab {
 
 .scratch-pop {
   position: fixed;
-  right: 28px;
-  bottom: calc(152px + env(safe-area-inset-bottom));
+  top: 0;
+  left: 0;
   z-index: 45;
-  width: min(360px, calc(100vw - 40px));
+  width: min(560px, calc(100vw - 24px));
+  max-width: calc(100vw - 16px);
+  max-height: calc(100dvh - 16px);
   padding: 12px;
   display: flex;
   flex-direction: column;
@@ -2069,15 +2073,23 @@ body.selection-mode .scratch-fab {
   border: 1px solid var(--line);
   border-radius: 12px;
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.22);
+  overflow: hidden;
 }
 
 .scratch-head {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   min-width: 0;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
 }
+body.scratchpad-dragging,
+body.scratchpad-dragging .scratch-head { cursor: grabbing; }
+body.scratchpad-dragging { user-select: none; }
 .scratch-title {
+  flex: none;
   font-size: 0.9375rem;
   font-weight: 600;
   letter-spacing: -0.01em;
@@ -2085,29 +2097,79 @@ body.selection-mode .scratch-fab {
 }
 .scratch-status {
   margin-left: auto;
+  min-width: 0;
   min-height: 1em;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-size: 0.78rem;
   color: var(--text-3);
   white-space: nowrap;
 }
 .scratch-status.is-saved { color: var(--green); }
 .scratch-status.is-error { color: var(--red); }
+.scratch-close { flex: none; }
 
+.scratch-field-wrap {
+  position: relative;
+  flex: 1 1 auto;
+  height: 360px;
+  min-height: 120px;
+  display: flex;
+}
 .scratch-text {
+  flex: 1 1 auto;
   width: 100%;
-  height: 190px;
-  min-height: 140px;
-  max-height: 50dvh;
-  padding: 10px 12px;
+  height: 100%;
+  min-height: 0;
+  max-height: none;
+  padding: 12px 14px 22px;
   border: 1px solid var(--line-soft);
   border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--text) 6%, transparent);
   line-height: 1.5;
-  resize: vertical;
+  resize: none;
 }
 .scratch-text:focus {
   outline: none;
   border-color: var(--accent);
+}
+
+.scratch-resize {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-3);
+  cursor: nwse-resize;
+  touch-action: none;
+}
+.scratch-resize:hover { color: var(--text-2); }
+.scratch-resize svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+}
+body.scratchpad-resizing { cursor: nwse-resize; user-select: none; }
+body.scratchpad-resizing * { cursor: nwse-resize !important; }
+
+/* The rest of the app cannot scroll behind the open scratch pad. */
+body.scratchpad-lock {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+body.scratchpad-lock .content,
+body.scratchpad-lock .sidebar { overflow: hidden; }
+@media (max-width: 899px) and (pointer: coarse) {
+  body.scratchpad-lock { position: fixed; inset: 0; width: 100%; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -3090,6 +3152,7 @@ body.sheet-open .sidebar {
   body { overflow: hidden; overscroll-behavior-y: contain; }
 
   .shell {
+    position: relative;
     display: flex;
     height: 100dvh;
     min-height: 0;
@@ -3097,6 +3160,38 @@ body.sheet-open .sidebar {
     max-width: 1500px;
     margin: 0 auto;
   }
+
+  /* A 9px hit area centered on the pane divider. It overlays the layout so
+     changing the pane width never adds a stray column. */
+  .sidebar-resizer {
+    display: block;
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: var(--sidebar-width);
+    width: 9px;
+    transform: translateX(-4px);
+    z-index: 6;
+    cursor: col-resize;
+    touch-action: none;
+    background: transparent;
+  }
+  .sidebar-resizer::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 4px;
+    width: 1px;
+    background: var(--accent);
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+  .sidebar-resizer:hover::after,
+  .sidebar-resizer:focus-visible::after,
+  body.sidebar-resizing .sidebar-resizer::after { opacity: 1; }
+  body.sidebar-resizing { cursor: col-resize; user-select: none; }
+  body.sidebar-resizing * { cursor: col-resize !important; }
 
   /* The left pane is always visible and scrolls on its own. */
   .sidebar {
@@ -3158,9 +3253,8 @@ body.sheet-open .sidebar {
     right: max(28px, calc((100vw - min(1500px, 100vw)) / 2 + 28px));
   }
 
-  .scratch-fab,
-  .scratch-pop {
-    right: max(28px, calc((100vw - min(1500px, 100vw)) / 2 + 28px));
+  .scratch-fab {
+    right: max(34px, calc((100vw - min(1500px, 100vw)) / 2 + 34px));
   }
 
   /* Centre the bulk-action pill over the right pane, not the whole window. */
@@ -3325,20 +3419,11 @@ body.sheet-open .sidebar {
   }
 
   .scratch-fab {
-    right: 20px;
+    right: 26px;
     bottom: calc(86px + env(safe-area-inset-bottom));
   }
 
-  .scratch-pop {
-    right: 20px;
-    bottom: calc(140px + env(safe-area-inset-bottom));
-    width: min(360px, calc(100vw - 40px));
-  }
-
-  .scratch-text {
-    height: 160px;
-    min-height: 130px;
-  }
+  .scratch-field-wrap { height: 300px; }
 
   #editor .editor-card {
     height: 94dvh;

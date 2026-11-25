@@ -510,6 +510,19 @@ function toast(message, actionLabel, action) {
 /* ---------------- Scratch pad ---------------- */
 
 const SCRATCHPAD_MAX = 200000;
+const SCRATCHPAD_POS_KEY = 'todo.scratchpadPos';
+const SCRATCHPAD_MARGIN = 8;
+
+function readScratchpadPosition() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(SCRATCHPAD_POS_KEY) || 'null');
+    if (saved && Number.isFinite(saved.left) && Number.isFinite(saved.top)) {
+      return { left: saved.left, top: saved.top };
+    }
+  } catch { /* ignore a bad stored position */ }
+  return null;
+}
+
 const scratchpadState = {
   open: false,
   loaded: false,
@@ -522,14 +535,25 @@ const scratchpadState = {
   statusTimer: null,
   fetchSeq: 0,
   epoch: 0,
+  position: readScratchpadPosition(),
+  current: null,
+  drag: null,
+  resize: null,
+  scrollLock: null,
+  layoutFrame: 0,
+  layoutPreserveBottom: false,
+  growFrame: 0,
 };
 
 function scratchpadElements() {
   return {
     button: $('#scratchpad-btn'),
     pop: $('#scratchpad-pop'),
+    head: $('#scratchpad-head'),
     field: $('#scratchpad-text'),
     status: $('#scratchpad-status'),
+    close: $('#scratchpad-close'),
+    grip: $('#scratchpad-resize'),
   };
 }
 
@@ -551,19 +575,130 @@ function scratchpadHasChanges() {
   return scratchpadState.text !== scratchpadState.savedText;
 }
 
-function syncScratchpadViewport() {
-  const { pop } = scratchpadElements();
-  if (!pop || !scratchpadState.open) return;
+function scratchpadViewport() {
   const viewport = window.visualViewport;
   if (!viewport) {
-    pop.style.bottom = '';
-    return;
+    return { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
   }
-  const hiddenBottom = Math.max(0, window.innerHeight - viewport.height);
-  const mobile = window.matchMedia('(max-width: 899px)').matches;
-  // Lift the popover above the on-screen keyboard instead of letting the
-  // lower half of the writing area sit underneath it.
-  pop.style.bottom = mobile && hiddenBottom > 80 ? `${Math.round(hiddenBottom + 12)}px` : '';
+  return {
+    left: viewport.offsetLeft,
+    top: viewport.offsetTop,
+    width: viewport.width,
+    height: viewport.height,
+  };
+}
+
+function clampScratchpadPos(left, top, width, height) {
+  const viewport = scratchpadViewport();
+  const minLeft = viewport.left + SCRATCHPAD_MARGIN;
+  const minTop = viewport.top + SCRATCHPAD_MARGIN;
+  const maxLeft = Math.max(minLeft, viewport.left + viewport.width - width - SCRATCHPAD_MARGIN);
+  const maxTop = Math.max(minTop, viewport.top + viewport.height - height - SCRATCHPAD_MARGIN);
+  return {
+    left: Math.min(Math.max(left, minLeft), maxLeft),
+    top: Math.min(Math.max(top, minTop), maxTop),
+  };
+}
+
+function layoutScratchpad({ initial = false, preserveBottom = false } = {}) {
+  const { pop, button } = scratchpadElements();
+  if (!pop || !scratchpadState.open) return;
+  const viewport = scratchpadViewport();
+  pop.style.maxHeight = `${Math.max(200, Math.round(viewport.height - SCRATCHPAD_MARGIN * 2))}px`;
+  const rect = pop.getBoundingClientRect();
+  const previous = scratchpadState.current;
+  let left;
+  let top;
+
+  if (initial || !previous) {
+    const saved = scratchpadState.position;
+    if (saved) {
+      left = saved.left;
+      top = saved.top;
+    } else {
+      const buttonRect = button ? button.getBoundingClientRect() : null;
+      const anchorRight = buttonRect ? buttonRect.right : viewport.left + viewport.width - 12;
+      left = anchorRight - rect.width;
+      top = (buttonRect ? buttonRect.top : viewport.top + viewport.height - 140) - 12 - rect.height;
+    }
+  } else {
+    left = previous.left;
+    top = preserveBottom ? previous.top + previous.height - rect.height : previous.top;
+  }
+
+  const pos = clampScratchpadPos(left, top, rect.width, rect.height);
+  pop.style.left = `${Math.round(pos.left)}px`;
+  pop.style.top = `${Math.round(pos.top)}px`;
+  scratchpadState.current = {
+    left: pos.left,
+    top: pos.top,
+    width: rect.width,
+    height: rect.height,
+  };
+}
+
+function scheduleScratchpadLayout({ preserveBottom = false } = {}) {
+  if (!scratchpadState.open) return;
+  scratchpadState.layoutPreserveBottom = scratchpadState.layoutPreserveBottom || preserveBottom;
+  if (scratchpadState.layoutFrame) return;
+  scratchpadState.layoutFrame = requestAnimationFrame(() => {
+    scratchpadState.layoutFrame = 0;
+    const preserve = scratchpadState.layoutPreserveBottom;
+    scratchpadState.layoutPreserveBottom = false;
+    layoutScratchpad({ preserveBottom: preserve });
+  });
+}
+
+function persistScratchpadPosition() {
+  const current = scratchpadState.current;
+  if (!current) return;
+  scratchpadState.position = { left: current.left, top: current.top };
+  try {
+    localStorage.setItem(SCRATCHPAD_POS_KEY, JSON.stringify(scratchpadState.position));
+  } catch { /* storage can be unavailable */ }
+}
+
+function autoGrowScratchpadField() {
+  if (!scratchpadState.open) return;
+  const { field } = scratchpadElements();
+  const wrap = field ? field.closest('.scratch-field-wrap') : null;
+  if (!field || !wrap) return;
+  const viewport = scratchpadViewport();
+  const max = Math.max(120, Math.round(viewport.height - 140));
+  const current = field.clientHeight;
+  if (field.scrollHeight <= current + 2) return;
+  const next = Math.min(field.scrollHeight + 2, max);
+  if (next <= current + 2) return;
+  wrap.style.height = `${next}px`;
+  scheduleScratchpadLayout({ preserveBottom: true });
+}
+
+function scheduleScratchpadAutoGrow() {
+  if (scratchpadState.growFrame) return;
+  scratchpadState.growFrame = requestAnimationFrame(() => {
+    scratchpadState.growFrame = 0;
+    autoGrowScratchpadField();
+  });
+}
+
+function lockScratchpadScroll() {
+  if (scratchpadState.scrollLock) return;
+  const pageTop = window.scrollY || pageScroller().scrollTop || 0;
+  scratchpadState.scrollLock = {
+    pageTop,
+    bodyTop: document.body.style.top,
+  };
+  document.body.classList.add('scratchpad-lock');
+  if (PAGE_SCROLL_MEDIA.matches) document.body.style.top = `-${pageTop}px`;
+}
+
+function unlockScratchpadScroll() {
+  const lock = scratchpadState.scrollLock;
+  if (!lock) return;
+  scratchpadState.scrollLock = null;
+  document.body.classList.remove('scratchpad-lock');
+  document.body.style.top = lock.bodyTop || '';
+  if (PAGE_SCROLL_MEDIA.matches) pageScroller().scrollTop = lock.pageTop;
 }
 
 function readScratchpadField() {
@@ -589,7 +724,10 @@ async function loadScratchpad({ initial = false } = {}) {
       scratchpadState.text = text;
       scratchpadState.savedText = text;
       if (field) { field.value = text; field.disabled = false; }
-      if (scratchpadState.open) setScratchpadStatus('', '');
+      if (scratchpadState.open) {
+        setScratchpadStatus('', '');
+        autoGrowScratchpadField();
+      }
     }
     return true;
   } catch {
@@ -673,6 +811,102 @@ async function flushScratchpadAndWait() {
   if (scratchpadHasChanges()) await flushScratchpad();
 }
 
+function startScratchpadDrag(event) {
+  if (!scratchpadState.open || (event.button !== undefined && event.button > 0)) return;
+  if (event.target instanceof Element && event.target.closest('button, textarea, .scratch-resize')) return;
+  const { head } = scratchpadElements();
+  const current = scratchpadState.current;
+  if (!head || !current) return;
+  event.preventDefault();
+  scratchpadState.drag = {
+    pointerId: event.pointerId,
+    startX: event.clientX,
+    startY: event.clientY,
+    left: current.left,
+    top: current.top,
+    width: current.width,
+    height: current.height,
+  };
+  try { head.setPointerCapture(event.pointerId); } catch { /* ignore */ }
+  document.body.classList.add('scratchpad-dragging');
+}
+
+function moveScratchpadDrag(event) {
+  const drag = scratchpadState.drag;
+  if (!drag || event.pointerId !== drag.pointerId) return;
+  event.preventDefault();
+  const pos = clampScratchpadPos(
+    drag.left + event.clientX - drag.startX,
+    drag.top + event.clientY - drag.startY,
+    drag.width,
+    drag.height,
+  );
+  const { pop } = scratchpadElements();
+  if (!pop) return;
+  pop.style.left = `${Math.round(pos.left)}px`;
+  pop.style.top = `${Math.round(pos.top)}px`;
+  scratchpadState.current = { ...pos, width: drag.width, height: drag.height };
+}
+
+function endScratchpadDrag(event) {
+  const drag = scratchpadState.drag;
+  if (!drag || (event && event.pointerId !== drag.pointerId)) return;
+  scratchpadState.drag = null;
+  document.body.classList.remove('scratchpad-dragging');
+  const { head } = scratchpadElements();
+  if (head) {
+    try { head.releasePointerCapture(drag.pointerId); } catch { /* already released */ }
+  }
+  persistScratchpadPosition();
+}
+
+function startScratchpadResize(event) {
+  if (!scratchpadState.open || (event.button !== undefined && event.button > 0)) return;
+  const { pop, grip } = scratchpadElements();
+  const wrap = pop ? pop.querySelector('.scratch-field-wrap') : null;
+  if (!pop || !grip || !wrap) return;
+  event.preventDefault();
+  event.stopPropagation();
+  scratchpadState.resize = {
+    pointerId: event.pointerId,
+    startX: event.clientX,
+    startY: event.clientY,
+    width: pop.offsetWidth,
+    height: wrap.offsetHeight,
+  };
+  try { grip.setPointerCapture(event.pointerId); } catch { /* ignore */ }
+  document.body.classList.add('scratchpad-resizing');
+}
+
+function moveScratchpadResize(event) {
+  const resize = scratchpadState.resize;
+  if (!resize || event.pointerId !== resize.pointerId) return;
+  event.preventDefault();
+  const { pop } = scratchpadElements();
+  const wrap = pop ? pop.querySelector('.scratch-field-wrap') : null;
+  if (!pop || !wrap) return;
+  const viewport = scratchpadViewport();
+  const maxWidth = Math.max(280, Math.min(720, Math.round(viewport.width - 16)));
+  const maxHeight = Math.max(120, Math.round(viewport.height - 140));
+  const width = Math.max(280, Math.min(maxWidth, resize.width + event.clientX - resize.startX));
+  const height = Math.max(120, Math.min(maxHeight, resize.height + event.clientY - resize.startY));
+  pop.style.width = `${Math.round(width)}px`;
+  wrap.style.height = `${Math.round(height)}px`;
+  layoutScratchpad();
+}
+
+function endScratchpadResize(event) {
+  const resize = scratchpadState.resize;
+  if (!resize || (event && event.pointerId !== resize.pointerId)) return;
+  scratchpadState.resize = null;
+  document.body.classList.remove('scratchpad-resizing');
+  const { grip } = scratchpadElements();
+  if (grip) {
+    try { grip.releasePointerCapture(resize.pointerId); } catch { /* already released */ }
+  }
+  persistScratchpadPosition();
+}
+
 async function openScratchpad() {
   if (!state.authenticated) return;
   const { button, pop, field } = scratchpadElements();
@@ -683,10 +917,16 @@ async function openScratchpad() {
   }
 
   scratchpadState.open = true;
+  scratchpadState.current = null;
   pop.hidden = false;
+  pop.style.visibility = 'hidden';
   if (button) button.setAttribute('aria-expanded', 'true');
   document.body.classList.add('scratchpad-open');
-  syncScratchpadViewport();
+  lockScratchpadScroll();
+  layoutScratchpad({ initial: true });
+  pop.style.visibility = '';
+  scheduleScratchpadLayout();
+
   clearInterval(scratchpadState.interval);
   scratchpadState.interval = setInterval(() => {
     if (scratchpadState.open && scratchpadHasChanges()) saveScratchpad();
@@ -700,18 +940,25 @@ async function openScratchpad() {
   if (!scratchpadState.open) return;
   field.disabled = false;
   field.focus();
+  autoGrowScratchpadField();
 }
 
 function closeScratchpad({ save = true } = {}) {
   if (!scratchpadState.open) return;
   readScratchpadField();
   scratchpadState.open = false;
+  endScratchpadDrag();
+  endScratchpadResize();
   clearInterval(scratchpadState.interval);
   scratchpadState.interval = null;
   const { button, pop } = scratchpadElements();
-  if (pop) { pop.hidden = true; pop.style.bottom = ''; }
+  if (pop) {
+    pop.hidden = true;
+    pop.style.visibility = '';
+  }
   if (button) button.setAttribute('aria-expanded', 'false');
   document.body.classList.remove('scratchpad-open');
+  unlockScratchpadScroll();
   setScratchpadStatus('');
   if (save) flushScratchpad();
 }
@@ -726,29 +973,65 @@ function resetScratchpadState() {
   scratchpadState.saving = false;
   scratchpadState.saveAgain = false;
   scratchpadState.savePromise = null;
+  scratchpadState.current = null;
+  scratchpadState.drag = null;
+  scratchpadState.resize = null;
   clearInterval(scratchpadState.interval);
   scratchpadState.interval = null;
   clearTimeout(scratchpadState.statusTimer);
+  if (scratchpadState.layoutFrame) cancelAnimationFrame(scratchpadState.layoutFrame);
+  scratchpadState.layoutFrame = 0;
+  if (scratchpadState.growFrame) cancelAnimationFrame(scratchpadState.growFrame);
+  scratchpadState.growFrame = 0;
   const { button, pop, field, status } = scratchpadElements();
-  if (pop) { pop.hidden = true; pop.style.bottom = ''; }
+  const wrap = pop ? pop.querySelector('.scratch-field-wrap') : null;
+  if (pop) {
+    pop.hidden = true;
+    pop.style.visibility = '';
+    pop.style.left = '';
+    pop.style.top = '';
+    pop.style.width = '';
+    pop.style.maxHeight = '';
+  }
+  if (wrap) wrap.style.height = '';
   if (button) button.setAttribute('aria-expanded', 'false');
   if (field) { field.value = ''; field.disabled = false; }
   if (status) { status.textContent = ''; status.classList.remove('is-saved', 'is-error'); }
-  document.body.classList.remove('scratchpad-open');
+  document.body.classList.remove('scratchpad-open', 'scratchpad-dragging', 'scratchpad-resizing');
+  unlockScratchpadScroll();
 }
 
 function initScratchpad() {
-  const { button, field } = scratchpadElements();
-  if (!button || !field) return;
+  const { button, pop, head, field, close, grip } = scratchpadElements();
+  if (!button || !pop || !field) return;
   field.maxLength = SCRATCHPAD_MAX;
   button.addEventListener('click', (event) => {
     event.stopPropagation();
     openScratchpad();
   });
+  if (close) {
+    close.addEventListener('click', (event) => {
+      event.stopPropagation();
+      closeScratchpad();
+    });
+  }
   field.addEventListener('input', () => {
     scratchpadState.text = field.value;
     setScratchpadStatus('');
+    scheduleScratchpadAutoGrow();
   });
+  if (head) {
+    head.addEventListener('pointerdown', startScratchpadDrag);
+    head.addEventListener('pointermove', moveScratchpadDrag);
+    head.addEventListener('pointerup', endScratchpadDrag);
+    head.addEventListener('pointercancel', endScratchpadDrag);
+  }
+  if (grip) {
+    grip.addEventListener('pointerdown', startScratchpadResize);
+    grip.addEventListener('pointermove', moveScratchpadResize);
+    grip.addEventListener('pointerup', endScratchpadResize);
+    grip.addEventListener('pointercancel', endScratchpadResize);
+  }
   document.addEventListener('pointerdown', (event) => {
     if (!scratchpadState.open) return;
     if (!(event.target instanceof Element)) return;
@@ -761,15 +1044,98 @@ function initScratchpad() {
     event.stopImmediatePropagation();
     closeScratchpad();
   }, true);
+  document.addEventListener('wheel', (event) => {
+    if (!scratchpadState.open) return;
+    if (event.target instanceof Element && event.target.closest('#scratchpad-pop')) return;
+    event.preventDefault();
+  }, { capture: true, passive: false });
+  document.addEventListener('touchmove', (event) => {
+    if (!scratchpadState.open) return;
+    if (event.target instanceof Element && event.target.closest('#scratchpad-pop')) return;
+    event.preventDefault();
+  }, { capture: true, passive: false });
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') flushScratchpad({ keepalive: true });
   });
   window.addEventListener('pagehide', () => flushScratchpad({ keepalive: true }));
   window.addEventListener('blur', () => flushScratchpad());
+  window.addEventListener('resize', () => scheduleScratchpadLayout());
   if (window.visualViewport) {
-    window.visualViewport.addEventListener('resize', syncScratchpadViewport);
-    window.visualViewport.addEventListener('scroll', syncScratchpadViewport);
+    window.visualViewport.addEventListener('resize', () => scheduleScratchpadLayout());
+    window.visualViewport.addEventListener('scroll', () => scheduleScratchpadLayout());
   }
+}
+
+/* ---------------- Resizable desktop folders pane ---------------- */
+
+const SIDEBAR_MIN_WIDTH = 320;
+const SIDEBAR_MAX_WIDTH = 416;
+const SIDEBAR_WIDTH_KEY = 'todo.sidebarWidth';
+
+function clampSidebarWidth(width) {
+  return Math.max(SIDEBAR_MIN_WIDTH, Math.min(SIDEBAR_MAX_WIDTH, Math.round(width)));
+}
+
+function applySidebarWidth(width, { persist = false } = {}) {
+  const next = clampSidebarWidth(width);
+  document.documentElement.style.setProperty('--sidebar-width', `${next}px`);
+  const handle = $('#sidebar-resizer');
+  if (handle) handle.setAttribute('aria-valuenow', String(next));
+  if (persist) {
+    try { localStorage.setItem(SIDEBAR_WIDTH_KEY, String(next)); } catch { /* storage can be unavailable */ }
+  }
+  return next;
+}
+
+function storedSidebarWidth() {
+  const value = Number(localStorage.getItem(SIDEBAR_WIDTH_KEY));
+  return Number.isFinite(value) ? clampSidebarWidth(value) : SIDEBAR_MIN_WIDTH;
+}
+
+function initSidebarResizer() {
+  applySidebarWidth(storedSidebarWidth());
+  const handle = $('#sidebar-resizer');
+  if (!handle) return;
+  let drag = null;
+
+  const finish = (event) => {
+    if (!drag || (event && event.pointerId !== drag.pointerId)) return;
+    const sidebar = $('.sidebar');
+    if (sidebar) applySidebarWidth(sidebar.getBoundingClientRect().width, { persist: true });
+    document.body.classList.remove('sidebar-resizing');
+    try { handle.releasePointerCapture(drag.pointerId); } catch { /* already released */ }
+    drag = null;
+  };
+
+  handle.addEventListener('pointerdown', (event) => {
+    if (!isSplitLayout() || (event.button !== undefined && event.button > 0)) return;
+    const sidebar = $('.sidebar');
+    if (!sidebar) return;
+    event.preventDefault();
+    drag = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startWidth: sidebar.getBoundingClientRect().width,
+    };
+    try { handle.setPointerCapture(event.pointerId); } catch { /* ignore */ }
+    document.body.classList.add('sidebar-resizing');
+  });
+  handle.addEventListener('pointermove', (event) => {
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    event.preventDefault();
+    applySidebarWidth(drag.startWidth + event.clientX - drag.startX);
+  });
+  handle.addEventListener('pointerup', finish);
+  handle.addEventListener('pointercancel', finish);
+  handle.addEventListener('keydown', (event) => {
+    if (!isSplitLayout()) return;
+    const sidebar = $('.sidebar');
+    if (!sidebar) return;
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+    event.preventDefault();
+    const step = event.shiftKey ? 24 : 8;
+    applySidebarWidth(sidebar.getBoundingClientRect().width + (event.key === 'ArrowRight' ? step : -step), { persist: true });
+  });
 }
 
 function showFieldError(input, messageNode, message) {
@@ -10031,6 +10397,7 @@ document.addEventListener('keydown', (event) => {
   if (commandSearch) {
     event.preventDefault();
     closeAccountMenu();
+    if (scratchpadState.open) closeScratchpad();
     setSearchOverlay(true);
     return;
   }
@@ -10041,6 +10408,10 @@ document.addEventListener('keydown', (event) => {
     event.preventDefault();
     closeAccountMenu();
     addNewItemForTenant();
+  } else if (key === 's') {
+    event.preventDefault();
+    closeAccountMenu();
+    openScratchpad();
   } else if (key === 'r') {
     event.preventDefault();
     closeAccountMenu();
@@ -10683,6 +11054,7 @@ initPullToRefresh();
 initDayPeek();
 initItemDrag();
 initScratchpad();
+initSidebarResizer();
 function onScrollActivity() {
   lastNoteScrollAt = Date.now();
 }

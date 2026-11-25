@@ -2,6 +2,12 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v5.4.0
+
+- **Scratch pad polish** - The scratch button is now centered under the same vertical axis as the add button. The pop-up opens much wider and taller, has a visible close button, locks background scrolling, grows upward as you type, and includes a touch/mouse corner grip for resizing. Drag it by the header to reposition it; the position is remembered per device and clamped on screen after keyboard or window changes. The field stays above the on-screen keyboard. **S** opens the scratch pad on desktop.
+- **Resizable desktop folder pane** - Drag the divider between the desktop panes to resize the folder pane between 320 px and 416 px. The card pane reflows automatically, the chosen width is remembered per device, and the mobile layout is unchanged.
+- Service worker cache bumped to `workspace-v5.4.0`.
+
 ## What's New in v5.3.0
 
 - **Shared scratch pad** - A smaller note button sits above the add button on desktop and mobile in every tenant. It opens a lightweight pop-up with one shared plain-text space (the same 200,000-character limit as a note body). It auto-saves only when the text changed every five seconds and immediately on close, window blur, tab hide, page hide, and sign-out. Text syncs through the server, survives reloads and devices, and never appears as a note, card, folder item, search result, count or storage entry. JSON backups include it as a separate `scratchpad` field.
