@@ -1523,6 +1523,32 @@ body.flipping .reminder-group { overflow: visible; }
   gap: 8px;
 }
 
+.item-drag-handle {
+  display: none;
+  width: 22px;
+  height: 22px;
+  flex: none;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-3);
+  opacity: 0.35;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  transition: opacity 0.15s, background 0.15s, color 0.15s;
+}
+.item-drag-handle .ic { width: 14px; height: 14px; }
+.item-drag-handle:hover { background: var(--fill); color: var(--text); }
+.item-drag-handle:active { cursor: grabbing; }
+.reminder:hover .item-drag-handle,
+.item-drag-handle:focus-visible { opacity: 0.9; }
+@media (min-width: 900px) and (pointer: fine) {
+  .item-drag-handle { display: grid; }
+}
+
 .row-copy,
 .row-edit,
 .doc-download {

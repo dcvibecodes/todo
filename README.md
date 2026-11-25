@@ -2,6 +2,12 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v5.11.0
+
+- **Day card collapses when you leave** - An expanded seven-day card now closes instantly when you switch tenants, enter a folder, or navigate to another view. Tapping days inside the strip works exactly as before.
+- **Card text is selectable again** - Desktop reminder, note and document cards now have a small grip handle. Only dragging that grip moves a card or starts a Doc download; click-dragging the title or preview selects text normally. Selection, swipe-open, split-layout and manual-sort behavior are preserved.
+- Service worker cache bumped to `workspace-v5.11.0`.
+
 ## What's New in v5.10.0
 
 - **Compact density is one row per element** - In Compact, card titles, note previews, Doc descriptions, metadata/due lines and link/file chip rows no longer wrap. Long text ellipsizes or clips; separate link/file chips stay on one clipped row, and image thumbnails keep their existing one-row layout with overflow count. Long-note expansion still works, and Comfortable density is unchanged. The existing Settings → Density control remains the only toggle.

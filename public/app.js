@@ -1904,6 +1904,7 @@ function setTenant(tenant, direction = 0) {
   exitSelection();
   resetListToolbarAutoHide();
   const next = TENANTS.includes(tenant) ? tenant : 'reminders';
+  if (next !== state.tenant) collapseDayPeek();
   state.tenant = next;
   localStorage.setItem('todo.tenant', next);
   state.search = '';
@@ -2059,6 +2060,7 @@ function route() {
   }
   if (view !== 'home' && !state.search) setSearchOverlay(false);
   const previousView = state.view;
+  if (view !== previousView) collapseDayPeek();
   const previousScreen = document.body.dataset.screen;
   if (PAGE_SCROLL_MEDIA.matches && previousScreen) {
     screenScroll[previousScreen] = pageScroller().scrollTop;
@@ -3697,6 +3699,11 @@ function openDayPeek(key) {
   renderDayPeek({ crossfade: true });
 }
 
+function collapseDayPeek() {
+  if (!dayPeekOpen && !dayPeekSelected) return;
+  closeDayPeek(true);
+}
+
 function closeDayPeek(instant = false) {
   const card = $('#day-card');
   const shouldAnimate = !instant && !dayPeekReduced() && homeScreenVisible();
@@ -4842,17 +4849,28 @@ function initItemDrag() {
 
 function makeItemDraggable(row, item, options = {}) {
   if (!window.matchMedia('(pointer: fine)').matches) return;
-  row.draggable = true;
-  row.addEventListener('pointerdown', (event) => {
-    row._itemDragOrigin = event.target;
-  }, { passive: true });
-  row.addEventListener('dragstart', (event) => {
+  const tools = row.querySelector('.row-tools');
+  if (!tools || tools.querySelector('.item-drag-handle')) return;
+  const handle = el('span', {
+    class: 'item-drag-handle',
+    draggable: 'true',
+    role: 'button',
+    tabindex: '0',
+    title: 'Drag to move',
+    'aria-label': `Drag to move ${item.label || 'item'}`,
+    html: ICON('grip', 'ic'),
+  });
+  tools.append(handle);
+  handle.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+  });
+  handle.addEventListener('pointerdown', (event) => event.stopPropagation());
+  handle.addEventListener('keydown', (event) => {
+    if (event.key === ' ' || event.key === 'Enter') event.preventDefault();
+  });
+  handle.addEventListener('dragstart', (event) => {
     if (!isSplitLayout() || state.selection.active || row.classList.contains('swipe-open')) {
-      event.preventDefault();
-      return;
-    }
-    const origin = row._itemDragOrigin || event.target;
-    if (origin.closest('a, button, input, textarea, select, [contenteditable="true"], [contenteditable=""]')) {
       event.preventDefault();
       return;
     }
@@ -4866,11 +4884,13 @@ function makeItemDraggable(row, item, options = {}) {
             `${options.mime || 'application/octet-stream'}:${options.name}:${location.origin}/api/files/${item.id}`,
           );
         }
+        const rect = row.getBoundingClientRect();
+        event.dataTransfer.setDragImage(row, event.clientX - rect.left, event.clientY - rect.top);
       } catch { /* DownloadURL is a Chromium extension; Share/Download remain */ }
     }
     beginItemDrag(row, item);
   });
-  row.addEventListener('dragend', () => {
+  handle.addEventListener('dragend', () => {
     if (options.download) lastDocDragEnd = Date.now();
     finishItemDrag();
   });
