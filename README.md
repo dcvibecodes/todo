@@ -2,6 +2,11 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v5.11.1
+
+- **Desktop delete is always visible** - The card delete × no longer waits for hover. It sits alongside Copy/Edit and the move grip at the same muted opacity as the other row actions, with the existing red hover state. Touch devices keep swipe-to-delete and the hidden ×.
+- Service worker cache bumped to `workspace-v5.11.1`.
+
 ## What's New in v5.11.0
 
 - **Day card collapses when you leave** - An expanded seven-day card now closes instantly when you switch tenants, enter a folder, or navigate to another view. Tapping days inside the strip works exactly as before.
