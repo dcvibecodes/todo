@@ -1,11 +1,12 @@
 'use strict';
 
-const CACHE = 'workspace-v4.20.6';
+const CACHE = 'workspace-v5.0.0';
 const ASSETS = [
   '/',
   '/index.html',
   '/styles.css',
   '/fuzzy-search.js',
+  '/view-state.js',
   '/vendor/pdfjs/pdf.min.js',
   '/vendor/pdfjs/pdf.worker.min.js',
   '/app.js',

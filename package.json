@@ -1,10 +1,11 @@
 {
   "name": "todo",
-  "version": "4.20.6",
+  "version": "5.0.0",
   "description": "A self-hosted workspace for reminders, notes and documents",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
+    "test": "node --test",
     "icons": "python3 generate-icons.py"
   },
   "license": "UNLICENSED",

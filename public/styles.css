@@ -2989,20 +2989,29 @@ body.sheet-open .sidebar {
   font-variant-numeric: tabular-nums;
 }
 
-/* ---------- Desktop: mirror the mobile Home ---------- */
+/* ---------- Desktop: persistent folders + cards (master-detail) ---------- */
 @media (min-width: 900px) {
   html, body { height: 100%; }
   body { overflow: hidden; overscroll-behavior-y: contain; }
 
-  .shell { display: flex; height: 100dvh; min-height: 0; }
+  .shell {
+    display: flex;
+    height: 100dvh;
+    min-height: 0;
+    width: 100%;
+    max-width: 1500px;
+    margin: 0 auto;
+  }
 
+  /* The left pane is always visible and scrolls on its own. */
   .sidebar {
     position: static;
-    width: min(54vw, 990px);
+    width: var(--sidebar-width);
+    flex: none;
     height: 100%;
-    margin: 0 auto;
-    border-right: 0;
-    padding: 18px 24px calc(96px + env(safe-area-inset-bottom));
+    margin: 0;
+    border-right: 1px solid var(--line-soft);
+    padding: 18px 16px calc(96px + env(safe-area-inset-bottom));
     z-index: auto;
     transform: none;
     transition: none;
@@ -3013,20 +3022,21 @@ body.sheet-open .sidebar {
 
   .sidebar::-webkit-scrollbar { display: none; width: 0; height: 0; }
 
-  body[data-screen="home"] .sidebar { display: flex; }
-  body[data-screen="home"] .main { display: none; }
-  body[data-screen="detail"] .sidebar { display: none; }
-  body[data-screen="detail"] .main { display: flex; }
-
   .sidebar .sidebar-foot { display: none; }
 
+  /* The right pane takes the remaining width and owns its own scroller. */
   .main {
-    width: min(54vw, 990px);
+    width: auto;
+    max-width: none;
+    min-width: 0;
     min-height: 0;
-    margin: 0 auto;
+    margin: 0;
     display: flex;
-    flex: none;
+    flex: 1 1 auto;
+    overflow: hidden;
   }
+
+  .main-top { flex: none; }
 
   .main-head {
     position: relative;
@@ -3035,9 +3045,7 @@ body.sheet-open .sidebar {
     align-items: center;
   }
 
-  .back-btn { display: flex; }
-  body[data-screen="home"] .back-btn { display: none; }
-  .back-btn span { display: inline; }
+  .back-btn { display: none; }
 
   #menu-btn { display: grid; }
   #sidebar-menu-btn { display: grid; }
@@ -3045,11 +3053,16 @@ body.sheet-open .sidebar {
   .sort-bar { margin: 0 24px; }
 
   .account-menu {
-    right: max(12px, calc((100vw - min(54vw, 990px)) / 2 + 12px));
+    right: max(12px, calc((100vw - min(1500px, 100vw)) / 2 + 12px));
   }
 
   .fab {
-    right: max(28px, calc((100vw - min(54vw, 990px)) / 2 + 28px));
+    right: max(28px, calc((100vw - min(1500px, 100vw)) / 2 + 28px));
+  }
+
+  /* Centre the bulk-action pill over the right pane, not the whole window. */
+  .selection-actions {
+    left: calc(50% + (var(--sidebar-width) / 2));
   }
 
   .content {

@@ -7,6 +7,7 @@ if (window.pdfjsLib) {
   pdfjsLib.GlobalWorkerOptions.workerSrc = '/vendor/pdfjs/pdf.worker.min.js';
 }
 const ICON = (name, cls = 'ic') => `<svg class="${cls}"><use href="#i-${name}"/></svg>`;
+const viewState = window.TodoViewState;
 
 
 const COLORS = ['red', 'rose', 'orange', 'yellow', 'lime', 'green', 'teal', 'cyan', 'blue', 'indigo', 'purple', 'pink', 'brown', 'slate', 'gray'];
@@ -1156,11 +1157,23 @@ function go(view) {
 }
 
 function viewKeyForPath(path) {
-  const raw = String(path);
-  if (raw.startsWith('list/')) return Number(raw.slice(5));
-  if (raw.startsWith('notes/folder/')) return 'notes-folder-' + raw.slice(13);
-  if (raw.startsWith('docs/folder/')) return 'docs-folder-' + raw.slice(12);
-  return raw;
+  return viewState.viewKeyForPath(path);
+}
+
+function viewPathFor(view) {
+  return viewState.viewPathFor(view);
+}
+
+function lastPathForTenant(tenant) {
+  return viewState.lastPathForTenant(localStorage, tenant, state.tenant);
+}
+
+function storedPathForTenant(tenant) {
+  return viewState.storedPathForTenant(localStorage, tenant, state.tenant);
+}
+
+function rememberView(view) {
+  return viewState.rememberView(localStorage, view, state.tenant);
 }
 
 function goOrRender(view) {
@@ -1181,8 +1194,16 @@ function clearSearch() {
 }
 
 function parseRoute() {
-  const raw = location.hash.replace(/^#\/?/, '');
-  if (!raw) return 'home';
+  let raw = location.hash.replace(/^#\/?/, '');
+  if (!raw) {
+    // A reload without a hash returns to the last view for this tenant. On a
+    // fresh desktop visit there is nothing stored yet, so show the tenant's
+    // All view rather than an empty right pane.
+    const stored = storedPathForTenant(state.tenant);
+    if (stored) raw = stored;
+    else if (isSplitLayout()) raw = lastPathForTenant(state.tenant);
+    else return 'home';
+  }
   if (raw === 'home') return 'home';
   if (raw.startsWith('list/')) {
     const id = Number(raw.slice(5));
@@ -1206,15 +1227,18 @@ function parseRoute() {
 }
 
 function routeTenant(view) {
-  if (view === 'notes' || String(view).startsWith('notes-folder-')) return 'notes';
-  if (view === 'docs' || String(view).startsWith('docs-folder-')) return 'docs';
-  if (view === 'home') return state.tenant;
-  return 'reminders';
+  return viewState.routeTenant(view, state.tenant);
 }
 
 function viewFolderId(view) {
   const match = String(view).match(/^(?:notes|docs)-folder-(\d+)$/);
   return match ? Number(match[1]) : null;
+}
+
+function listViewActive(list) {
+  if (!list) return false;
+  if (typeof state.view === 'number') return state.view === list.id;
+  return viewFolderId(state.view) === list.id;
 }
 
 
@@ -1240,6 +1264,13 @@ function setTenant(tenant, direction = 0) {
   $('#main-search').value = '';
   clearSearchResults();
   setSearchOverlay(false);
+  if (isSplitLayout()) {
+    // Keep both panes visible: switch the left pane and load that tenant's
+    // last-used view (or its All view) in the right pane.
+    goOrRender(lastPathForTenant(next));
+    animateTenantContent(direction);
+    return;
+  }
   if (state.view !== 'home') {
     go('home');
     return;
@@ -1250,6 +1281,12 @@ function setTenant(tenant, direction = 0) {
 
 
 const NAV_MOBILE = window.matchMedia('(max-width: 899px)');
+const NAV_DESKTOP = window.matchMedia('(min-width: 900px)');
+
+function isSplitLayout() {
+  return NAV_DESKTOP.matches;
+}
+
 // On phones both screens share the document scroller, so keep one position
 // per screen (the old nested scrollers each remembered their own).
 const screenScroll = { home: 0, detail: 0 };
@@ -1353,7 +1390,12 @@ function route() {
   finishClosingSheetsForRoute();
   const fromHistoryBack = historyBackHash !== null && historyBackHash === location.hash;
   historyBackHash = null;
-  const view = parseRoute();
+  let view = parseRoute();
+  if (isSplitLayout() && view === 'home') {
+    // The split layout always has a right pane; #/home only means "last
+    // view" on desktop, never the mobile folder-list screen.
+    view = viewKeyForPath(lastPathForTenant(state.tenant));
+  }
   if (state.selection.active && view !== state.view) exitSelection();
   // Clear search before deciding whether this navigation can slide. Previously
   // the search was cleared after canSlide was computed, so leaving search
@@ -1403,6 +1445,7 @@ function route() {
       state.tenant = tenant;
       localStorage.setItem('todo.tenant', tenant);
     }
+    rememberView(view);
   }
   document.body.dataset.screen = view === 'home' ? 'home' : 'detail';
   render();
@@ -3136,7 +3179,7 @@ function renderSidebar() {
       dot = el('span', { class: 'list-ring', style: { '--p': String(pct) }, title: doneTitle }, [dot]);
     }
     const row = el('button', {
-      class: 'list-row' + (state.view === list.id ? ' active' : ''),
+      class: 'list-row' + (listViewActive(list) ? ' active' : ''),
       style: { '--c': colorVar(list.color) },
       'data-list-id': list.id,
       onclick: () => {
@@ -9217,6 +9260,7 @@ let detailSwipeSuppressClickUntil = 0;
 const detailSwipeSurface = $('.main');
 
 function canStartDetailSwipe(target) {
+  if (isSplitLayout()) return false;
   if (document.body.dataset.screen !== 'detail' || state.view === 'home') return false;
   if (state.search || $('#main-search-form').classList.contains('open')) return false;
   if ($$('.sheet').some((sheet) => !sheet.hidden)) return false;
@@ -9571,7 +9615,7 @@ function escapeBack() {
     return true;
   }
   if (state.selection.active) { exitSelection(); return true; }
-  if (document.body.dataset.screen === 'detail') { go('home'); return true; }
+  if (!isSplitLayout() && document.body.dataset.screen === 'detail') { go('home'); return true; }
   return false;
 }
 
@@ -9746,11 +9790,17 @@ async function runSearch(query) {
     state.searchOpen = local.filter((reminder) => !reminder.completed);
     state.searchCompleted = local.filter((reminder) => reminder.completed);
     state.searchNotes = includeNotes
-      ? state.notes.filter((note) => note.title.toLowerCase().includes(needle)
-        || (note.body || '').toLowerCase().includes(needle))
+      ? (window.TodoFuzzy
+        ? window.TodoFuzzy.rankItems(state.notes, state.search, { title: 'title', notes: 'body' })
+          .map((entry) => entry.item)
+        : state.notes.filter((note) => note.title.toLowerCase().includes(needle)
+          || (note.body || '').toLowerCase().includes(needle)))
       : [];
     state.searchDocs = includeDocs
-      ? state.docs.filter((doc) => doc.name.toLowerCase().includes(needle))
+      ? (window.TodoFuzzy
+        ? window.TodoFuzzy.rankItems(state.docs, state.search, { title: 'name' })
+          .map((entry) => entry.item)
+        : state.docs.filter((doc) => doc.name.toLowerCase().includes(needle)))
       : [];
     state.searchTotals = {
       open: state.searchOpen.length,
@@ -10263,6 +10313,17 @@ window.addEventListener('scroll', () => {
   updateListToolbarAutoHide();
   if (PAGE_SCROLL_MEDIA.matches) recordScreenScroll();
 }, { passive: true });
+
+// Crossing into the split layout while the phone folder list is showing has
+// to load a real view for the right pane; crossing back just re-renders.
+NAV_DESKTOP.addEventListener('change', (event) => {
+  if (!state.authenticated) return;
+  if (event.matches && state.view === 'home') {
+    goOrRender(lastPathForTenant(state.tenant));
+    return;
+  }
+  render();
+});
 
 // Crossing the layout breakpoint (e.g. rotating a large iPhone) swaps which
 // element scrolls; carry the position across once the new styles settle.

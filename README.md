@@ -2,6 +2,13 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v5.0.0
+
+- **Desktop master-detail layout** - At 900 px and wider, the folder pane stays visible on the left while cards open on the right. Both panes scroll independently inside a centered 1500 px shell. Mobile keeps the one-screen-at-a-time Home/detail flow with Back and the slide animation.
+- **Last view per tenant** - A fresh load restores the tenant, smart view or folder you last had open. Switching tenants in the desktop split view opens that tenant's last view instead of going Home.
+- **Fuzzy search for Notes and Docs** - Notes search titles and bodies, Documents search file names, and both use the same typo-tolerant matcher as Reminders. Document contents remain out of scope.
+- Service worker cache bumped to `workspace-v5.0.0`.
+
 ## What's New in v4.15.5
 
 - **Inline completed-retention control** - In Completed view, the retention period and a muted **Change** action now sit in the freed Sort/Order space. The retention line above the cards is gone, so Open and Completed views place cards at the same vertical position.

@@ -3190,27 +3190,30 @@ async function main() {
         `SELECT n.id, n.folder_id, n.title, n.body, n.body_format, n.revision, n.created_at, n.updated_at,
                 l.name AS folder_name, l.color AS folder_color
          FROM notes n JOIN lists l ON l.id = n.folder_id
-         WHERE n.deleted_at IS NULL AND (instr(lower(n.title), lower(?)) > 0 OR instr(lower(n.body), lower(?)) > 0)
-         ORDER BY n.updated_at DESC, n.id DESC`,
-        [query, query]
+         WHERE n.deleted_at IS NULL
+         ORDER BY n.updated_at DESC, n.id DESC`
       ) : [],
       includeDocs ? db.all(
         `SELECT a.id, a.folder_id, a.name, a.mime, a.size, a.revision, a.created_at,
                 l.name AS folder_name, l.color AS folder_color
          FROM attachments a JOIN lists l ON l.id = a.folder_id
-         WHERE a.owner_type = 'doc' AND a.deleted_at IS NULL AND instr(lower(a.name), lower(?)) > 0
-         ORDER BY a.created_at DESC, a.id DESC`,
-        [query]
+         WHERE a.owner_type = 'doc' AND a.deleted_at IS NULL
+         ORDER BY a.created_at DESC, a.id DESC`
       ) : [],
       getStoreEpoch(),
     ]);
-    // rank() is stable for equal scores, so the SQL ordering above is the tie-break.
+    // rank()/rankItems() are stable for equal scores, so the SQL ordering above
+    // is the tie-break. Notes search title + body; documents search name only.
     const openMatches = includeReminders ? fuzzy.rank(openRows, query) : [];
     const completedMatches = includeReminders ? fuzzy.rank(completedRows, query) : [];
+    const noteMatches = includeNotes
+      ? fuzzy.rankItems(noteRows, query, { title: 'title', notes: 'body' }) : [];
+    const docMatches = includeDocs
+      ? fuzzy.rankItems(docRows, query, { title: 'name' }) : [];
     const open = openMatches.slice(0, limit).map((entry) => entry.reminder);
     const completed = completedMatches.slice(0, limit).map((entry) => entry.reminder);
-    const notes = noteRows.slice(0, limit);
-    const docs = docRows.slice(0, limit);
+    const notes = noteMatches.slice(0, limit).map((entry) => entry.item);
+    const docs = docMatches.slice(0, limit).map((entry) => entry.item);
     await applyOccurrenceOverrides(open);
     res.json({
       query,
@@ -3222,11 +3225,11 @@ async function main() {
       totals: {
         open: openMatches.length,
         completed: completedMatches.length,
-        notes: noteRows.length,
-        docs: docRows.length,
+        notes: noteMatches.length,
+        docs: docMatches.length,
       },
       truncated: openMatches.length > open.length || completedMatches.length > completed.length
-        || noteRows.length > notes.length || docRows.length > docs.length,
+        || noteMatches.length > notes.length || docMatches.length > docs.length,
       store_epoch: storeEpoch,
       filtered: Boolean(req.token),
     });

@@ -139,6 +139,20 @@
     return matchPrepared(reminder, phrase, queryTokens);
   }
 
+  // Rank arbitrary rows by mapping a title field and an optional body field
+  // onto the reminder shape. Notes use title/body, documents use name only.
+  // Returns [{ item, score }] so callers keep their own row objects.
+  function rankItems(items, query, keys = {}) {
+    const titleKey = keys.title || 'title';
+    const notesKey = keys.notes || null;
+    const wrapped = (items || []).map((item) => ({
+      item,
+      title: item ? item[titleKey] : '',
+      notes: notesKey && item ? item[notesKey] : '',
+    }));
+    return rank(wrapped, query).map(({ reminder, score }) => ({ item: reminder.item, score }));
+  }
+
   // Best matches first; equal scores keep the caller's existing order (the
   // SQL query already returns lists by sort_order and completed by newest).
   function rank(reminders, query) {
@@ -162,5 +176,5 @@
     return scored;
   }
 
-  return { normalize, tokens, distance, matchOne, rank };
+  return { normalize, tokens, distance, matchOne, rank, rankItems };
 });
