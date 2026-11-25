@@ -1343,6 +1343,7 @@ function hideUsernameGate() {
 }
 
 function showAuth() {
+  closeMovePicker();
   resetScratchpadState();
   state.authenticated = false;
   state.needsUsername = false;
@@ -2660,6 +2661,7 @@ function animateListRects(before) {
 }
 
 function render() {
+  closeMovePicker();
   const flip = animateNextRender
     ? captureRects('#content .reminder[data-reminder-id]', (node) => node.dataset.reminderId)
     : null;
@@ -4737,7 +4739,7 @@ function noteRow(note, options = {}) {
   });
   row.append(el('span', { class: 'selection-check', 'aria-hidden': 'true', html: ICON('check', 'ic') }));
   attachSelectionLongPress(row, 'notes', note.id);
-  makeItemDraggable(row, {
+  makeItemMoveControl(row, {
     type: 'note', id: note.id, folderId: note.folder_id, tenant: 'notes', label: note.title,
   });
   attachManualOrderControls(row, 'note', note.id, note.title);
@@ -4815,11 +4817,16 @@ function docRow(doc, options = {}) {
   });
   row.append(el('span', { class: 'selection-check', 'aria-hidden': 'true', html: ICON('check', 'ic') }));
   attachSelectionLongPress(row, 'docs', doc.id);
-  makeItemDraggable(row, {
+  makeItemMoveControl(row, {
     type: 'doc', id: doc.id, folderId: doc.folder_id, tenant: 'docs', label: doc.name,
-  }, manualModeForView(state.view) ? {} : {
-    download: true, mime: doc.mime, name: doc.name,
   });
+  const docDragEnd = () => { lastDocDragEnd = Date.now(); };
+  const docIcon = row.querySelector('.doc-icon');
+  if (docIcon) docIcon.title = 'Drag out to copy file';
+  const docDownload = row.querySelector('.doc-download');
+  if (docDownload) docDownload.title = 'Download · drag out to copy';
+  makeFileDraggable(docIcon, doc, { onDragEnd: docDragEnd });
+  makeFileDraggable(docDownload, doc, { onDragEnd: docDragEnd });
   attachManualOrderControls(row, 'doc', doc.id, doc.name);
   return row;
 }
@@ -4827,10 +4834,12 @@ function docRow(doc, options = {}) {
 let itemDrag = null;
 let itemDropRow = null;
 let itemDragSuppressClickUntil = 0;
+let fileDragSuppressClickUntil = 0;
+let movePicker = null;
 
 function initItemDrag() {
   document.addEventListener('click', (event) => {
-    if (performance.now() >= itemDragSuppressClickUntil) return;
+    if (performance.now() >= Math.max(itemDragSuppressClickUntil, fileDragSuppressClickUntil)) return;
     event.preventDefault();
     event.stopPropagation();
   }, true);
@@ -4847,51 +4856,178 @@ function initItemDrag() {
   });
 }
 
-function makeItemDraggable(row, item, options = {}) {
+function setFileDragData(event, file, element) {
+  if (!event.dataTransfer || !file || !file.id) return;
+  try {
+    event.dataTransfer.effectAllowed = 'copy';
+    event.dataTransfer.setData(
+      'DownloadURL',
+      `${file.mime || 'application/octet-stream'}:${file.name || 'file'}:${location.origin}/api/files/${file.id}`,
+    );
+    event.dataTransfer.setData('text/plain', file.name || 'file');
+    const rect = element.getBoundingClientRect();
+    event.dataTransfer.setDragImage(
+      element,
+      Math.max(0, event.clientX - rect.left),
+      Math.max(0, event.clientY - rect.top),
+    );
+  } catch { /* DownloadURL is a Chromium extension; click/download remain */ }
+}
+
+function makeFileDraggable(element, file, options = {}) {
+  if (!element || !file || !file.id) return element;
+  element._dragFile = file;
+  if (options.onDragEnd) element._fileDragEnd = options.onDragEnd;
+  if (element._fileDragBound) return element;
+  if (!window.matchMedia('(pointer: fine)').matches) return element;
+  element._fileDragBound = true;
+  element.draggable = true;
+  element.addEventListener('dragstart', (event) => {
+    const current = element._dragFile;
+    if (!current || !current.id) {
+      event.preventDefault();
+      return;
+    }
+    event.stopPropagation();
+    setFileDragData(event, current, element);
+  });
+  element.addEventListener('dragend', () => {
+    fileDragSuppressClickUntil = performance.now() + 400;
+    if (element._fileDragEnd) element._fileDragEnd(element._dragFile);
+  });
+  return element;
+}
+
+function closeMovePicker({ focus = false } = {}) {
+  if (!movePicker) return;
+  const current = movePicker;
+  movePicker = null;
+  current.element.remove();
+  current.anchor.setAttribute('aria-expanded', 'false');
+  if (focus && current.anchor.isConnected) {
+    try { current.anchor.focus({ preventScroll: true }); } catch { current.anchor.focus(); }
+  }
+}
+
+function openMovePicker(anchor, item) {
+  if (movePicker && movePicker.anchor === anchor) {
+    closeMovePicker({ focus: true });
+    return;
+  }
+  closeMovePicker();
+  const folders = foldersFor(item.tenant);
+  const pop = el('div', {
+    id: 'move-picker',
+    class: 'move-picker',
+    role: 'dialog',
+    'aria-label': 'Move to folder',
+  });
+  pop.append(el('div', { class: 'move-picker-title', text: 'Move to folder' }));
+  let hasOther = false;
+  for (const folder of folders) {
+    const current = folder.id === item.folderId;
+    if (!current) hasOther = true;
+    const button = el('button', {
+      type: 'button',
+      class: 'move-picker-item',
+      disabled: current,
+      'aria-current': current ? 'true' : null,
+    }, [
+      el('span', { class: 'move-picker-dot', style: { '--c': colorVar(folder.color) } }),
+      el('span', { class: 'move-picker-name', text: folder.name }),
+      current ? el('span', { class: 'move-picker-check', html: ICON('check', 'ic') }) : null,
+    ]);
+    button.addEventListener('click', (event) => {
+      event.stopPropagation();
+      closeMovePicker();
+      moveItemToFolder(item, folder);
+    });
+    pop.append(button);
+  }
+  if (!hasOther) pop.append(el('p', { class: 'move-picker-empty', text: 'No other folders' }));
+  document.body.append(pop);
+  anchor.setAttribute('aria-expanded', 'true');
+  movePicker = { element: pop, anchor };
+  const rect = anchor.getBoundingClientRect();
+  const width = pop.offsetWidth;
+  const height = pop.offsetHeight;
+  const margin = 8;
+  const left = Math.min(
+    Math.max(margin, rect.right - width),
+    window.innerWidth - width - margin,
+  );
+  let top = rect.bottom + 6;
+  if (top + height > window.innerHeight - margin) top = Math.max(margin, rect.top - height - 6);
+  pop.style.left = `${Math.round(left)}px`;
+  pop.style.top = `${Math.round(top)}px`;
+  const first = pop.querySelector('.move-picker-item:not([disabled])');
+  if (first) first.focus({ preventScroll: true });
+}
+
+function initMovePicker() {
+  document.addEventListener('pointerdown', (event) => {
+    if (!movePicker) return;
+    if (movePicker.element.contains(event.target) || movePicker.anchor.contains(event.target)) return;
+    closeMovePicker();
+  }, true);
+  document.addEventListener('keydown', (event) => {
+    if (!movePicker || event.key !== 'Escape') return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    closeMovePicker({ focus: true });
+  }, true);
+  window.addEventListener('resize', () => closeMovePicker());
+  window.addEventListener('scroll', (event) => {
+    if (!movePicker) return;
+    if (event.target instanceof Node && movePicker.element.contains(event.target)) return;
+    closeMovePicker();
+  }, true);
+}
+
+function makeItemMoveControl(row, item) {
   if (!window.matchMedia('(pointer: fine)').matches) return;
   const tools = row.querySelector('.row-tools');
-  if (!tools || tools.querySelector('.item-drag-handle')) return;
-  const handle = el('span', {
-    class: 'item-drag-handle',
+  if (!tools || tools.querySelector('.item-move-control')) return;
+  const control = el('span', {
+    class: 'item-move-control',
     draggable: 'true',
     role: 'button',
     tabindex: '0',
-    title: 'Drag to move',
-    'aria-label': `Drag to move ${item.label || 'item'}`,
-    html: ICON('grip', 'ic'),
+    title: 'Move to folder',
+    'aria-label': `Move ${item.label || 'item'} to another folder`,
+    'aria-haspopup': 'dialog',
+    'aria-expanded': 'false',
+    html: ICON('move-folder', 'ic'),
   });
-  tools.append(handle);
-  handle.addEventListener('click', (event) => {
+  tools.append(control);
+  control.addEventListener('click', (event) => {
     event.preventDefault();
     event.stopPropagation();
+    openMovePicker(control, item);
   });
-  handle.addEventListener('pointerdown', (event) => event.stopPropagation());
-  handle.addEventListener('keydown', (event) => {
-    if (event.key === ' ' || event.key === 'Enter') event.preventDefault();
+  control.addEventListener('pointerdown', (event) => event.stopPropagation());
+  control.addEventListener('keydown', (event) => {
+    if (event.key !== ' ' && event.key !== 'Enter') return;
+    event.preventDefault();
+    event.stopPropagation();
+    openMovePicker(control, item);
   });
-  handle.addEventListener('dragstart', (event) => {
+  control.addEventListener('dragstart', (event) => {
     if (!isSplitLayout() || state.selection.active || row.classList.contains('swipe-open')) {
       event.preventDefault();
       return;
     }
     if (event.dataTransfer) {
       try {
-        event.dataTransfer.effectAllowed = options.download ? 'copyMove' : 'move';
+        event.dataTransfer.effectAllowed = 'move';
         event.dataTransfer.setData('application/x-todo-item', JSON.stringify(item));
-        if (options.download) {
-          event.dataTransfer.setData(
-            'DownloadURL',
-            `${options.mime || 'application/octet-stream'}:${options.name}:${location.origin}/api/files/${item.id}`,
-          );
-        }
         const rect = row.getBoundingClientRect();
         event.dataTransfer.setDragImage(row, event.clientX - rect.left, event.clientY - rect.top);
-      } catch { /* DownloadURL is a Chromium extension; Share/Download remain */ }
+      } catch { /* ignore */ }
     }
     beginItemDrag(row, item);
   });
-  handle.addEventListener('dragend', () => {
-    if (options.download) lastDocDragEnd = Date.now();
+  control.addEventListener('dragend', () => {
     finishItemDrag();
   });
 }
@@ -5138,6 +5274,8 @@ function openDocSheet(doc) {
   const download = $('#doc-sheet-download');
   download.href = '/api/files/' + doc.id;
   download.setAttribute('download', doc.name);
+  download.title = 'Download · drag out to copy';
+  makeFileDraggable(download, doc);
   const share = $('#doc-sheet-share');
   share.hidden = typeof navigator.share !== 'function';
   share.onclick = () => shareDoc(share);
@@ -5575,6 +5713,8 @@ function renderImageViewer(direction = 0) {
   const next = $('#image-next');
   const file = imageGallery[imageIndex];
   if (!image || !status || !title || !count || !prev || !next || !file) return;
+  makeFileDraggable(image, file);
+  image.title = `Drag out to copy ${file.name}`;
   title.textContent = file.name;
   const multiple = imageGallery.length > 1;
   count.hidden = !multiple;
@@ -5643,6 +5783,68 @@ function openImagePreview(file, gallery = null) {
   renderImageViewer();
   prefetchGallery();
   openSheet('#image-sheet');
+}
+
+function blobToPng(blob) {
+  if (blob.type === 'image/png') return Promise.resolve(blob);
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(blob);
+    const image = new Image();
+    image.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = image.naturalWidth || image.width;
+        canvas.height = image.naturalHeight || image.height;
+        const context = canvas.getContext('2d');
+        if (!context || !canvas.width || !canvas.height) throw new Error('Could not read image');
+        context.drawImage(image, 0, 0);
+        canvas.toBlob((png) => {
+          URL.revokeObjectURL(url);
+          if (png) resolve(png);
+          else reject(new Error('Could not prepare image'));
+        }, 'image/png');
+      } catch (err) {
+        URL.revokeObjectURL(url);
+        reject(err);
+      }
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('Could not read image'));
+    };
+    image.src = url;
+  });
+}
+
+async function copyCurrentImage() {
+  const file = imageGallery[imageIndex];
+  const button = $('#image-copy');
+  if (!file || !button) return;
+  const label = button.textContent;
+  button.disabled = true;
+  button.textContent = 'Copying…';
+  try {
+    if (!navigator.clipboard || !window.ClipboardItem) {
+      throw new Error('Copying images is not supported in this browser');
+    }
+    let blob;
+    const cached = imageFullCache.get(imageCacheKey(file));
+    if (cached) {
+      blob = await (await fetch(cached.url)).blob();
+    } else {
+      const response = await fetch('/api/files/' + file.id + '/preview', { credentials: 'same-origin' });
+      if (!response.ok) throw new Error('Could not load image');
+      blob = await response.blob();
+    }
+    const png = await blobToPng(blob);
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': png })]);
+    toast('Image copied');
+  } catch (err) {
+    toast(err.message || 'Copy failed');
+  } finally {
+    button.disabled = false;
+    button.textContent = label;
+  }
 }
 
 function stepImage(delta) {
@@ -5760,6 +5962,8 @@ async function openPdfPreview(file) {
     download.href = '/api/files/' + file.id;
     download.setAttribute('download', file.name || 'document.pdf');
     download.setAttribute('aria-label', `Download ${file.name || 'PDF'}`);
+    download.title = 'Download · drag out to copy';
+    makeFileDraggable(download, file);
   }
   syncPdfToolbar();
   openSheet('#pdf-sheet');
@@ -5811,11 +6015,12 @@ function zoomPdf(delta) {
 }
 
 function fileChip(file) {
+  let chip;
   if (isPreviewablePdf(file.name)) {
-    return el('button', {
+    chip = el('button', {
       type: 'button',
       class: 'link-chip',
-      title: `Preview ${file.name}`,
+      title: `Preview ${file.name} · drag out to copy`,
       'aria-label': `Preview ${file.name}`,
       onclick: (event) => {
         event.stopPropagation();
@@ -5823,22 +6028,24 @@ function fileChip(file) {
       },
       html: `${ICON('eye', 'ic')}<span class="link-domain">${escapeHtml(file.name)}</span>`,
     });
+  } else {
+    chip = el('a', {
+      class: 'link-chip',
+      href: '/api/files/' + file.id,
+      download: file.name,
+      title: `Download ${file.name} · drag out to copy`,
+      'aria-label': `Download ${file.name}`,
+      html: `${ICON(docIconForName(file.name), 'ic')}<span class="link-domain">${escapeHtml(file.name)}</span>`,
+    });
   }
-  return el('a', {
-    class: 'link-chip',
-    href: '/api/files/' + file.id,
-    download: file.name,
-    title: `Download ${file.name}`,
-    'aria-label': `Download ${file.name}`,
-    html: `${ICON(docIconForName(file.name), 'ic')}<span class="link-domain">${escapeHtml(file.name)}</span>`,
-  });
+  return makeFileDraggable(chip, file);
 }
 
 function imageThumb(file, gallery) {
   const button = el('button', {
     type: 'button',
     class: 'attachment-thumb',
-    title: `Preview ${file.name}`,
+    title: `Preview ${file.name} · drag out to copy`,
     'aria-label': `Preview ${file.name}`,
     onclick: (event) => {
       event.stopPropagation();
@@ -5858,7 +6065,7 @@ function imageThumb(file, gallery) {
   });
   image.addEventListener('error', () => button.classList.add('is-error'));
   button.append(image, el('span', { class: 'thumb-fallback', html: ICON('image', 'ic') }));
-  return button;
+  return makeFileDraggable(button, file);
 }
 
 function attachmentExtras(files) {
@@ -7022,7 +7229,7 @@ function reminderRow(reminder, options = {}) {
   row.append(el('span', { class: 'selection-check', 'aria-hidden': 'true', html: ICON('check', 'ic') }));
   attachSelectionLongPress(row, 'reminders', reminder.id);
   if (!options.dayPeek) {
-    makeItemDraggable(row, {
+    makeItemMoveControl(row, {
       type: 'reminder', id: reminder.id, folderId: reminder.list_id, tenant: 'reminders', label: reminder.title,
     });
   }
@@ -7859,10 +8066,10 @@ function attachmentRow(file, onRemove, gallery = null) {
   const previewable = previewImage || previewPdf;
   const icon = previewImage || previewPdf ? docIconForName(file.name) : 'files';
   if (previewable) {
-    row.append(el('button', {
+    row.append(makeFileDraggable(el('button', {
       type: 'button',
       class: 'attach-preview',
-      title: `Preview ${file.name}`,
+      title: `Preview ${file.name} · drag out to copy`,
       'aria-label': `Preview ${file.name}`,
       onclick: (event) => {
         event.stopPropagation();
@@ -7872,23 +8079,24 @@ function attachmentRow(file, onRemove, gallery = null) {
     }, [
       el('span', { html: ICON(icon, 'ic') }),
       el('span', { class: 'attach-name', text: file.name }),
-    ]));
+    ]), file));
   } else {
-    row.append(
-      el('span', { html: ICON(icon, 'ic') }),
-      el('span', { class: 'attach-name', text: file.name }),
-    );
+    const fileIcon = el('span', { html: ICON(icon, 'ic'), title: 'Drag out to copy file' });
+    const fileName = el('span', { class: 'attach-name', text: file.name, title: 'Drag out to copy file' });
+    makeFileDraggable(fileIcon, file);
+    makeFileDraggable(fileName, file);
+    row.append(fileIcon, fileName);
   }
   row.append(el('span', { class: 'attach-size', text: formatBytes(file.size) }));
   if (file.id) {
-    row.append(el('a', {
+    row.append(makeFileDraggable(el('a', {
       class: 'attach-download',
       href: '/api/files/' + file.id,
       download: file.name,
-      title: `Download ${file.name}`,
+      title: `Download ${file.name} · drag out to copy`,
       'aria-label': `Download ${file.name}`,
       html: ICON('download', 'ic'),
-    }));
+    }), file));
   }
   row.append(el('button', {
     type: 'button',
@@ -9279,6 +9487,7 @@ function finishSheetClose(sheet) {
 
 function openSheet(selector) {
   if (scratchpadState.open) closeScratchpad();
+  closeMovePicker();
   if (!$$('.sheet').some((sheet) => !sheet.hidden)) {
     lastFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   }
@@ -10705,6 +10914,7 @@ document.addEventListener('keydown', (event) => {
   if (commandSearch) {
     event.preventDefault();
     closeAccountMenu();
+    closeMovePicker();
     if (scratchpadState.open) closeScratchpad();
     setSearchOverlay(true);
     return;
@@ -10719,6 +10929,7 @@ document.addEventListener('keydown', (event) => {
   } else if (key === 's') {
     event.preventDefault();
     closeAccountMenu();
+    closeMovePicker();
     openScratchpad();
   } else if (key === 'c') {
     event.preventDefault();
@@ -11133,6 +11344,7 @@ document.addEventListener('keydown', (event) => {
     if (event.key === 'ArrowRight') { event.preventDefault(); stepPdfPage(1); }
   }
 });
+$('#image-copy').addEventListener('click', copyCurrentImage);
 $('#doc-description').addEventListener('input', () => { syncDocDescriptionCount(); syncDocSave(); });
 $('#doc-image-preview-img').addEventListener('error', () => {
   $('#doc-image-preview').hidden = true;
@@ -11368,6 +11580,7 @@ buildTokenAccessEditor($('#token-access-new'));
 initPullToRefresh();
 initDayPeek();
 initItemDrag();
+initMovePicker();
 initScratchpad();
 initSidebarResizer();
 function onScrollActivity() {

@@ -2,6 +2,12 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v5.12.0
+
+- **Move cards through a folder picker or drag** - The card drag grip is replaced by a distinct **Move to folder** icon. Dragging it still moves the card to a folder; clicking it opens a folder picker (current folder checked, Escape/outside-click closes). Folder rows keep their separate six-dot reorder grip.
+- **Drag files and images out** - On Chromium desktop, drag an image thumbnail, file chip, Doc icon/download, editor attachment or full-screen image out to another app; the original file is offered via the existing authenticated download URL. Click preview/download behavior remains, and Safari/Firefox keep the normal download. The image viewer also has a **Copy** clipboard fallback (PNG). This copies the file out; it does not remove it from Workspace.
+- Service worker cache bumped to `workspace-v5.12.0`.
+
 ## What's New in v5.11.1
 
 - **Desktop delete is always visible** - The card delete × no longer waits for hover. It sits alongside Copy/Edit and the move grip at the same muted opacity as the other row actions, with the existing red hover state. Touch devices keep swipe-to-delete and the hidden ×.
