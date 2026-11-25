@@ -3022,6 +3022,8 @@ body.sheet-open .sidebar {
 
   .sidebar::-webkit-scrollbar { display: none; width: 0; height: 0; }
 
+  body.sidebar-collapsed .sidebar { display: none; }
+
   /* Search, refresh and the menu belong to the main pane on desktop. */
   .sidebar-head .head-actions,
   .sidebar-head .search-bar-overlay { display: none; }
@@ -3067,6 +3069,8 @@ body.sheet-open .sidebar {
   .selection-actions {
     left: calc(50% + (var(--sidebar-width) / 2));
   }
+
+  body.sidebar-collapsed .selection-actions { left: 50%; }
 
   .content {
     width: 100%;
@@ -5065,6 +5069,9 @@ body.selection-mode .fab { display: none; }
 }
 @media (pointer: coarse) {
   .account-menu-shortcuts { display: none; }
+}
+@media (max-width: 899px) {
+  .shortcut-sidebar-hint { display: none; }
 }
 
 /* Inline slash-linking */

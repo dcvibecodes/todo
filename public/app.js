@@ -1287,6 +1287,11 @@ function isSplitLayout() {
   return NAV_DESKTOP.matches;
 }
 
+function toggleSidebarPane() {
+  if (!isSplitLayout()) return;
+  document.body.classList.toggle('sidebar-collapsed');
+}
+
 // On phones both screens share the document scroller, so keep one position
 // per screen (the old nested scrollers each remembered their own).
 const screenScroll = { home: 0, detail: 0 };
@@ -9623,6 +9628,8 @@ const FINE_POINTER = window.matchMedia('(pointer: fine)');
 const IS_MAC = /Mac|iPhone|iPad|iPod/.test(navigator.platform || navigator.userAgent);
 const shortcutSearchKey = $('#shortcut-search-key');
 if (shortcutSearchKey) shortcutSearchKey.textContent = IS_MAC ? '⌘K' : 'Ctrl K';
+const shortcutSidebarKey = $('#shortcut-sidebar-key');
+if (shortcutSidebarKey) shortcutSidebarKey.textContent = IS_MAC ? '⌘B' : 'Ctrl B';
 
 function shortcutTextTarget(target) {
   return target instanceof Element
@@ -9643,6 +9650,16 @@ document.addEventListener('keydown', (event) => {
     event.preventDefault();
     closeAccountMenu();
     setSearchOverlay(true);
+    return;
+  }
+
+  const commandSidebar = (event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && key === 'b';
+  if (commandSidebar) {
+    if (event.repeat || !isSplitLayout()) return;
+    if (shortcutTextTarget(event.target) || shortcutTextTarget(document.activeElement)) return;
+    event.preventDefault();
+    closeAccountMenu();
+    toggleSidebarPane();
     return;
   }
 
