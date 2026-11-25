@@ -1124,6 +1124,8 @@ body.list-dragging .list-grip { cursor: grabbing; }
   gap: 10px;
 }
 
+body.app-loading .title-wrap { visibility: hidden; }
+
 .title-wrap h2 {
   margin: 0;
   font-family: 'Fraunces', serif;

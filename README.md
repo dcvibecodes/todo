@@ -2,6 +2,11 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v5.13.3
+
+- **No startup view-title flash** - The installed/mobile app no longer briefly shows the hardcoded **Today** header before restoring the saved folder. The header title and count stay hidden while the loading skeleton runs, then appear with the remembered Docs/Notes/Reminders view. The skeleton also chooses the correct Home/detail screen before the shell becomes visible, avoiding a flash of the wrong screen.
+- Service worker cache bumped to `workspace-v5.13.3`.
+
 ## What's New in v5.13.2
 
 - **Delete confirmation fits the action grid** - On desktop, arming Delete briefly hides Move to folder and lets the red **Confirm?** button span the full bottom action row inside the card, so it no longer overlaps Move or crosses the border. Confirming deletes; cancel/outside-click/timeout restores Copy/Edit/Move/Delete.

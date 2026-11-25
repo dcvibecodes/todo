@@ -1345,6 +1345,7 @@ function hideUsernameGate() {
 function showAuth() {
   closeMovePicker();
   resetScratchpadState();
+  document.body.classList.remove('app-loading');
   state.authenticated = false;
   state.needsUsername = false;
   hideUsernameGate();
@@ -1483,9 +1484,10 @@ function showApp() {
    rows on screen. */
 function showAppLoading() {
   state.authenticated = true;
+  document.body.classList.add('app-loading');
   $('#auth').hidden = true;
-  $('#shell').hidden = false;
   renderSkeletons();
+  $('#shell').hidden = false;
 }
 
 function renderSkeletons() {
@@ -2676,6 +2678,7 @@ function render() {
   syncSelectionUI();
   state.justAddedId = null;
   applyPendingInlineFocus();
+  document.body.classList.remove('app-loading');
 }
 
 let selectionDeleteArmed = false;
