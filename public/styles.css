@@ -1107,6 +1107,10 @@ body.list-dragging .list-grip { cursor: grabbing; }
 .back-btn .ic { width: 18px; height: 18px; }
 .back-btn:hover { color: var(--text); }
 
+.sidebar-toggle { display: none; flex: none; }
+.sidebar-toggle .ic { width: 18px; height: 18px; transform: rotate(180deg); }
+body.sidebar-collapsed .sidebar-toggle .ic { transform: none; }
+
 .title-wrap {
   flex: 1;
   min-width: 0;
@@ -3052,6 +3056,7 @@ body.sheet-open .sidebar {
   }
 
   .back-btn { display: none; }
+  .sidebar-toggle { display: grid; }
 
   #menu-btn { display: grid; }
 

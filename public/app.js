@@ -1287,9 +1287,20 @@ function isSplitLayout() {
   return NAV_DESKTOP.matches;
 }
 
+function syncSidebarToggle() {
+  const button = $('#sidebar-toggle');
+  if (!button) return;
+  const collapsed = document.body.classList.contains('sidebar-collapsed');
+  const label = collapsed ? 'Show sidebar' : 'Hide sidebar';
+  button.title = label;
+  button.setAttribute('aria-label', label);
+  button.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+}
+
 function toggleSidebarPane() {
   if (!isSplitLayout()) return;
   document.body.classList.toggle('sidebar-collapsed');
+  syncSidebarToggle();
 }
 
 // On phones both screens share the document scroller, so keep one position
@@ -9676,6 +9687,10 @@ document.addEventListener('keydown', (event) => {
   }
 });
 $('#menu-btn').addEventListener('click', handleMenuButton);
+$('#sidebar-toggle').addEventListener('click', () => {
+  closeAccountMenu();
+  toggleSidebarPane();
+});
 $('#sidebar-menu-btn').addEventListener('click', toggleAccountMenu);
 $('#account-notifications').addEventListener('click', () => { closeAccountMenu(); openNotifySheet(); });
 $('#account-storage').addEventListener('click', async () => {
