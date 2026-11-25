@@ -2,6 +2,11 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v5.6.2
+
+- **Plain-text paste for reminder notes and Doc descriptions** - Pasting email or other rich HTML now inserts only the clipboard's plain text in the Reminders Notes & URL field and the Docs description field. Intentional spaces, indentation and blank lines are preserved exactly; the email's markup and layout whitespace are not. The Notes tenant body field keeps its existing plain-text behavior.
+- Service worker cache bumped to `workspace-v5.6.2`.
+
 ## What's New in v5.6.1
 
 - **Day-strip labels switch together** - If any weekday label would need shortening in the current folder-pane width, all seven switch to single initials; otherwise all keep their three-letter labels. No mixed one-letter/three-letter row.

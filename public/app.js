@@ -10849,6 +10849,13 @@ $('#n-body').addEventListener('paste', (event) => {
   document.execCommand('insertText', false, text);
   requestAnimationFrame(updateNoteFormatState);
 });
+function insertPlainClipboardText(event) {
+  event.preventDefault();
+  const text = event.clipboardData.getData('text/plain');
+  document.execCommand('insertText', false, text);
+}
+$('#e-notes').addEventListener('paste', insertPlainClipboardText);
+$('#doc-description').addEventListener('paste', insertPlainClipboardText);
 $('#n-body').addEventListener('input', updateNoteFormatState);
 document.addEventListener('selectionchange', () => {
   updateNoteFormatState();
