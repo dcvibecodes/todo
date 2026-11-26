@@ -1491,9 +1491,29 @@ function showAppLoading() {
 }
 
 function renderSkeletons() {
-  // Mirror the screen the loaded view will use, or the main column stays
-  // hidden behind the home default while skeletons are showing.
-  document.body.dataset.screen = parseRoute() === 'home' ? 'home' : 'detail';
+  const view = parseRoute();
+  const home = view === 'home';
+  const tenant = view === 'notes' || String(view).startsWith('notes-folder-')
+    ? 'notes'
+    : view === 'docs' || String(view).startsWith('docs-folder-') ? 'docs' : 'reminders';
+  document.body.dataset.screen = home ? 'home' : 'detail';
+
+  const dayPeek = $('#day-peek');
+  const dayStrip = $('#day-strip');
+  if (dayPeek) dayPeek.hidden = tenant !== 'reminders';
+  if (dayStrip) {
+    dayStrip.dataset.days = '';
+    dayStrip.replaceChildren();
+    if (tenant === 'reminders') {
+      for (let i = 0; i < 7; i++) {
+        dayStrip.append(el('div', { class: 'skel-day-cell', 'aria-hidden': 'true' }, [
+          el('span', { class: 'skel skel-day-weekday' }),
+          el('span', { class: 'skel skel-day-date' }),
+        ]));
+      }
+    }
+  }
+
   const wrap = $('#lists');
   wrap.replaceChildren();
   for (let i = 0; i < 4; i++) {
@@ -1505,8 +1525,52 @@ function renderSkeletons() {
 
   const content = $('#content');
   content.replaceChildren();
-  if (parseRoute() === 'home') return;
   const group = el('div', { class: 'skel-group', 'aria-hidden': 'true' });
+
+  if (home) {
+    for (let i = 0; i < 4; i++) {
+      group.append(el('div', { class: 'skel-row' }, [
+        el('span', { class: 'skel skel-home-dot' }),
+        el('div', { class: 'skel-lines' }, [
+          el('span', { class: 'skel skel-bar skel-bar-title', style: { width: `${50 + (i % 3) * 12}%` } }),
+          el('span', { class: 'skel skel-bar skel-bar-meta', style: { width: `${24 + (i % 2) * 8}%` } }),
+        ]),
+      ]));
+    }
+    content.append(group);
+    return;
+  }
+
+  if (tenant === 'notes') {
+    for (let i = 0; i < 4; i++) {
+      group.append(el('div', { class: 'skel-card' }, [
+        el('div', { class: 'skel-lines' }, [
+          el('span', { class: 'skel skel-bar skel-bar-title', style: { width: `${56 + (i % 3) * 10}%` } }),
+          el('span', { class: 'skel skel-bar skel-bar-meta', style: { width: `${22 + (i % 2) * 8}%` } }),
+          el('span', { class: 'skel skel-bar', style: { width: `${90 - (i % 3) * 9}%` } }),
+          el('span', { class: 'skel skel-bar', style: { width: `${64 + (i % 2) * 10}%` } }),
+        ]),
+      ]));
+    }
+    content.append(group);
+    return;
+  }
+
+  if (tenant === 'docs') {
+    for (let i = 0; i < 4; i++) {
+      group.append(el('div', { class: 'skel-doc-row' }, [
+        el('span', { class: 'skel skel-doc-icon' }),
+        el('div', { class: 'skel-lines' }, [
+          el('span', { class: 'skel skel-bar skel-bar-title', style: { width: `${48 + (i % 3) * 11}%` } }),
+          el('span', { class: 'skel skel-bar skel-bar-meta', style: { width: `${30 + (i % 2) * 8}%` } }),
+        ]),
+        el('span', { class: 'skel skel-doc-side' }),
+      ]));
+    }
+    content.append(group);
+    return;
+  }
+
   for (let i = 0; i < 4; i++) {
     group.append(el('div', { class: 'skel-row' }, [
       el('span', { class: 'skel skel-check' }),
@@ -7114,9 +7178,13 @@ function reminderRow(reminder, options = {}) {
   // row's min-height, so top-aligning the check would float it above centre.
   // Flag it so the check can centre; any extra line keeps the check on the title.
   const titleOnly = meta.childElementCount === 0 && !reminder.notes;
+  const completion = completingInFlight.get(reminder.id);
+  const completionClass = completion && !completion.settled ? completion.mode : null;
 
   const row = el('div', {
-    class: 'reminder' + (reminder.completed ? ' done' : '') + (titleOnly ? ' reminder--single' : '')
+    class: 'reminder' + (reminder.completed ? ' done' : '')
+      + (completionClass ? ` ${completionClass}` : '')
+      + (titleOnly ? ' reminder--single' : '')
       + (state.justAddedId === reminder.id ? ' entering' : ''),
     style: { '--c': color },
     'data-reminder-id': reminder.id,
@@ -7413,21 +7481,25 @@ function escapeHtml(value) {
 // One in-flight completion per item: a rapid double-tap must not send two
 // PATCHes (for recurring series the second tap used to advance the series
 // twice, silently skipping an occurrence).
-const completingInFlight = new Set();
+const completingInFlight = new Map();
 
 async function toggleCompleted(reminder, row) {
   // Optimistic feedback only: the check fills/unfills while the request is
   // already in flight. A failure re-renders the row's real state.
   if (completingInFlight.has(reminder.id)) return;
-  completingInFlight.add(reminder.id);
-  const undoing = Boolean(reminder.completed);
-  if (row) row.classList.add(undoing ? 'uncompleting' : 'completing');
+  const inFlight = {
+    mode: reminder.completed ? 'uncompleting' : 'completing',
+    settled: false,
+  };
+  completingInFlight.set(reminder.id, inFlight);
+  if (row) row.classList.add(inFlight.mode);
   try {
     const result = await api('/api/reminders/' + reminder.id, {
       method: 'PATCH',
       body: { completed: !reminder.completed },
     });
     await loadState();
+    inFlight.settled = true;
     requestRowAnimation(0.72);
     render();
     if (result && result.advanced && result.nextDue) {
@@ -7437,7 +7509,10 @@ async function toggleCompleted(reminder, row) {
       toast('Already recorded for this date — move the date to a new day to advance');
     }
   } catch (err) {
-    if (row) row.classList.remove('completing', 'uncompleting');
+    completingInFlight.delete(reminder.id);
+    $$(`.reminder[data-reminder-id="${reminder.id}"]`).forEach((node) => {
+      node.classList.remove('completing', 'uncompleting');
+    });
     toast(err.message);
   } finally {
     completingInFlight.delete(reminder.id);

@@ -1117,6 +1117,7 @@ body.list-dragging .list-grip { cursor: grabbing; }
 .back-btn:hover { color: var(--text); }
 
 .title-wrap {
+  position: relative;
   flex: 1;
   min-width: 0;
   display: flex;
@@ -1124,7 +1125,29 @@ body.list-dragging .list-grip { cursor: grabbing; }
   gap: 10px;
 }
 
-body.app-loading .title-wrap { visibility: hidden; }
+.title-loading { display: none; }
+
+body.app-loading .title-wrap > #view-title,
+body.app-loading .title-wrap > #view-count { visibility: hidden; }
+
+body.app-loading .title-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  pointer-events: none;
+}
+
+.skel-title {
+  width: clamp(100px, 36vw, 170px);
+  max-width: calc(100% - 38px);
+  height: 20px;
+  border-radius: 6px;
+}
+
+.skel-count { width: 28px; height: 12px; border-radius: 999px; }
 
 .title-wrap h2 {
   margin: 0;
@@ -1559,7 +1582,7 @@ body.flipping .reminder-group { overflow: visible; }
   user-select: none;
   transition: opacity 0.15s, background 0.15s, color 0.15s;
 }
-.item-move-control .ic { width: 15px; height: 15px; }
+.item-move-control .ic { width: 16px; height: 16px; }
 .reminder:hover .item-move-control { opacity: 0.9; }
 .item-move-control:hover { background: var(--fill); color: var(--text); opacity: 1; }
 .item-move-control:focus-visible { opacity: 1; background: var(--fill); color: var(--text); }
@@ -3853,6 +3876,38 @@ body.sheet-open .sidebar {
 
 .skel-bar { height: 10px; border-radius: 999px; }
 .skel-bar-title { height: 12px; }
+
+.skel-day-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 2px 6px;
+}
+
+.skel-day-weekday { width: 24px; height: 7px; border-radius: 999px; }
+.skel-day-date { width: 18px; height: 14px; border-radius: 4px; }
+
+.skel-card {
+  padding: 15px;
+  border-bottom: 1px solid var(--line);
+}
+
+.skel-card:last-child { border-bottom: 0; }
+.skel-card .skel-lines { gap: 7px; }
+
+.skel-doc-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 15px;
+  border-bottom: 1px solid var(--line);
+}
+
+.skel-doc-row:last-child { border-bottom: 0; }
+.skel-doc-icon { width: 38px; height: 38px; border-radius: 9px; flex: none; }
+.skel-doc-side { width: 42px; height: 10px; border-radius: 999px; flex: none; }
+.skel-home-dot { width: 18px; height: 18px; border-radius: 6px; flex: none; }
 
 .skel-list-row {
   display: flex;

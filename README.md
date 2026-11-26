@@ -2,6 +2,13 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v5.15.0
+
+- **Rapid completions keep their checks** - Marking several reminders complete in quick succession keeps every tapped checkbox filled from the tap until its row disappears. Another item's completion can no longer rebuild the list and strip the optimistic check from rows whose PATCH is still in flight. Un-completing keeps the same empty-ring preview, and the double-tap guard still sends only one PATCH per item.
+- **Loading skeletons now mirror the real views** - The header shows a shimmering folder-title bar plus count chip instead of a blank gap. Reminders loading shows seven day-strip pills above the folder skeleton, Notes and Docs use card-shaped content skeletons, and the Home route now has a main-column skeleton instead of staying empty.
+- **Crisper Move to folder icon** - The right-pointing arrow is larger, centred inside the folder, and no longer crowds the folder edge, so it reads clearly at row-tool size.
+- Service worker cache bumped to `workspace-v5.15.0`.
+
 ## What's New in v5.14.0
 
 - **Image previews work without ImageMagick** - When the ImageMagick command is unavailable, image thumbnail requests now redirect to the existing authenticated full-image preview instead of showing the grey image icon. Uploads keep the original file. The fallback fires only when the command is missing; a conversion error still uses the normal grey-icon fallback. Windows now looks for `magick` instead of accidentally invoking Windows' built-in `convert.exe`; Linux/macOS keep `convert`, and `IMAGEMAGICK_BIN` still overrides both.
