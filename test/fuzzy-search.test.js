@@ -156,3 +156,8 @@ test('newest year first across spaced, hyphenated and compact spellings', () => 
     assert.deepEqual(ranked.map((row) => row.item.id), [2, 4, 3, 1], query);
   }
 });
+
+test('compact title matching starts at a word boundary', () => {
+  const docs = [{ id: 1, name: 'Platform 16 handbook.pdf' }];
+  assert.equal(fuzzy.rankItems(docs, 'Form16', DOC_KEYS).length, 0);
+});

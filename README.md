@@ -2,6 +2,12 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v5.16.0
+
+- **Smarter global search** - Search results now have All / Reminders / Notes / Docs filters with counts, groups are ordered by their strongest match, and completed reminders stay collapsed behind a toggle. Title and filename hits outrank body-only matches; short or numeric body words must match whole words instead of appearing inside dates or words like "information". Spaced, hyphenated and compact titles tie ("Form 16" = "Form-16" = "Form16"), and equal-scoring Docs list the newest dated filename first. Offline fallback uses the same ranking.
+- **Signed and encrypted PDFs stay intact** - Before Ghostscript runs, uploads scan raw PDF bytes for encryption or signature markers. Protected PDFs are stored byte-identical with `skipped-encrypted`/`skipped-signed`/`skipped-protected` status, and the File sheet explains that Download returns the original. The recompression maintenance script skips them too.
+- Service worker cache bumped to `workspace-v5.16.0`.
+
 ## What's New in v5.15.1
 
 - **Mobile restores the exact folder-list or folder** - Each tenant now remembers whether you left on its folder-list screen or inside a folder. Force-closing from the Docs, Notes or Reminders folder list reopens that list; leaving inside a folder reopens that folder. Switching tenants while already on a folder list records the new tenant's folder list too.

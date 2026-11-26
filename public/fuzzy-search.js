@@ -136,7 +136,7 @@
       let joined = '';
       for (let end = start; end < titleWords.length; end += 1) {
         joined += compact(titleWords[end]);
-        if (joined.indexOf(compactQuery) !== -1) {
+        if (joined.startsWith(compactQuery)) {
           const span = end - start + 1;
           if (!best || span < best) best = span;
           break;
