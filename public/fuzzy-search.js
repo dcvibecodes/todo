@@ -24,6 +24,11 @@
     return words(normalize(value));
   }
 
+  // Letters and digits only, so "Form16", "Form 16" and "Form-16" compare equal.
+  function compact(value) {
+    return normalize(value).replace(/[^\p{L}\p{N}]+/gu, '');
+  }
+
   // 1–2 characters are too ambiguous to fuzzy-match: they must appear as text.
   function maxEditsFor(length) {
     if (length <= 2) return 0;
@@ -82,16 +87,29 @@
   }
 
   // 16 = exact word, 14 = word prefix, 10 = substring, 8/6 = fuzzy by edits.
-  function scoreToken(field, token) {
+  // Titles and filenames allow all of these. Body text is stricter, because a
+  // short query word like "16" or "form" would otherwise match inside "16 Nov"
+  // or "information" and bury the real hits: body text matches whole words, and
+  // prefix, substring and fuzzy matching need a longer query word.
+  const BODY_FUZZY_MIN_LENGTH = 6;
+  const BODY_SUBSTRING_MIN_LENGTH = 5;
+
+  function scoreToken(field, token, isBody) {
     if (!field.text) return 0;
     if (field.text.indexOf(token) !== -1) {
       const wordList = field.words();
       if (wordList.indexOf(token) !== -1) return 16;
-      for (const word of wordList) {
-        if (word.length > token.length && word.startsWith(token)) return 14;
+      if (!isBody || token.length >= BODY_SUBSTRING_MIN_LENGTH) {
+        for (const word of wordList) {
+          if (word.length > token.length && word.startsWith(token)) return 14;
+        }
       }
-      return 10;
+      if (!isBody || (token.length >= BODY_SUBSTRING_MIN_LENGTH && !/^\d+$/.test(token))) return 10;
     }
+    if (isBody && token.length < BODY_FUZZY_MIN_LENGTH) return 0;
+    // Codes and numbers ("fy2014", "2019") are not typos of each other: one
+    // changed digit is a different year, so they must match as text.
+    if (/\d/.test(token)) return 0;
     const max = maxEditsFor(token.length);
     if (!max) return 0;
     let best = 0;
@@ -104,24 +122,37 @@
     return best;
   }
 
+  // A title or filename hit always outranks a body-only hit for the same word.
+  const TITLE_WEIGHT = 30;
+  const COMPACT_TITLE_SCORE = 70;
+
   function matchPrepared(reminder, phrase, queryTokens) {
     const title = prepare(reminder.title);
     const notes = prepare(reminder.notes);
     let score = 0;
+    let tokenPath = true;
 
     for (const token of queryTokens) {
-      const inTitle = scoreToken(title, token);
-      const inNotes = scoreToken(notes, token);
-      const best = Math.max(inTitle, inNotes);
-      if (!best) return null;
-      // Title matches win ties so the most visible hit ranks first.
-      score += best + (inTitle >= inNotes && inTitle ? 2 : 0);
+      const inTitle = scoreToken(title, token, false);
+      const inNotes = inTitle ? 0 : scoreToken(notes, token, true);
+      if (!inTitle && !inNotes) { tokenPath = false; break; }
+      score += inTitle ? inTitle + TITLE_WEIGHT : inNotes;
     }
 
-    // Keep the old exact-phrase behaviour at the top of the list.
-    if (phrase && title.text.indexOf(phrase) !== -1) score += 24;
-    else if (phrase && notes.text.indexOf(phrase) !== -1) score += 12;
-    return score;
+    if (tokenPath) {
+      // Keep the old exact-phrase behaviour at the top of the list.
+      if (phrase && title.text.indexOf(phrase) !== -1) score += 24;
+      else if (phrase && notes.text.indexOf(phrase) !== -1) score += 12;
+    } else {
+      score = 0;
+    }
+
+    // Spacing and punctuation are optional in titles: "Form16" finds "Form 16".
+    const compactQuery = compact(phrase);
+    if (compactQuery.length >= 3 && title.text && compact(title.text).indexOf(compactQuery) !== -1) {
+      score = Math.max(score, COMPACT_TITLE_SCORE);
+    }
+    return score > 0 ? score : null;
   }
 
   function matchOne(reminder, query) {
@@ -150,12 +181,31 @@
       title: item ? item[titleKey] : '',
       notes: notesKey && item ? item[notesKey] : '',
     }));
-    return rank(wrapped, query).map(({ reminder, score }) => ({ item: reminder.item, score }));
+    const tieBreak = typeof keys.tieBreak === 'function'
+      ? (a, b) => keys.tieBreak(a.item, b.item)
+      : null;
+    return rank(wrapped, query, { tieBreak }).map(({ reminder, score }) => ({ item: reminder.item, score }));
+  }
+
+  // Equal-score documents: newest dated name first. Names that start with a
+  // date ("2026-03-31 Form 16 FY2025-26 ...") sort by it; others keep order.
+  function docDateKey(name) {
+    const match = /^\s*(\d{4}-\d{2}(?:-\d{2})?)/.exec(String(name == null ? '' : name));
+    return match ? match[1] : '';
+  }
+
+  function docTieBreak(a, b) {
+    const left = docDateKey(a && a.name);
+    const right = docDateKey(b && b.name);
+    if (left === right) return 0;
+    if (!left) return 1;
+    if (!right) return -1;
+    return left < right ? 1 : -1;
   }
 
   // Best matches first; equal scores keep the caller's existing order (the
   // SQL query already returns lists by sort_order and completed by newest).
-  function rank(reminders, query) {
+  function rank(reminders, query, options = {}) {
     const phrase = normalize(query).trim();
     const queryTokens = tokens(phrase);
     const scored = [];
@@ -172,9 +222,10 @@
       }
       if (score != null) scored.push({ reminder, score });
     }
-    scored.sort((a, b) => b.score - a.score);
+    const tieBreak = options && typeof options.tieBreak === 'function' ? options.tieBreak : null;
+    scored.sort((a, b) => (b.score - a.score) || (tieBreak ? tieBreak(a.reminder, b.reminder) : 0));
     return scored;
   }
 
-  return { normalize, tokens, distance, matchOne, rank, rankItems };
+  return { normalize, compact, tokens, distance, matchOne, rank, rankItems, docDateKey, docTieBreak };
 });
