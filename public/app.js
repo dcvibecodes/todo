@@ -1942,7 +1942,7 @@ function parseRoute() {
     const folder = listById(id);
     return folder && tenantOf(folder) === 'docs' ? 'docs-folder-' + id : 'docs';
   }
-  if (raw === 'today' || raw === 'scheduled' || raw === 'all' || raw === 'flagged' || raw === 'completed') return raw;
+  if (raw === 'today' || raw === 'scheduled' || raw === 'all' || raw === 'flagged' || raw === 'inprogress' || raw === 'completed') return raw;
   return 'today';
 }
 
@@ -2583,6 +2583,9 @@ function viewItems() {
   } else if (view === 'flagged') {
     items = incompleteReminders()
       .filter((reminder) => reminder.urgent);
+  } else if (view === 'inprogress') {
+    items = incompleteReminders()
+      .filter((reminder) => reminder.in_progress_at);
   } else if (view === 'all') {
     items = incompleteReminders();
   } else if (view === 'completed') {
@@ -2759,7 +2762,7 @@ let pendingBulkCompletion = null;
 function selectionTypeForView(view = state.view) {
   if (view === 'notes' || String(view).startsWith('notes-folder-')) return 'notes';
   if (view === 'docs' || String(view).startsWith('docs-folder-')) return 'docs';
-  if (typeof view === 'number' || ['today', 'scheduled', 'all', 'flagged', 'completed'].includes(view)) {
+  if (typeof view === 'number' || ['today', 'scheduled', 'all', 'flagged', 'inprogress', 'completed'].includes(view)) {
     return 'reminders';
   }
   return null;
@@ -3861,7 +3864,7 @@ function renderSidebar() {
   });
   $$('#smart-nav .nav-row').forEach((row) => {
     const view = row.dataset.view;
-    const reminderView = ['today', 'scheduled', 'all', 'flagged', 'completed'].includes(view);
+    const reminderView = ['today', 'scheduled', 'all', 'flagged', 'inprogress', 'completed'].includes(view);
     row.hidden = reminderView ? tenant !== 'reminders'
       : view === 'notes' ? tenant !== 'notes'
         : view === 'docs' ? tenant !== 'docs' : false;
@@ -3884,6 +3887,7 @@ function renderSidebar() {
   const allCount = incomplete.length;
   const scheduledCount = incomplete.filter((reminder) => reminder.due_at).length;
   const flaggedCount = incomplete.filter((reminder) => reminder.urgent).length;
+  const inProgressCount = incomplete.filter((reminder) => reminder.in_progress_at).length;
 
   const todayBadge = $('#count-today');
   todayBadge.replaceChildren();
@@ -3915,6 +3919,7 @@ function renderSidebar() {
   setPulseText($('#count-scheduled'), scheduledCount ? String(scheduledCount) : '');
   setPulseText($('#count-all'), allCount ? String(allCount) : '');
   setPulseText($('#count-flagged'), flaggedCount ? String(flaggedCount) : '');
+  setPulseText($('#count-inprogress'), inProgressCount ? String(inProgressCount) : '');
   setPulseText($('#count-notes'), state.notes.length ? String(state.notes.length) : '');
   setPulseText($('#count-docs'), state.docs.length ? String(state.docs.length) : '');
 
@@ -4292,6 +4297,7 @@ function renderMain() {
   if (view === 'all') title = 'All';
   else if (view === 'scheduled') title = 'Scheduled';
   else if (view === 'flagged') title = 'Flagged';
+  else if (view === 'inprogress') title = 'In progress';
   else if (view === 'completed') title = 'Completed';
   else if (typeof view === 'number') {
     list = listById(view);
@@ -6623,6 +6629,7 @@ function emptyState(view) {
     scheduled: { icon: 'clock', heading: 'Nothing scheduled', message: 'Give an item a date and it will show up here, grouped by when it is due.' },
     all: { icon: 'all', heading: 'A fresh start', message: 'No items yet. Capture the first thing on your mind.' },
     flagged: { icon: 'flag', heading: 'Nothing flagged', message: 'Mark an item urgent and it will wait for you here.' },
+    inprogress: { icon: 'progress', heading: 'Nothing in progress', message: 'Tap an item\'s circle and choose Mark in progress to keep it here.' },
     completed: {
       icon: 'done',
       heading: 'No history yet',
@@ -7176,14 +7183,36 @@ function reminderRow(reminder, options = {}) {
     if (actionGroups.length) body.append(el('div', { class: 'row-action-stack' }, actionGroups));
   }
 
+  const inProgress = Boolean(reminder.in_progress_at) && !reminder.completed;
   const check = el('button', {
+    type: 'button',
     class: 'check',
-    'aria-label': reminder.completed ? 'Mark incomplete' : 'Mark complete',
+    'aria-label': reminder.completed
+      ? 'Mark incomplete'
+      : `${inProgress ? 'In progress' : 'Not started'}. Change status`,
     html: ICON('check'),
   });
+  if (!reminder.completed) {
+    check.setAttribute('aria-haspopup', 'menu');
+    check.setAttribute('aria-expanded', 'false');
+  }
   check.addEventListener('click', (event) => {
     event.stopPropagation();
-    toggleCompleted(reminder, event.currentTarget.closest('.reminder'));
+    // Completed items keep the direct tap-to-undo; the menu is for open items.
+    if (reminder.completed) {
+      toggleCompleted(reminder, event.currentTarget.closest('.reminder'));
+      return;
+    }
+    // A mouse click while the hover pill is already showing keeps the pill;
+    // keyboard (detail 0) and touch open the list.
+    if (event.detail > 0 && event.pointerType !== 'touch' && statusMenuEl
+      && statusMenuEl.anchor && statusMenuEl.anchor.closest('.reminder') === event.currentTarget.closest('.reminder')
+      && statusMenuEl.mode === 'hover') return;
+    openStatusMenu(reminder, event.currentTarget, 'menu');
+  });
+  check.addEventListener('pointerenter', (event) => {
+    if (event.pointerType !== 'mouse' || reminder.completed || state.selection.active) return;
+    openStatusMenu(reminder, event.currentTarget, 'hover');
   });
 
   // Copy puts the title on the clipboard, followed by the note on a new line
@@ -7256,11 +7285,15 @@ function reminderRow(reminder, options = {}) {
   // row's min-height, so top-aligning the check would float it above centre.
   // Flag it so the check can centre; any extra line keeps the check on the title.
   const titleOnly = meta.childElementCount === 0 && !reminder.notes;
+  // Item number: plain reference text at the end of the meta row. It is not a
+  // control and does nothing when pressed.
+  meta.append(el('span', { class: 'meta-id', text: `#${reminder.id}`, 'aria-label': `Item number ${reminder.id}` }));
   const completion = completingInFlight.get(reminder.id);
   const completionClass = completion && !completion.settled ? completion.mode : null;
 
   const row = el('div', {
     class: 'reminder' + (reminder.completed ? ' done' : '')
+      + (inProgress ? ' in-progress' : '')
       + (completionClass ? ` ${completionClass}` : '')
       + (titleOnly ? ' reminder--single' : '')
       + (state.justAddedId === reminder.id ? ' entering' : ''),
@@ -7560,6 +7593,133 @@ function escapeHtml(value) {
 // PATCHes (for recurring series the second tap used to advance the series
 // twice, silently skipping an occurrence).
 const completingInFlight = new Map();
+
+/* ---------------- Item status menu ---------------- */
+
+let statusMenuEl = null;
+let statusMenuClose = null;
+
+function closeStatusMenu(restoreFocus = false) {
+  if (!statusMenuEl) return;
+  const { anchor } = statusMenuEl;
+  statusMenuEl.remove();
+  statusMenuEl = null;
+  if (statusMenuClose) statusMenuClose();
+  statusMenuClose = null;
+  if (anchor) {
+    anchor.setAttribute('aria-expanded', 'false');
+    if (restoreFocus && document.contains(anchor)) anchor.focus();
+  }
+}
+
+async function setReminderInProgress(reminder, value) {
+  try {
+    await api('/api/reminders/' + reminder.id, {
+      method: 'PATCH',
+      body: { in_progress: value },
+    });
+    await loadState();
+    render();
+  } catch (err) {
+    toast(err.message);
+  }
+}
+
+// mode 'hover' is the desktop pill beside the circle; 'menu' is the small
+// list under it (tap, click or keyboard). Hover is never the only way in.
+function openStatusMenu(reminder, anchor, mode) {
+  if (statusMenuEl && statusMenuEl.anchor === anchor && statusMenuEl.mode === mode && mode === 'hover') return;
+  const reopen = statusMenuEl && statusMenuEl.anchor === anchor && statusMenuEl.mode === 'menu';
+  closeStatusMenu();
+  if (reopen) return;
+  const inProgress = Boolean(reminder.in_progress_at);
+  const menu = el('div', {
+    class: 'status-menu' + (mode === 'hover' ? ' inline' : ''),
+    role: 'menu',
+    'aria-label': 'Item status',
+  });
+  const add = (label, icon, action) => {
+    menu.append(el('button', {
+      type: 'button',
+      class: 'status-menu-item',
+      role: 'menuitem',
+      html: ICON(icon, 'ic') + `<span>${escapeHtml(label)}</span>`,
+      onclick: (event) => {
+        event.stopPropagation();
+        closeStatusMenu();
+        action();
+      },
+    }));
+  };
+  add('Complete', 'done', () => toggleCompleted(reminder, anchor.closest('.reminder')));
+  if (inProgress) add('Mark not started', 'notstarted', () => setReminderInProgress(reminder, false));
+  else add('Mark in progress', 'progress', () => setReminderInProgress(reminder, true));
+  document.body.append(menu);
+  menu.anchor = anchor;
+  menu.mode = mode;
+  statusMenuEl = menu;
+  anchor.setAttribute('aria-expanded', 'true');
+
+  const rect = anchor.getBoundingClientRect();
+  const width = menu.offsetWidth;
+  const height = menu.offsetHeight;
+  let left;
+  let top;
+  if (mode === 'hover') {
+    left = rect.right + 8;
+    top = rect.top + rect.height / 2 - height / 2;
+  } else {
+    left = rect.left - 4;
+    top = rect.bottom + 8;
+  }
+  left = Math.max(8, Math.min(left, window.innerWidth - width - 8));
+  if (top + height > window.innerHeight - 8) top = Math.max(8, rect.top - height - 8);
+  menu.style.left = `${left}px`;
+  menu.style.top = `${top}px`;
+
+  const onPointerDown = (event) => {
+    if (!menu.contains(event.target) && !anchor.contains(event.target)) closeStatusMenu();
+  };
+  const onKey = (event) => {
+    if (event.key === 'Escape') {
+      event.stopPropagation();
+      closeStatusMenu(true);
+      return;
+    }
+    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+    const items = [...menu.querySelectorAll('button')];
+    const index = items.indexOf(document.activeElement);
+    event.preventDefault();
+    const next = event.key === 'ArrowDown' ? index + 1 : index - 1;
+    items[(next + items.length) % items.length].focus();
+  };
+  const onClose = () => closeStatusMenu();
+  // The list re-renders while it is open, so the anchor can be replaced under
+  // the pointer; watch the pointer instead of relying on mouseleave.
+  const onMove = (event) => {
+    if (mode !== 'hover') return;
+    if (menu.contains(event.target) || anchor.contains(event.target)) return;
+    const live = document.querySelector(`.reminder[data-reminder-id="${reminder.id}"] .check`);
+    if (live && live.contains(event.target)) return;
+    closeStatusMenu();
+  };
+  document.addEventListener('pointerdown', onPointerDown, true);
+  document.addEventListener('keydown', onKey, true);
+  document.addEventListener('pointermove', onMove);
+  window.addEventListener('scroll', onClose, true);
+  window.addEventListener('resize', onClose);
+  statusMenuClose = () => {
+    document.removeEventListener('pointerdown', onPointerDown, true);
+    document.removeEventListener('keydown', onKey, true);
+    document.removeEventListener('pointermove', onMove);
+    window.removeEventListener('scroll', onClose, true);
+    window.removeEventListener('resize', onClose);
+  };
+  if (mode === 'menu' && !(window.matchMedia && window.matchMedia('(pointer: coarse)').matches)) {
+    const first = menu.querySelector('button');
+    if (first) first.focus();
+  }
+}
 
 async function toggleCompleted(reminder, row) {
   // Optimistic feedback only: the check fills/unfills while the request is
