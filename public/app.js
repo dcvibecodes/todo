@@ -7677,7 +7677,7 @@ function openStatusMenu(reminder, anchor, mode) {
   let left;
   let top;
   if (mode === 'hover') {
-    left = rect.right + 8;
+    left = rect.right + 4;
     top = rect.top + rect.height / 2 - height / 2;
   } else {
     left = rect.left - 4;
@@ -7705,21 +7705,44 @@ function openStatusMenu(reminder, anchor, mode) {
     items[(next + items.length) % items.length].focus();
   };
   const onClose = () => closeStatusMenu();
+  let hoverCloseTimer = null;
+  const cancelHoverClose = () => {
+    if (!hoverCloseTimer) return;
+    clearTimeout(hoverCloseTimer);
+    hoverCloseTimer = null;
+  };
+  const scheduleHoverClose = () => {
+    cancelHoverClose();
+    hoverCloseTimer = setTimeout(() => {
+      hoverCloseTimer = null;
+      if (statusMenuEl === menu) closeStatusMenu();
+    }, 200);
+  };
+  const keepHoverOpen = () => cancelHoverClose();
   // The list re-renders while it is open, so the anchor can be replaced under
   // the pointer; watch the pointer instead of relying on mouseleave.
   const onMove = (event) => {
     if (mode !== 'hover') return;
-    if (menu.contains(event.target) || anchor.contains(event.target)) return;
+    if (menu.contains(event.target) || anchor.contains(event.target)) {
+      keepHoverOpen();
+      return;
+    }
     const live = document.querySelector(`.reminder[data-reminder-id="${reminder.id}"] .check`);
-    if (live && live.contains(event.target)) return;
-    closeStatusMenu();
+    if (live && live.contains(event.target)) {
+      keepHoverOpen();
+      return;
+    }
+    scheduleHoverClose();
   };
+  menu.addEventListener('pointerenter', keepHoverOpen);
   document.addEventListener('pointerdown', onPointerDown, true);
   document.addEventListener('keydown', onKey, true);
   document.addEventListener('pointermove', onMove);
   window.addEventListener('scroll', onClose, true);
   window.addEventListener('resize', onClose);
   statusMenuClose = () => {
+    cancelHoverClose();
+    menu.removeEventListener('pointerenter', keepHoverOpen);
     document.removeEventListener('pointerdown', onPointerDown, true);
     document.removeEventListener('keydown', onKey, true);
     document.removeEventListener('pointermove', onMove);

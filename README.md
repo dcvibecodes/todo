@@ -2,6 +2,12 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v5.17.1
+
+- **Hover status pill is clickable** - Moving the mouse from the status circle to the Complete / Mark in progress pill no longer closes it in the gap. The pill now keeps a 200ms grace period and cancels closing as soon as the pointer reaches it, so both hover actions work with a mouse.
+- **Selection mode is visually distinct** - The multi-select control is now a rounded square instead of a circle, so it no longer looks like the status circle. Selected rows still fill it with the accent colour and check.
+- Service worker cache bumped to `workspace-v5.17.1`.
+
 ## What's New in v5.17.0
 
 - **Status circle replaces the checkbox** - Open items show a neutral circle: empty is not started, half filled is in progress. Tap it (or hover it with a mouse) for Complete and Mark in progress / Mark not started. Click and keyboard (Enter, arrows, Escape) also open the menu. Completed items keep tap-to-undo.

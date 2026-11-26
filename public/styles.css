@@ -5495,7 +5495,7 @@ button.link-chip { border: 0; font-family: inherit; cursor: pointer; }
   transform: translateY(-50%);
   place-items: center;
   border: 1.5px solid var(--text-3);
-  border-radius: 50%;
+  border-radius: 6px;
   background: var(--surface);
   color: transparent;
   pointer-events: none;
