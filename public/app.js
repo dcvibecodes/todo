@@ -7287,7 +7287,16 @@ function reminderRow(reminder, options = {}) {
   const titleOnly = meta.childElementCount === 0 && !reminder.notes;
   // Item number: plain reference text at the end of the meta row. It is not a
   // control and does nothing when pressed.
-  meta.append(el('span', { class: 'meta-id', text: `#${reminder.id}`, 'aria-label': `Item number ${reminder.id}` }));
+  // Added date and number wrap as one unit, so the number never drops to a line of its own.
+  const idEl = el('span', { class: 'meta-id', text: `#${reminder.id}`, 'aria-label': `Item number ${reminder.id}` });
+  const addedEl = meta.querySelector(':scope > .meta-added');
+  if (addedEl) {
+    const tail = el('span', { class: 'meta-tail' });
+    meta.replaceChild(tail, addedEl);
+    tail.append(addedEl, idEl);
+  } else {
+    meta.append(idEl);
+  }
   const completion = completingInFlight.get(reminder.id);
   const completionClass = completion && !completion.settled ? completion.mode : null;
 
