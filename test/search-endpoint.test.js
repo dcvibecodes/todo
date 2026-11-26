@@ -159,3 +159,17 @@ test('document contents are not searched by the server endpoint', async () => {
   const data = await json('/api/search?q=one%20word%20second%20word&limit=all&scope=docs');
   assert.deepEqual(data.docs.map((doc) => doc.name), ['one word second word.txt']);
 });
+
+test('server search reports the best score per group so the client can order groups', async () => {
+  const data = await json('/api/search?q=one%20word&limit=all&scope=all');
+  assert.ok(data.best_scores);
+  assert.ok(data.best_scores.open > 0);
+  assert.ok(data.best_scores.notes > 0);
+  assert.ok(data.best_scores.docs > 0);
+  assert.equal(data.best_scores.completed, 0);
+});
+
+test('server search finds a spaced document name when the query has no space', async () => {
+  const data = await json('/api/search?q=oneword&limit=all&scope=docs');
+  assert.deepEqual(data.docs.map((doc) => doc.name), ['one word second word.txt']);
+});
