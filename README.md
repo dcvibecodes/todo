@@ -5,7 +5,7 @@ A self-hosted, single-user app with three tenants — Reminders, Notes and Docs 
 ## What's New in v5.17.0
 
 - **Status circle replaces the checkbox** - Open items show a neutral circle: empty is not started, half filled is in progress. Tap it (or hover it with a mouse) for Complete and Mark in progress / Mark not started. Click and keyboard (Enter, arrows, Escape) also open the menu. Completed items keep tap-to-undo.
-- **In progress smart view** - New view between Flagged and Completed with a count. Completing an item, or completing or skipping a repeating occurrence, clears the mark. Stored as a new nullable `in_progress_at` column (additive migration), exposed as `in_progress` on PATCH, and included in backup, import and CSV.
+- **In progress smart view** - New view between Flagged and Completed with a count. Completing an item, or completing or skipping a repeating occurrence, clears the mark. Stored as a new nullable `in_progress_at` column (additive migration), exposed as `in_progress` on PATCH and token batch, and included in backup, import and CSV. Ordinary edits preserve the mark, and the In progress sort choice syncs like other views.
 - **Item number on each card** - The reminder's existing id (for example #491) shows at the end of the meta row. It is reference text only, not a control.
 - Service worker cache bumped to `workspace-v5.17.0`.
 

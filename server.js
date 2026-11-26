@@ -2212,7 +2212,7 @@ async function main() {
 
   const SORT_FIELDS = ['due', 'created', 'completed', 'name'];
   const SORT_DIRS = ['asc', 'desc'];
-  const SORT_VIEW_KEY = /^(today|scheduled|all|flagged|completed|notes|docs|list:\d{1,10}|notes:\d{1,10}|docs:\d{1,10})$/;
+  const SORT_VIEW_KEY = /^(today|scheduled|all|flagged|inprogress|completed|notes|docs|list:\d{1,10}|notes:\d{1,10}|docs:\d{1,10})$/;
   const SORT_MAX_OVERRIDES = 200;
 
   function parseSortSetting(raw) {
@@ -5488,7 +5488,7 @@ async function main() {
           }
           fields.push('completed = ?');
           params.push(completed);
-          fields.push('in_progress_at = NULL');
+          if (completed) fields.push('in_progress_at = NULL');
           if (completed && !current.completed) {
             fields.push('completed_at = ?');
             params.push(new Date().toISOString());
@@ -5721,7 +5721,7 @@ async function main() {
       }
       fields.push('completed = ?');
       params.push(completed);
-      fields.push('in_progress_at = NULL');
+      if (completed) fields.push('in_progress_at = NULL');
       if (completed && !current.completed) {
         fields.push('completed_at = ?');
         params.push(new Date().toISOString());
@@ -5777,7 +5777,7 @@ async function main() {
 
   const BATCH_MAX_OPERATIONS = 100;
   const BATCH_REMINDER_UPDATE_FIELDS = new Set([
-    'title', 'notes', 'list_id', 'due_at', 'has_time', 'urgent',
+    'title', 'notes', 'list_id', 'due_at', 'has_time', 'urgent', 'in_progress',
     'repeat_rule', 'repeat', 'time_model', 'time_zone', 'scope',
     'base_revision', 'base_epoch',
     'linked_reminder_ids', 'linked_note_ids', 'linked_doc_ids',

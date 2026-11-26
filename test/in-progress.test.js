@@ -128,6 +128,16 @@ test('marking in progress bumps the revision', async () => {
   assert.ok((await get(item.id)).revision > before);
 });
 
+test('an ordinary edit that sends completed:false keeps the in-progress mark', async () => {
+  const item = await create();
+  await patch(item.id, { in_progress: true });
+  const stamp = (await get(item.id)).in_progress_at;
+  await patch(item.id, { title: 'Edited while in progress', completed: false });
+  const edited = await get(item.id);
+  assert.equal(edited.title, 'Edited while in progress');
+  assert.equal(edited.in_progress_at, stamp);
+});
+
 test('completing clears in progress, and uncompleting does not bring it back', async () => {
   const item = await create();
   await patch(item.id, { in_progress: true });
@@ -190,4 +200,8 @@ test('the In progress smart view, status menu and item number are served', async
   assert.match(app, /view === 'inprogress'/);
   assert.match(app, /class: 'meta-id'/);
   assert.doesNotMatch(app, /Copy item number/);
+  const sort = await request('/api/settings/sort', {
+    method: 'POST', csrf: true, body: { view: 'inprogress', field: 'created', dir: 'desc' },
+  });
+  assert.equal(sort.status, 200);
 });

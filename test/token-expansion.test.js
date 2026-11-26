@@ -251,6 +251,22 @@ test('batch writes atomically, reports per-item errors and is idempotent', async
   assert.equal(replayData.deduplicated, true);
   assert.equal((await tokenJson('/api/notes')).notes.filter((note) => note.title === 'Batch note').length, 1);
 
+  const batchReminder = reminders.reminders.find((item) => item.title === 'Batch reminder');
+  const progress = await tokenRequest('/api/batch', {
+    method: 'POST',
+    headers: { 'Idempotency-Key': 'batch-in-progress-1' },
+    body: {
+      operations: [{
+        type: 'reminder', action: 'update', id: batchReminder.id,
+        data: { in_progress: true, base_epoch: epoch, base_revision: batchReminder.revision },
+      }],
+    },
+  });
+  assert.equal(progress.status, 200);
+  const progressed = (await tokenJson('/api/reminders')).reminders
+    .find((item) => item.id === batchReminder.id);
+  assert.ok(progressed.in_progress_at);
+
   const invalidBody = {
     operations: [
       {

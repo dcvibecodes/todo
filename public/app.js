@@ -2737,6 +2737,7 @@ function animateListRects(before) {
 }
 
 function render() {
+  closeStatusMenu();
   closeMovePicker();
   const flip = animateNextRender
     ? captureRects('#content .reminder[data-reminder-id]', (node) => node.dataset.reminderId)
@@ -7628,6 +7629,7 @@ async function setReminderInProgress(reminder, value) {
       body: { in_progress: value },
     });
     await loadState();
+    if (state.search) await runSearch(state.search);
     render();
   } catch (err) {
     toast(err.message);
@@ -7746,6 +7748,7 @@ async function toggleCompleted(reminder, row) {
       body: { completed: !reminder.completed },
     });
     await loadState();
+    if (state.search) await runSearch(state.search);
     inFlight.settled = true;
     requestRowAnimation(0.72);
     render();
