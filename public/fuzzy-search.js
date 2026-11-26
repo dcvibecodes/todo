@@ -124,7 +124,30 @@
 
   // A title or filename hit always outranks a body-only hit for the same word.
   const TITLE_WEIGHT = 30;
-  const COMPACT_TITLE_SCORE = 70;
+  // Score of an exact, whole-word title match plus the exact-phrase bonus, per
+  // title word the query spans. A spacing-insensitive match gets the score its
+  // spaced spelling would get, so "Form16", "Form-16" and "Form 16" tie.
+  const EXACT_TITLE_WORD_SCORE = 16 + TITLE_WEIGHT;
+  const EXACT_PHRASE_BONUS = 24;
+
+  function compactTitleScore(titleWords, compactQuery) {
+    let best = 0;
+    for (let start = 0; start < titleWords.length; start += 1) {
+      let joined = '';
+      for (let end = start; end < titleWords.length; end += 1) {
+        joined += compact(titleWords[end]);
+        if (joined.indexOf(compactQuery) !== -1) {
+          const span = end - start + 1;
+          if (!best || span < best) best = span;
+          break;
+        }
+      }
+    }
+    if (!best) return 0;
+    // "Form16" reads as two words, "Form 16", whichever way the title spells it.
+    const runs = (compactQuery.match(/\p{L}+|\p{N}+/gu) || []).length;
+    return Math.max(best, runs) * EXACT_TITLE_WORD_SCORE + EXACT_PHRASE_BONUS;
+  }
 
   function matchPrepared(reminder, phrase, queryTokens) {
     const title = prepare(reminder.title);
@@ -150,7 +173,7 @@
     // Spacing and punctuation are optional in titles: "Form16" finds "Form 16".
     const compactQuery = compact(phrase);
     if (compactQuery.length >= 3 && title.text && compact(title.text).indexOf(compactQuery) !== -1) {
-      score = Math.max(score, COMPACT_TITLE_SCORE);
+      score = Math.max(score, compactTitleScore(title.words(), compactQuery));
     }
     return score > 0 ? score : null;
   }
