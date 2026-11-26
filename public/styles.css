@@ -1516,7 +1516,7 @@ body.flipping .reminder-group { overflow: visible; }
   margin-top: 1px;
   padding: 0;
   border: 1.5px solid var(--text-3);
-  border-radius: var(--radius-sm);
+  border-radius: 50%;
   background: transparent;
   color: var(--text-3);
   display: grid;
@@ -1531,12 +1531,71 @@ body.flipping .reminder-group { overflow: visible; }
   transition: opacity 0.15s;
 }
 
+/* The status circle stays neutral; only a completed item takes the list colour. */
 .reminder:hover .check,
 .check:focus-visible {
-  border-color: var(--c);
-  background: color-mix(in srgb, var(--c) 10%, transparent);
-  color: var(--c);
+  border-color: var(--text-2);
+  background: var(--hover);
+  color: var(--text-2);
 }
+
+/* In progress: left half filled. Not a colour, so it reads without a label. */
+.reminder.in-progress .check,
+.reminder.in-progress:hover .check {
+  border-color: var(--text-2);
+  background: linear-gradient(90deg, var(--text-2) 50%, transparent 50%);
+}
+
+/* Item number: quiet reference text at the end of the meta row. */
+.meta-id {
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+  user-select: text;
+}
+
+/* Status menu: opened from the circle (tap, click, keyboard) or as a hover pill. */
+.status-menu {
+  position: fixed;
+  z-index: 60;
+  min-width: 190px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.16);
+  animation: status-menu-in 0.12s ease-out;
+}
+.status-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 12px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.94rem;
+  font-weight: 500;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.status-menu-item .ic { width: 16px; height: 16px; color: var(--text-2); flex: none; }
+.status-menu-item:hover,
+.status-menu-item:focus-visible { background: var(--fill); outline: none; }
+.status-menu.inline {
+  flex-direction: row;
+  min-width: 0;
+  padding: 3px;
+  border-radius: 999px;
+}
+.status-menu.inline .status-menu-item { padding: 5px 11px; border-radius: 999px; font-size: 0.8rem; }
+.status-menu.inline .status-menu-item .ic { width: 14px; height: 14px; }
+@keyframes status-menu-in { from { opacity: 0; transform: translateY(-2px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .status-menu { animation: none; } }
 
 .row-tools {
   display: flex;
