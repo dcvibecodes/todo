@@ -58,3 +58,78 @@ test('reminders keep the existing fuzzy behaviour', () => {
   assert.equal(matches.length, 1);
   assert.equal(matches[0].reminder.id, 1);
 });
+
+// ---- Relevance ranking and spacing (Form 16 search) ----
+
+const FORM16_DOCS = [
+  { id: 1, name: '2018-03 Form 16 FY2017-18 Maersk (Part A and B).pdf' },
+  { id: 2, name: '2026-03-31 Form 16 FY2025-26 Altisource.pdf' },
+  { id: 3, name: '2014-03-31 Form 16 FY2013-14 Altisource Part A.pdf' },
+  { id: 4, name: '2015-03 Form 16 FY2014-15 Altisource.pdf' },
+  { id: 5, name: 'Health report.pdf' },
+];
+
+function docIds(query) {
+  return fuzzy.rankItems(FORM16_DOCS, query, { title: 'name', tieBreak: fuzzy.docTieBreak })
+    .map((entry) => entry.item.id);
+}
+
+test('"Form16", "Form 16" and "Form-16" find the same documents', () => {
+  const expected = docIds('Form 16');
+  assert.deepEqual([...expected].sort(), [1, 2, 3, 4]);
+  assert.deepEqual([...docIds('Form16')].sort(), [1, 2, 3, 4]);
+  assert.deepEqual([...docIds('form-16')].sort(), [1, 2, 3, 4]);
+});
+
+test('equal-score documents list the newest dated name first', () => {
+  assert.deepEqual(docIds('Form 16'), [2, 1, 4, 3]);
+});
+
+test('a short or numeric query word does not match inside body text', () => {
+  const reminders = [
+    { id: 1, title: 'Movie: Sing Sing', notes: 'Release checked 16 Nov 2026. More information about the format.' },
+    { id: 2, title: 'Pay property tax', notes: 'form 16 attached' },
+  ];
+  const ids = fuzzy.rank(reminders, 'Form 16').map((entry) => entry.reminder.id);
+  assert.deepEqual(ids, [2]);
+});
+
+test('a title hit outranks a body-only hit for the same words', () => {
+  const reminders = [
+    { id: 1, title: 'Unrelated', notes: 'Please send the form 16 copy' },
+    { id: 2, title: 'Form 16 download', notes: '' },
+  ];
+  const ranked = fuzzy.rank(reminders, 'form 16');
+  assert.deepEqual(ranked.map((entry) => entry.reminder.id), [2, 1]);
+  assert.ok(ranked[0].score - ranked[1].score >= 20, 'title hit must lead by a clear margin');
+});
+
+test('codes and years must match exactly; one changed digit is a different year', () => {
+  const docs = [{ id: 1, name: '2019-03-31 Form 16 FY2018-19.pdf' }];
+  assert.equal(fuzzy.rankItems(docs, 'form 16 FY2014', DOC_KEYS).length, 0);
+  assert.equal(fuzzy.rankItems(docs, 'form 16 FY2018', DOC_KEYS).length, 1);
+});
+
+test('"form 16 FY2014" puts the FY2014-15 file first', () => {
+  assert.equal(docIds('form 16 FY2014')[0], 4);
+});
+
+test('long words still match in body text and tolerate a typo', () => {
+  const notes = [{ id: 1, title: 'Unrelated', body: 'Choline intake during pregnancy' }];
+  assert.equal(fuzzy.rankItems(notes, 'choline', NOTE_KEYS).length, 1);
+  assert.equal(fuzzy.rankItems(notes, 'pregnnacy', NOTE_KEYS).length, 1);
+});
+
+test('a plain word that appears only in titles still finds those titles first', () => {
+  const reminders = [
+    { id: 1, title: 'Unrelated', notes: 'mentions Sing Sing in passing' },
+    { id: 2, title: 'Sing Sing, the 2024 prison drama', notes: '' },
+  ];
+  assert.equal(fuzzy.rank(reminders, 'sing sing')[0].reminder.id, 2);
+});
+
+test('docDateKey reads a leading year-month or year-month-day', () => {
+  assert.equal(fuzzy.docDateKey('2026-03-31 Form 16.pdf'), '2026-03-31');
+  assert.equal(fuzzy.docDateKey('2018-03 Form 16.pdf'), '2018-03');
+  assert.equal(fuzzy.docDateKey('Health report.pdf'), '');
+});
