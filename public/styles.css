@@ -2101,6 +2101,9 @@ html body .reminder.is-note-expanded .reminder-title {
 
 .toggle-completed + .group-title { margin-top: 14px; }
 
+.search-filters { margin: 0 0 8px; flex-wrap: wrap; }
+.search-filters .segmented-btn { flex: 1 1 auto; font-variant-numeric: tabular-nums; }
+
 .search-status {
   margin: 0 0 12px;
   font-size: 0.78rem;
