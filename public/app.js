@@ -38,6 +38,9 @@ const state = {
   searchNotes: [],
   searchDocs: [],
   searchTotals: { open: 0, completed: 0, notes: 0, docs: 0 },
+  searchBest: { open: 0, completed: 0, notes: 0, docs: 0 },
+  searchFilter: 'all',
+  searchCompletedOpen: false,
   searchTruncated: false,
   searchLoading: false,
   searchOffline: false,
@@ -4019,31 +4022,101 @@ function renderSearchResults(content) {
   if (state.searchTruncated) {
     content.append(el('p', { class: 'search-status', text: 'Showing the first results — refine the search to see the rest.' }));
   }
-  if (open.length) {
-    content.append(el('h3', { class: 'group-title', text: `Open reminders (${totals.open})` }));
-    const group = el('div', { class: 'reminder-group' });
-    for (const reminder of open) group.append(reminderRow(reminder, { showList: true }));
-    content.append(group);
+  const filter = ['all', 'reminders', 'notes', 'docs'].includes(state.searchFilter) ? state.searchFilter : 'all';
+  const chips = [
+    ['all', 'All', total],
+    ['reminders', 'Reminders', (totals.open || 0) + (totals.completed || 0)],
+    ['notes', 'Notes', totals.notes || 0],
+    ['docs', 'Docs', totals.docs || 0],
+  ];
+  content.append(el('div', { class: 'segmented search-filters', role: 'group', 'aria-label': 'Filter search results' },
+    chips.map(([key, label, count]) => el('button', {
+      type: 'button',
+      class: 'segmented-btn' + (filter === key ? ' active' : ''),
+      'aria-pressed': filter === key ? 'true' : 'false',
+      text: `${label} ${count}`,
+      onclick: () => {
+        state.searchFilter = key;
+        render();
+      },
+    }))));
+
+  const show = (kind) => filter === 'all' || filter === kind;
+  const best = state.searchBest || {};
+  // Groups with the strongest match first; equal scores keep the usual order.
+  const groups = [
+    {
+      key: 'open',
+      kind: 'reminders',
+      rows: open,
+      build: () => {
+        const nodes = [el('h3', { class: 'group-title', text: `Open reminders (${totals.open})` })];
+        const group = el('div', { class: 'reminder-group' });
+        for (const reminder of open) group.append(reminderRow(reminder, { showList: true }));
+        nodes.push(group);
+        return nodes;
+      },
+    },
+    {
+      key: 'notes',
+      kind: 'notes',
+      rows: notes,
+      build: () => {
+        const nodes = [el('h3', { class: 'group-title', text: `Notes (${totals.notes})` })];
+        const group = el('div', { class: 'reminder-group' });
+        for (const note of notes) group.append(noteRow(note, { showFolder: true }));
+        nodes.push(group);
+        return nodes;
+      },
+    },
+    {
+      key: 'docs',
+      kind: 'docs',
+      rows: docs,
+      build: () => {
+        const nodes = [el('h3', { class: 'group-title', text: `Docs (${totals.docs})` })];
+        const group = el('div', { class: 'reminder-group' });
+        for (const doc of docs) group.append(docRow(doc, { showFolder: true }));
+        nodes.push(group);
+        return nodes;
+      },
+    },
+  ]
+    .map((group, index) => ({ ...group, index, score: Number(best[group.key]) || 0 }))
+    .filter((group) => group.rows.length && show(group.kind))
+    .sort((a, b) => (b.score - a.score) || (a.index - b.index));
+  for (const group of groups) {
+    for (const node of group.build()) content.append(node);
   }
-  if (completed.length) {
-    content.append(el('h3', { class: 'group-title', text: `Completed reminders (${totals.completed})` }));
-    const group = el('div', { class: 'reminder-group' });
-    for (const reminder of completed) group.append(reminderRow(reminder, { showList: true }));
-    content.append(group);
+
+  // Completed reminders are history, so they stay collapsed unless nothing
+  // else matched or the owner opens them.
+  if (completed.length && show('reminders')) {
+    const expanded = state.searchCompletedOpen || !open.length;
+    if (open.length) {
+      content.append(el('button', {
+        type: 'button',
+        class: 'toggle-completed',
+        'aria-expanded': expanded ? 'true' : 'false',
+        text: `${expanded ? 'Hide' : 'Show'} completed reminders (${totals.completed})`,
+        onclick: () => {
+          state.searchCompletedOpen = !state.searchCompletedOpen;
+          render();
+        },
+      }));
+    }
+    if (expanded) {
+      content.append(el('h3', { class: 'group-title', text: `Completed reminders (${totals.completed})` }));
+      const group = el('div', { class: 'reminder-group' });
+      for (const reminder of completed) group.append(reminderRow(reminder, { showList: true }));
+      content.append(group);
+    }
   }
-  if (notes.length) {
-    content.append(el('h3', { class: 'group-title', text: `Notes (${totals.notes})` }));
-    const group = el('div', { class: 'reminder-group' });
-    for (const note of notes) group.append(noteRow(note, { showFolder: true }));
-    content.append(group);
-  }
-  if (docs.length) {
-    content.append(el('h3', { class: 'group-title', text: `Docs (${totals.docs})` }));
-    const group = el('div', { class: 'reminder-group' });
-    for (const doc of docs) group.append(docRow(doc, { showFolder: true }));
-    content.append(group);
+  if (!groups.length && !(completed.length && show('reminders'))) {
+    content.append(el('p', { class: 'search-status', text: 'No matches in this filter.' }));
   }
 }
+
 function emptySearchState() {
   return el('div', { class: 'empty' }, [
     el('span', { html: ICON('search') }),
@@ -5155,6 +5228,7 @@ function docStorageSummary(doc) {
   if (stored && original && stored < original * 0.99) {
     return `Stored at ${formatBytes(stored)} from the uploaded ${formatBytes(original)} file. Download returns the stored optimized copy.`;
   }
+  if (/:skipped-(?:encrypted|signed|protected)$/.test(optimization)) return 'Stored as original — signed and password-protected PDFs are never optimized. Download returns the original.';
   if (optimization.endsWith(':disabled')) return 'Download returns the original file — optimization is off.';
   if (optimization.endsWith(':skipped-small')) return 'Original kept — the file was below the optimization threshold. Download returns the original.';
   if (optimization.endsWith(':kept')) return 'Original kept — no smaller copy was produced. Download returns the original.';
@@ -11028,6 +11102,9 @@ function clearSearchResults() {
   state.searchNotes = [];
   state.searchDocs = [];
   state.searchTotals = { open: 0, completed: 0, notes: 0, docs: 0 };
+  state.searchBest = { open: 0, completed: 0, notes: 0, docs: 0 };
+  state.searchFilter = 'all';
+  state.searchCompletedOpen = false;
   state.searchTruncated = false;
   state.searchLoading = false;
   state.searchOffline = false;
@@ -11069,30 +11146,41 @@ async function runSearch(query) {
       notes: state.searchNotes.length,
       docs: state.searchDocs.length,
     };
+    state.searchBest = data.best_scores || { open: 0, completed: 0, notes: 0, docs: 0 };
     state.searchTruncated = Boolean(data.truncated);
     state.searchOffline = false;
   } catch {
     if (seq !== state.searchSeq || query !== state.search) return false;
     state.searchQuery = query;
     const needle = query.toLowerCase();
+    const bestOf = (entries) => (entries.length ? entries[0].score : 0);
+    const localEntries = includeReminders && window.TodoFuzzy ? window.TodoFuzzy.rank(state.reminders, state.search) : null;
     const local = includeReminders
-      ? (window.TodoFuzzy
-        ? window.TodoFuzzy.rank(state.reminders, state.search).map((entry) => entry.reminder)
+      ? (localEntries
+        ? localEntries.map((entry) => entry.reminder)
         : sortItems(state.reminders.filter(matchesSearch), effectiveSort(state.view)))
       : [];
+    const noteEntries = includeNotes && window.TodoFuzzy
+      ? window.TodoFuzzy.rankItems(state.notes, state.search, { title: 'title', notes: 'body' }) : null;
+    const docEntries = includeDocs && window.TodoFuzzy
+      ? window.TodoFuzzy.rankItems(state.docs, state.search, { title: 'name', tieBreak: window.TodoFuzzy.docTieBreak }) : null;
     state.searchOpen = local.filter((reminder) => !reminder.completed);
     state.searchCompleted = local.filter((reminder) => reminder.completed);
+    state.searchBest = {
+      open: localEntries ? bestOf(localEntries.filter((entry) => !entry.reminder.completed)) : 0,
+      completed: localEntries ? bestOf(localEntries.filter((entry) => entry.reminder.completed)) : 0,
+      notes: noteEntries ? bestOf(noteEntries) : 0,
+      docs: docEntries ? bestOf(docEntries) : 0,
+    };
     state.searchNotes = includeNotes
-      ? (window.TodoFuzzy
-        ? window.TodoFuzzy.rankItems(state.notes, state.search, { title: 'title', notes: 'body' })
-          .map((entry) => entry.item)
+      ? (noteEntries
+        ? noteEntries.map((entry) => entry.item)
         : state.notes.filter((note) => note.title.toLowerCase().includes(needle)
           || (note.body || '').toLowerCase().includes(needle)))
       : [];
     state.searchDocs = includeDocs
-      ? (window.TodoFuzzy
-        ? window.TodoFuzzy.rankItems(state.docs, state.search, { title: 'name' })
-          .map((entry) => entry.item)
+      ? (docEntries
+        ? docEntries.map((entry) => entry.item)
         : state.docs.filter((doc) => doc.name.toLowerCase().includes(needle)))
       : [];
     state.searchTotals = {
