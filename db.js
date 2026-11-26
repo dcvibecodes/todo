@@ -213,6 +213,7 @@ async function init() {
   await addReminderColumn('revision', 'revision INTEGER NOT NULL DEFAULT 0');
   await addReminderColumn('deleted_at', 'deleted_at TEXT');
   await addReminderColumn('manual_position', 'manual_position INTEGER');
+  await addReminderColumn('in_progress_at', 'in_progress_at TEXT');
   // Per-occurrence history for recurring reminders. One row per
   // (reminder, scheduled occurrence): 'completed' | 'skipped' | 'exception'
   // (an occurrence-only edit waiting to fire). UNIQUE keeps history honest.
