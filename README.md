@@ -2,6 +2,12 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v5.15.1
+
+- **Mobile restores the exact folder-list or folder** - Each tenant now remembers whether you left on its folder-list screen or inside a folder. Force-closing from the Docs, Notes or Reminders folder list reopens that list; leaving inside a folder reopens that folder. Switching tenants while already on a folder list records the new tenant's folder list too.
+- **Desktop tenant tabs open All** - On desktop, switching to a tenant opens its **All** view instead of an arbitrary last folder. A cold page load still resumes the last folder for that tenant.
+- Service worker cache bumped to `workspace-v5.15.1`.
+
 ## What's New in v5.15.0
 
 - **Rapid completions keep their checks** - Marking several reminders complete in quick succession keeps every tapped checkbox filled from the tap until its row disappears. Another item's completion can no longer rebuild the list and strip the optimistic check from rows whose PATCH is still in flight. Un-completing keeps the same empty-ring preview, and the double-tap guard still sends only one PATCH per item.

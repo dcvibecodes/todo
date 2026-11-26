@@ -1491,7 +1491,10 @@ function showAppLoading() {
 }
 
 function renderSkeletons() {
-  const view = parseRoute();
+  let view = parseRoute();
+  if (isSplitLayout() && view === 'home') {
+    view = viewKeyForPath(lastPathForTenant(state.tenant));
+  }
   const home = view === 'home';
   const tenant = view === 'notes' || String(view).startsWith('notes-folder-')
     ? 'notes'
@@ -1910,9 +1913,9 @@ function clearSearch() {
 function parseRoute() {
   let raw = location.hash.replace(/^#\/?/, '');
   if (!raw) {
-    // A reload without a hash returns to the last view for this tenant. On a
-    // fresh desktop visit there is nothing stored yet, so show the tenant's
-    // All view rather than an empty right pane.
+    // A reload without a hash returns to the last screen for this tenant,
+    // including the mobile folder list. Desktop has no full-screen Home, so
+    // route() maps a stored home to that tenant's default view.
     const stored = storedPathForTenant(state.tenant);
     if (stored) raw = stored;
     else if (isSplitLayout()) raw = lastPathForTenant(state.tenant);
@@ -1980,9 +1983,9 @@ function setTenant(tenant, direction = 0) {
   clearSearchResults();
   setSearchOverlay(false);
   if (isSplitLayout()) {
-    // Keep both panes visible: switch the left pane and load that tenant's
-    // last-used view (or its All view) in the right pane.
-    goOrRender(lastPathForTenant(next));
+    // Keep both panes visible: switch the left pane and open that tenant's
+    // All view instead of an arbitrary last folder.
+    goOrRender(viewState.defaultPathForTenant(next));
     animateTenantContent(direction);
     return;
   }
@@ -1990,6 +1993,7 @@ function setTenant(tenant, direction = 0) {
     go('home');
     return;
   }
+  rememberView('home');
   render();
   animateTenantContent(direction);
 }
@@ -2161,8 +2165,8 @@ function route() {
       state.tenant = tenant;
       localStorage.setItem('todo.tenant', tenant);
     }
-    rememberView(view);
   }
+  rememberView(view);
   document.body.dataset.screen = view === 'home' ? 'home' : 'detail';
   render();
   resetListToolbarAutoHide();

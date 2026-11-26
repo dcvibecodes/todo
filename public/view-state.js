@@ -59,7 +59,6 @@
   }
 
   function rememberView(storage, view, currentTenant) {
-    if (view === 'home') return readLastViews(storage);
     const tenant = routeTenant(view, currentTenant);
     const path = viewPathFor(view);
     const views = readLastViews(storage);
@@ -74,13 +73,14 @@
     const path = views[tenant];
     if (!path) return null;
     const key = viewKeyForPath(path);
-    if (key === 'home' || routeTenant(key, currentTenant) !== tenant) return null;
+    if (key !== 'home' && routeTenant(key, currentTenant) !== tenant) return null;
     return path;
   }
 
   function lastPathForTenant(storage, tenant, currentTenant) {
-    return storedPathForTenant(storage, tenant, currentTenant)
-      || defaultPathForTenant(normalizeTenant(tenant));
+    const stored = storedPathForTenant(storage, tenant, currentTenant);
+    if (stored && stored !== 'home') return stored;
+    return defaultPathForTenant(normalizeTenant(tenant));
   }
 
   return {

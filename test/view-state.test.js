@@ -51,10 +51,18 @@ test('tenants without a stored view fall back to their All view', () => {
   assert.equal(viewState.lastPathForTenant(storage, 'docs'), 'docs');
 });
 
-test('home is never stored as a restorable view', () => {
+test('home is stored per tenant for mobile restore but ignored by the desktop path', () => {
   const storage = memoryStorage();
+  viewState.rememberView(storage, 'docs-folder-9', 'docs');
+  viewState.rememberView(storage, 'home', 'docs');
+  assert.deepEqual(viewState.readLastViews(storage), { docs: 'home' });
+  assert.equal(viewState.storedPathForTenant(storage, 'docs'), 'home');
+  assert.equal(viewState.lastPathForTenant(storage, 'docs'), 'docs');
+
+  viewState.rememberView(storage, 'list/12', 'reminders');
   viewState.rememberView(storage, 'home', 'reminders');
-  assert.deepEqual(viewState.readLastViews(storage), {});
+  assert.equal(viewState.storedPathForTenant(storage, 'reminders'), 'home');
+  assert.equal(viewState.lastPathForTenant(storage, 'reminders'), 'all');
 });
 
 test('the desktop split breakpoint is 900px', () => {
