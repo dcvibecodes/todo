@@ -1274,7 +1274,7 @@ async function completeReminder(id) {
   if (!recurrence.isRecurringRule(rule)) {
     if (reminder.completed) return { advanced: false, reminder };
     await db.run(
-      'UPDATE reminders SET completed = 1, completed_at = ?, snoozed_until = NULL, updated_at = ?, revision = revision + 1 WHERE id = ?',
+      'UPDATE reminders SET completed = 1, completed_at = ?, snoozed_until = NULL, in_progress_at = NULL, updated_at = ?, revision = revision + 1 WHERE id = ?',
       [now, now, id]
     );
     return { advanced: false };
@@ -1336,7 +1336,7 @@ async function completeReminder(id) {
   // we report it instead of advancing the (already new) current occurrence.
   const updated = await db.run(
     `UPDATE reminders SET due_at = ?, notified_at = NULL, last_push_at = NULL,
-       push_count = 0, snoozed_until = NULL, updated_at = ?, revision = revision + 1
+       push_count = 0, snoozed_until = NULL, in_progress_at = NULL, updated_at = ?, revision = revision + 1
      WHERE id = ? AND due_at = ?`,
     [next, now, id, reminder.due_at]
   );
@@ -1378,7 +1378,7 @@ async function skipOccurrence(id) {
   // flips due_at from the snapshot value owns this skip.
   const updated = await db.run(
     `UPDATE reminders SET due_at = ?, notified_at = NULL, last_push_at = NULL,
-       push_count = 0, snoozed_until = NULL, updated_at = ?, revision = revision + 1
+       push_count = 0, snoozed_until = NULL, in_progress_at = NULL, updated_at = ?, revision = revision + 1
      WHERE id = ? AND due_at = ?`,
     [next, now, id, reminder.due_at]
   );
@@ -2395,7 +2395,7 @@ async function main() {
     const settings = await getSettings();
     const lists = await db.all('SELECT id, name, color, sort_order, completed_retention, manual_order, manual_order_revision, tenant, created_at FROM lists ORDER BY tenant, sort_order, id');
     const reminders = await db.all(`SELECT id, list_id, title, notes, due_at, has_time, completed,
-      completed_at, urgent, repeat_rule, time_model, time_zone, snoozed_until,
+      completed_at, in_progress_at, urgent, repeat_rule, time_model, time_zone, snoozed_until,
       sort_order, manual_position, created_at, updated_at, revision FROM reminders WHERE deleted_at IS NULL ORDER BY id`);
     const occurrences = await db.all(
       `SELECT reminder_id, occurrence_at, status, title, notes, list_id, urgent,
@@ -2459,7 +2459,7 @@ async function main() {
 
   const REMINDER_CSV_HEADERS = [
     'tenant', 'id', 'list_id', 'folder_name', 'title', 'notes', 'due_at', 'has_time',
-    'completed', 'completed_at', 'urgent', 'repeat_rule', 'time_model', 'time_zone',
+    'completed', 'completed_at', 'in_progress_at', 'urgent', 'repeat_rule', 'time_model', 'time_zone',
     'snoozed_until', 'notified_at', 'last_push_at', 'push_count', 'sort_order',
     'manual_position', 'revision', 'created_at', 'updated_at', 'links',
   ];
@@ -2475,7 +2475,7 @@ async function main() {
   const ALL_CSV_HEADERS = [
     'tenant', 'id', 'list_id', 'folder_id', 'folder_name', 'title', 'name', 'notes',
     'body', 'body_format', 'description', 'due_at', 'has_time', 'completed',
-    'completed_at', 'urgent', 'repeat_rule', 'time_model', 'time_zone', 'snoozed_until',
+    'completed_at', 'in_progress_at', 'urgent', 'repeat_rule', 'time_model', 'time_zone', 'snoozed_until',
     'notified_at', 'last_push_at', 'push_count', 'sort_order', 'mime', 'size',
     'stored_size', 'original_size', 'compression', 'optimization', 'manual_position',
     'revision', 'created_at', 'updated_at', 'links',
@@ -2643,16 +2643,17 @@ async function main() {
       try {
         await db.run(`
           INSERT INTO reminders
-            (id, list_id, title, notes, due_at, has_time, completed, completed_at, urgent,
+            (id, list_id, title, notes, due_at, has_time, completed, completed_at, in_progress_at, urgent,
              repeat_rule, time_model, time_zone, snoozed_until, notified_at, last_push_at, push_count,
              sort_order, manual_position, created_at, updated_at, revision)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)
         `, [
           reminder.id, reminder.list_id, String(reminder.title).slice(0, 500),
           String(reminder.notes || '').slice(0, NOTES_MAX),
           isoOrNull(reminder.due_at),
           reminder.has_time ? 1 : 0, reminder.completed ? 1 : 0,
           isoOrNull(reminder.completed_at),
+          reminder.completed ? null : isoOrNull(reminder.in_progress_at),
           reminder.urgent ? 1 : 0, rule, model, zone,
           isoOrNull(reminder.snoozed_until),
           isoOrNull(reminder.notified_at),
@@ -3060,7 +3061,7 @@ async function main() {
   });
 
   const REMINDER_COLUMNS = `id, list_id, title, notes, due_at, has_time, completed,
-    completed_at, urgent, repeat_rule, time_model, time_zone, snoozed_until,
+    completed_at, in_progress_at, urgent, repeat_rule, time_model, time_zone, snoozed_until,
     notified_at, last_push_at, push_count, sort_order, manual_position, created_at, updated_at, revision`;
 
   const INLINE_LINK_RE = /\[\[ws:(reminder|note|doc):(\d+)\]\]|data-ws-link=["'](reminder|note|doc):(\d+)["']/g;
@@ -4847,7 +4848,7 @@ async function main() {
           const rule = parseRuleColumn(current.repeat_rule);
           if (recurrence.isRecurringRule(rule) || !current.completed) { skipped += 1; continue; }
           await db.run(
-            'UPDATE reminders SET completed = 0, completed_at = NULL, updated_at = ?, revision = revision + 1 WHERE id = ?',
+            'UPDATE reminders SET completed = 0, completed_at = NULL, in_progress_at = NULL, updated_at = ?, revision = revision + 1 WHERE id = ?',
             [new Date().toISOString(), id]
           );
           completedCount += 1;
@@ -5208,7 +5209,7 @@ async function main() {
   // ---- Write-profile token mutation helpers ----
   // Strict validation for token callers: unknown fields and wrong types are
   // rejected naming the field. Session behavior (coercion) is untouched.
-  const PATCH_FIELDS = ['title', 'notes', 'list_id', 'due_at', 'has_time', 'urgent',
+  const PATCH_FIELDS = ['title', 'notes', 'list_id', 'due_at', 'has_time', 'urgent', 'in_progress',
     'repeat_rule', 'repeat', 'time_model', 'time_zone', 'completed', 'snoozed_until',
     'scope', 'occurrence_at', 'base_revision', 'base_epoch',
     'linked_reminder_ids', 'linked_note_ids', 'linked_doc_ids'];
@@ -5231,6 +5232,7 @@ async function main() {
     mustBe('due_at', (v) => v === null || typeof v === 'string');
     mustBe('has_time', (v) => typeof v === 'boolean');
     mustBe('urgent', (v) => typeof v === 'boolean');
+    mustBe('in_progress', (v) => typeof v === 'boolean');
     mustBe('repeat_rule', (v) => typeof v === 'string' || (v !== null && typeof v === 'object'));
     mustBe('repeat', (v) => typeof v === 'string' || (v !== null && typeof v === 'object'));
     mustBe('time_model', (v) => typeof v === 'string');
@@ -5433,6 +5435,10 @@ async function main() {
           fields.push('urgent = ?');
           params.push(body.urgent ? 1 : 0);
         }
+        if (body.in_progress !== undefined && body.completed === undefined && !current.completed) {
+          fields.push('in_progress_at = ?');
+          params.push(body.in_progress ? (current.in_progress_at || new Date().toISOString()) : null);
+        }
         if (body.repeat_rule !== undefined || body.repeat !== undefined) {
           let rule;
           try {
@@ -5482,6 +5488,7 @@ async function main() {
           }
           fields.push('completed = ?');
           params.push(completed);
+          fields.push('in_progress_at = NULL');
           if (completed && !current.completed) {
             fields.push('completed_at = ?');
             params.push(new Date().toISOString());
@@ -5659,6 +5666,10 @@ async function main() {
       fields.push('urgent = ?');
       params.push(req.body.urgent ? 1 : 0);
     }
+    if (req.body.in_progress !== undefined && req.body.completed === undefined && !current.completed) {
+      fields.push('in_progress_at = ?');
+      params.push(req.body.in_progress ? (current.in_progress_at || new Date().toISOString()) : null);
+    }
 
     if (req.body.repeat_rule !== undefined || req.body.repeat !== undefined) {
       let rule;
@@ -5710,6 +5721,7 @@ async function main() {
       }
       fields.push('completed = ?');
       params.push(completed);
+      fields.push('in_progress_at = NULL');
       if (completed && !current.completed) {
         fields.push('completed_at = ?');
         params.push(new Date().toISOString());
@@ -5894,6 +5906,10 @@ async function main() {
       if (data.urgent !== undefined) {
         fields.push('urgent = ?');
         params.push(data.urgent ? 1 : 0);
+      }
+      if (data.in_progress !== undefined && data.completed === undefined && !current.completed) {
+        fields.push('in_progress_at = ?');
+        params.push(data.in_progress ? (current.in_progress_at || new Date().toISOString()) : null);
       }
       const nextModel = data.time_model !== undefined ? String(data.time_model) : current.time_model;
       const nextZone = data.time_zone !== undefined
