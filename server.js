@@ -4,6 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 const zlib = require('zlib');
+const { inspectPdfProtection, protectionStatus } = require('./pdf-protection');
 const { execFile } = require('child_process');
 const express = require('express');
 const session = require('express-session');
@@ -426,6 +427,14 @@ async function optimizeUploadedFile(file, name, optimizeLossy = true) {
   if (ext === '.pdf') {
     if (!optimizeLossy) {
       const result = compressionOutcome('pdf', 'disabled', stat.size);
+      logCompression(name, result);
+      return result;
+    }
+    // Signed and password-protected PDFs are stored exactly as uploaded: a
+    // Ghostscript rewrite would drop the signature or the encryption.
+    const protectedStatus = protectionStatus(await inspectPdfProtection(file.path));
+    if (protectedStatus) {
+      const result = compressionOutcome('pdf', protectedStatus, stat.size);
       logCompression(name, result);
       return result;
     }
@@ -3437,7 +3446,7 @@ async function main() {
     const noteMatches = includeNotes
       ? fuzzy.rankItems(noteRows, query, { title: 'title', notes: 'body' }) : [];
     const docMatches = includeDocs
-      ? fuzzy.rankItems(docRows, query, { title: 'name' }) : [];
+      ? fuzzy.rankItems(docRows, query, { title: 'name', tieBreak: fuzzy.docTieBreak }) : [];
     const open = openMatches.slice(0, limit).map((entry) => entry.reminder);
     const completed = completedMatches.slice(0, limit).map((entry) => entry.reminder);
     const notes = noteMatches.slice(0, limit).map((entry) => entry.item);
@@ -3455,6 +3464,14 @@ async function main() {
         completed: completedMatches.length,
         notes: noteMatches.length,
         docs: docMatches.length,
+      },
+      // Best match score per group, so the client can show the group with the
+      // strongest title or filename hit first instead of a fixed order.
+      best_scores: {
+        open: openMatches.length ? openMatches[0].score : 0,
+        completed: completedMatches.length ? completedMatches[0].score : 0,
+        notes: noteMatches.length ? noteMatches[0].score : 0,
+        docs: docMatches.length ? docMatches[0].score : 0,
       },
       truncated: openMatches.length > open.length || completedMatches.length > completed.length
         || noteMatches.length > notes.length || docMatches.length > docs.length,
