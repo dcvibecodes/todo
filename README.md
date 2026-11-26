@@ -2,6 +2,13 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v5.17.0
+
+- **Status circle replaces the checkbox** - Open items show a neutral circle: empty is not started, half filled is in progress. Tap it (or hover it with a mouse) for Complete and Mark in progress / Mark not started. Click and keyboard (Enter, arrows, Escape) also open the menu. Completed items keep tap-to-undo.
+- **In progress smart view** - New view between Flagged and Completed with a count. Completing an item, or completing or skipping a repeating occurrence, clears the mark. Stored as a new nullable `in_progress_at` column (additive migration), exposed as `in_progress` on PATCH, and included in backup, import and CSV.
+- **Item number on each card** - The reminder's existing id (for example #491) shows at the end of the meta row. It is reference text only, not a control.
+- Service worker cache bumped to `workspace-v5.17.0`.
+
 ## What's New in v5.16.0
 
 - **Smarter global search** - Search results now have All / Reminders / Notes / Docs filters with counts, groups are ordered by their strongest match, and completed reminders stay collapsed behind a toggle. Title and filename hits outrank body-only matches; short or numeric body words must match whole words instead of appearing inside dates or words like "information". Spaced, hyphenated and compact titles tie ("Form 16" = "Form-16" = "Form16"), and equal-scoring Docs list the newest dated filename first. Offline fallback uses the same ranking.
