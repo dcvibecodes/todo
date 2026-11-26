@@ -8,6 +8,7 @@ const { execFile } = require('child_process');
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
 process.env.DATA_DIR = DATA_DIR;
 const db = require('../db');
+const { inspectPdfProtection, protectionStatus } = require('../pdf-protection');
 
 const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
 const IMAGE_MAX_EDGE = 2200;
@@ -158,6 +159,14 @@ async function main() {
     if (kind !== 'pdf' && before.size < 1024) {
       report.files.push({ id: row.id, name: row.name, status: 'skipped-small', before: before.size });
       continue;
+    }
+    if (kind === 'pdf') {
+      // Never rewrite signed or password-protected PDFs: pdfwrite drops both.
+      const protectedStatus = protectionStatus(await inspectPdfProtection(filePath));
+      if (protectedStatus) {
+        report.files.push({ id: row.id, name: row.name, status: protectedStatus, before: before.size });
+        continue;
+      }
     }
     const secondPass = isSecondPass(row.optimization);
     try {
