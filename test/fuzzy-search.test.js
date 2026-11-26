@@ -133,3 +133,26 @@ test('docDateKey reads a leading year-month or year-month-day', () => {
   assert.equal(fuzzy.docDateKey('2018-03 Form 16.pdf'), '2018-03');
   assert.equal(fuzzy.docDateKey('Health report.pdf'), '');
 });
+
+test('"Form16", "Form-16" and "Form 16" score every Form 16 title the same', () => {
+  const titles = ['2010-03-31 Form 16.pdf', '2024-03-31 Form16.pdf', '2021-03-31 Form-16 Part B.pdf'];
+  for (const title of titles) {
+    const scores = ['Form 16', 'Form16', 'form-16'].map((query) => fuzzy.matchOne({ title, notes: '' }, query));
+    assert.ok(scores.every((score) => score > 0), `${title}: ${scores}`);
+    assert.equal(new Set(scores).size, 1, `${title}: ${scores}`);
+  }
+});
+
+test('newest year first across spaced, hyphenated and compact spellings', () => {
+  const docs = [
+    { id: 1, name: '2010-03-31 Form 16.pdf' },
+    { id: 2, name: '2024-03-31 Form16.pdf' },
+    { id: 3, name: '2021-03-31 Form-16 Part B.pdf' },
+    { id: 4, name: '2023-03-31 Form 16.pdf' },
+    { id: 5, name: 'Bank statement march.pdf' },
+  ];
+  for (const query of ['Form 16', 'Form16', 'form-16']) {
+    const ranked = fuzzy.rankItems(docs, query, { title: 'name', tieBreak: fuzzy.docTieBreak });
+    assert.deepEqual(ranked.map((row) => row.item.id), [2, 4, 3, 1], query);
+  }
+});
