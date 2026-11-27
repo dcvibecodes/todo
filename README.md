@@ -2,6 +2,11 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v5.18.4
+
+- **Sort uses the empty corner** - When a view has no Completed control (All, Today, Scheduled, Flagged, In progress, Completed, Notes and Docs), the Sort icon now moves into the second toolbar column where Completed would sit, so the right corner is not left empty. Reminders list views keep Sort in the first column and Completed in the second. The count still never moves either icon, and `99+` remains the cap.
+- Service worker cache bumped to `workspace-v5.18.4`.
+
 ## What's New in v5.18.3
 
 - **One item-number pool for every card** - Reminders, Notes and Docs now share a single, never-reused item-number sequence. Existing reminders keep the numbers people already see (for example #486), and existing Notes/Docs are numbered above the highest reminder. New items of any tenant draw from the same pool, so no two cards can share a number. Note and Doc cards now show `#number` beside their Added date just like reminders.

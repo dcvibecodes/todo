@@ -4410,6 +4410,8 @@ function syncCompletedFilter() {
   const sortBar = $('#sort-bar');
   if (!filter) return;
   filter.hidden = !show;
+  const actions = filter.closest('.sort-actions');
+  if (actions) actions.classList.toggle('no-completed', !show);
   const inline = $('#completed-retention-inline');
   if (!show) {
     if (sortBar) sortBar.classList.remove('showing-completed');

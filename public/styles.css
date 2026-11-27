@@ -5575,6 +5575,7 @@ button.link-chip { border: 0; font-family: inherit; cursor: pointer; }
     grid-row: 1;
     width: 34px;
   }
+  .sort-actions.no-completed .sort-order-toggle { grid-column: 2; }
   .sort-actions .sort-completed-filter {
     grid-column: 2;
     grid-row: 1;
