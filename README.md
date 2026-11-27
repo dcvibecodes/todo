@@ -2,6 +2,12 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v5.18.1
+
+- **One tone for the toolbar** - The Completed check and count now use the same muted colour and weight as Select and the sort icon. Completed keeps its active fill when showing the completed list.
+- **Selection actions stay on the left** - After tapping Select, the count, Select all and Cancel now sit together on the left where Select was, instead of pushing Select all and Cancel to the right. The bottom Complete/In progress/Not started/Delete bar is unchanged.
+- Service worker cache bumped to `workspace-v5.18.1`.
+
 ## What's New in v5.18.0
 
 - **In-progress status is instant** - Mark in progress / Mark not started updates the circle and its aria-label before the PATCH goes out, like Complete and undo. A failed request puts the real state back and shows the error. The extra full-state reload and duplicate search call are gone, and the In progress view still removes an item only after the server confirms.
