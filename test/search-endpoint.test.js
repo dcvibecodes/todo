@@ -173,3 +173,17 @@ test('server search finds a spaced document name when the query has no space', a
   const data = await json('/api/search?q=oneword&limit=all&scope=docs');
   assert.deepEqual(data.docs.map((doc) => doc.name), ['one word second word.txt']);
 });
+
+test('server search finds a reminder by its exact item number', async () => {
+  const created = await json('/api/reminders', {
+    method: 'POST',
+    csrf: true,
+    body: { list_id: remindersFolder.id, title: 'reference without digits' },
+  });
+  for (const query of [String(created.id), `#${created.id}`]) {
+    const data = await json(`/api/search?q=${encodeURIComponent(query)}&limit=all&scope=all`);
+    assert.equal(data.open[0].id, created.id);
+    assert.equal(data.open[0].title, 'reference without digits');
+    assert.ok(data.best_scores.open >= 1000);
+  }
+});

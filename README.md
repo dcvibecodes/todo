@@ -2,6 +2,12 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v5.18.2
+
+- **Search by item number** - Typing a reminder's visible item number, with or without the hash (`513` or `#513`), finds that exact item even when its title and notes contain no digits. The id hit carries the top score in its group, and the offline fallback uses the same rule. Notes and Docs keep their normal title/name matching.
+- **Pasted and dictated paragraphs stay separate** - Plain text with a blank line is inserted as real paragraphs with an empty paragraph between them, so it saves with the same line breaks as pressing Enter and never joins sentences or invents a link chip. Single newlines stay soft line breaks, text without newlines stays inline, and existing editor content and formatting are never rewritten. The notes/description serializer now also inserts a line break before a block that follows bare text, so a joined value cannot recur.
+- Service worker cache bumped to `workspace-v5.18.2`.
+
 ## What's New in v5.18.1
 
 - **One tone for the toolbar** - The Completed check and count now use the same muted colour and weight as Select and the sort icon. Completed keeps its active fill when showing the completed list.

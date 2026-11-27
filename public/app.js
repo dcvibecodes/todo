@@ -4861,7 +4861,13 @@ function setInlineField(node, value) {
 
 function inlineFieldValue(node) {
   if (!node) return '';
+  const BLOCK = /^(P|DIV|H[1-6]|BLOCKQUOTE|LI|FIGCAPTION|PRE)$/;
+  const isBlock = (current) => current && current.nodeType === Node.ELEMENT_NODE
+    && BLOCK.test(current.tagName);
   let out = '';
+  const ensureBreak = () => {
+    if (out && !out.endsWith('\n')) out += '\n';
+  };
   const walk = (current) => {
     if (current.nodeType === Node.TEXT_NODE) {
       out += current.nodeValue || '';
@@ -4874,10 +4880,15 @@ function inlineFieldValue(node) {
       out += wsLinkToken(link.split(':')[0], link.split(':')[1]);
       return;
     }
-    Array.from(current.childNodes).forEach(walk);
-    if (current.tagName === 'DIV' || current.tagName === 'P') out += '\n';
+    let sawBlock = false;
+    for (const child of Array.from(current.childNodes)) {
+      const block = isBlock(child);
+      if (block || sawBlock) ensureBreak();
+      walk(child);
+      if (block) sawBlock = true;
+    }
   };
-  Array.from(node.childNodes).forEach(walk);
+  walk(node);
   return out.replace(/\u200B/g, '').replace(/\n$/, '');
 }
 
@@ -11579,7 +11590,19 @@ async function runSearch(query) {
     state.searchQuery = query;
     const needle = query.toLowerCase();
     const bestOf = (entries) => (entries.length ? entries[0].score : 0);
-    const localEntries = includeReminders && window.TodoFuzzy ? window.TodoFuzzy.rank(state.reminders, state.search) : null;
+    const numberMatch = /^#?\s*(\d{1,12})$/.exec(query.trim());
+    const exactId = numberMatch ? Number(numberMatch[1]) : null;
+    let localEntries = includeReminders && window.TodoFuzzy ? window.TodoFuzzy.rank(state.reminders, state.search) : null;
+    if (exactId != null && includeReminders) {
+      const seen = new Set((localEntries || []).map((entry) => entry.reminder.id));
+      const bumped = (localEntries || []).map((entry) => (
+        entry.reminder.id === exactId ? { ...entry, score: Math.max(entry.score, 1000) } : entry
+      ));
+      const extras = state.reminders
+        .filter((reminder) => reminder.id === exactId && !seen.has(reminder.id))
+        .map((reminder) => ({ reminder, score: 1000 }));
+      localEntries = bumped.concat(extras).sort((a, b) => b.score - a.score);
+    }
     const local = includeReminders
       ? (localEntries
         ? localEntries.map((entry) => entry.reminder)
@@ -11794,13 +11817,50 @@ $('#n-body').addEventListener('click', (event) => {
   if (link) event.preventDefault();
 });
 function normalizePastedText(text) {
-  if (window.WorkspacePasteText) return window.WorkspacePasteText.normalizePastedParagraphs(text);
-  return String(text == null ? '' : text).replace(/\r\n?/g, '\n').replace(/\n{2,}/g, '\n');
+  if (window.WorkspacePasteText) return window.WorkspacePasteText.normalizeNewlines(text);
+  return String(text == null ? '' : text).replace(/\r\n?/g, '\n');
+}
+function pasteTextHtml(text) {
+  if (window.WorkspacePasteText) return window.WorkspacePasteText.textToHtml(text);
+  return String(text == null ? '' : text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+    .replace(/\n/g, '<br>');
+}
+function insertHtmlAtSelection(html) {
+  if (document.execCommand('insertHTML', false, html)) return;
+  const selection = window.getSelection();
+  if (!selection || !selection.rangeCount) return;
+  const range = selection.getRangeAt(0);
+  range.deleteContents();
+  const template = document.createElement('template');
+  template.innerHTML = html;
+  const fragment = template.content;
+  const last = fragment.lastChild;
+  range.insertNode(fragment);
+  if (last) {
+    const after = document.createRange();
+    after.setStartAfter(last);
+    after.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(after);
+  }
+}
+function insertPlainTextAsBlocks(text) {
+  const lf = normalizePastedText(text);
+  if (!lf) return;
+  if (!lf.includes('\n')) {
+    document.execCommand('insertText', false, lf);
+    return;
+  }
+  insertHtmlAtSelection(pasteTextHtml(lf));
 }
 function insertPlainClipboardText(event) {
   event.preventDefault();
-  const text = normalizePastedText(event.clipboardData.getData('text/plain'));
-  document.execCommand('insertText', false, text);
+  insertPlainTextAsBlocks(event.clipboardData ? event.clipboardData.getData('text/plain') : '');
 }
 $('#n-body').addEventListener('paste', (event) => {
   insertPlainClipboardText(event);
@@ -11810,14 +11870,14 @@ $('#e-notes').addEventListener('paste', insertPlainClipboardText);
 $('#doc-description').addEventListener('paste', insertPlainClipboardText);
 
 function insertNormalizedParagraphs(event) {
-  if (event.inputType !== 'insertFromPaste' && event.inputType !== 'insertFromDictation') return;
+  if (event.inputType !== 'insertFromDictation' && event.inputType !== 'insertText') return;
   if (!event.cancelable) return;
   const raw = typeof event.data === 'string'
     ? event.data
     : event.dataTransfer ? event.dataTransfer.getData('text/plain') : '';
-  if (!raw || !/\n{2,}/.test(raw.replace(/\r\n?/g, '\n'))) return;
+  if (!raw || !normalizePastedText(raw).includes('\n')) return;
   event.preventDefault();
-  document.execCommand('insertText', false, normalizePastedText(raw));
+  insertPlainTextAsBlocks(raw);
   if (event.target && event.target.id === 'n-body') requestAnimationFrame(updateNoteFormatState);
 }
 for (const id of ['e-notes', 'n-body', 'doc-description']) {

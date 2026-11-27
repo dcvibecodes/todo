@@ -3440,10 +3440,27 @@ async function main() {
       ) : [],
       getStoreEpoch(),
     ]);
+    // A bare item number ("513") or hash-prefixed one ("#513") is an exact
+    // reference to the card's visible item number, not body text. Keep the
+    // id hit at the top of its group even when the title has no digits.
+    const numberMatch = /^#?\s*(\d{1,12})$/.exec(query.trim());
+    const exactId = numberMatch ? Number(numberMatch[1]) : null;
+    const withExactId = (rows, matches) => {
+      if (exactId == null) return matches;
+      const byId = new Map(matches.map((entry) => [entry.reminder.id, entry]));
+      for (const row of rows) {
+        if (row.id !== exactId) continue;
+        const existing = byId.get(row.id);
+        if (existing) existing.score = Math.max(existing.score, 1000);
+        else byId.set(row.id, { reminder: row, score: 1000 });
+      }
+      return Array.from(byId.values()).sort((a, b) => b.score - a.score);
+    };
     // rank()/rankItems() are stable for equal scores, so the SQL ordering above
     // is the tie-break. Notes search title + body; documents search name only.
-    const openMatches = includeReminders ? fuzzy.rank(openRows, query) : [];
-    const completedMatches = includeReminders ? fuzzy.rank(completedRows, query) : [];
+    const openMatches = includeReminders ? withExactId(openRows, fuzzy.rank(openRows, query)) : [];
+    const completedMatches = includeReminders
+      ? withExactId(completedRows, fuzzy.rank(completedRows, query)) : [];
     const noteMatches = includeNotes
       ? fuzzy.rankItems(noteRows, query, { title: 'title', notes: 'body' }) : [];
     const docMatches = includeDocs
