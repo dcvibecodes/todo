@@ -2,6 +2,13 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v5.18.3
+
+- **One item-number pool for every card** - Reminders, Notes and Docs now share a single, never-reused item-number sequence. Existing reminders keep the numbers people already see (for example #486), and existing Notes/Docs are numbered above the highest reminder. New items of any tenant draw from the same pool, so no two cards can share a number. Note and Doc cards now show `#number` beside their Added date just like reminders.
+- **Search any card by its number** - Typing `486` or `#486` finds the exact Reminder, Note or Doc with that item number, not just a reminder. Since the pool is unique, one number resolves to one item.
+- **Stable sort controls** - Select, Sort, Completed, Select all and Cancel now share the same 28px pill background height. The Sort icon keeps one fixed position and the Completed icon another, regardless of the completed count; the count is capped at `99+` so it never pushes either icon. The alignment follows the desktop card's Copy/Move and Edit/Delete columns and also keeps the sort icon fixed on mobile.
+- Service worker cache bumped to `workspace-v5.18.3`.
+
 ## What's New in v5.18.2
 
 - **Search by item number** - Typing a reminder's visible item number, with or without the hash (`513` or `#513`), finds that exact item even when its title and notes contain no digits. The id hit carries the top score in its group, and the offline fallback uses the same rule. Notes and Docs keep their normal title/name matching.

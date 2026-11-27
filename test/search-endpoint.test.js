@@ -180,10 +180,38 @@ test('server search finds a reminder by its exact item number', async () => {
     csrf: true,
     body: { list_id: remindersFolder.id, title: 'reference without digits' },
   });
-  for (const query of [String(created.id), `#${created.id}`]) {
+  const reminder = await json(`/api/reminders/${created.id}`);
+  assert.ok(Number.isInteger(reminder.reminder.item_number));
+  for (const query of [String(reminder.reminder.item_number), `#${reminder.reminder.item_number}`]) {
     const data = await json(`/api/search?q=${encodeURIComponent(query)}&limit=all&scope=all`);
     assert.equal(data.open[0].id, created.id);
     assert.equal(data.open[0].title, 'reference without digits');
     assert.ok(data.best_scores.open >= 1000);
   }
+});
+
+test('item numbers are one unique pool across reminders, notes and docs', async () => {
+  const state = await json('/api/state');
+  const numbers = [
+    ...state.reminders.map((item) => item.item_number),
+    ...state.notes.map((item) => item.item_number),
+    ...state.docs.map((item) => item.item_number),
+  ];
+  assert.ok(numbers.length >= 3);
+  assert.ok(numbers.every(Number.isInteger));
+  assert.equal(new Set(numbers).size, numbers.length);
+});
+
+test('server search finds a note and a doc by their exact item numbers', async () => {
+  const state = await json('/api/state');
+  const note = state.notes.find((item) => item.title === 'one word-second word');
+  const doc = state.docs.find((item) => item.name === 'one word second word.txt');
+  assert.ok(Number.isInteger(note.item_number));
+  assert.ok(Number.isInteger(doc.item_number));
+  const noteSearch = await json(`/api/search?q=${note.item_number}&limit=all&scope=all`);
+  assert.equal(noteSearch.notes[0].id, note.id);
+  assert.ok(noteSearch.best_scores.notes >= 1000);
+  const docSearch = await json(`/api/search?q=${doc.item_number}&limit=all&scope=all`);
+  assert.equal(docSearch.docs[0].id, doc.id);
+  assert.ok(docSearch.best_scores.docs >= 1000);
 });

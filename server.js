@@ -2394,15 +2394,15 @@ async function main() {
   async function buildExportPayload(userId) {
     const settings = await getSettings();
     const lists = await db.all('SELECT id, name, color, sort_order, completed_retention, manual_order, manual_order_revision, tenant, created_at FROM lists ORDER BY tenant, sort_order, id');
-    const reminders = await db.all(`SELECT id, list_id, title, notes, due_at, has_time, completed,
+    const reminders = await db.all(`SELECT id, item_number, list_id, title, notes, due_at, has_time, completed,
       completed_at, in_progress_at, urgent, repeat_rule, time_model, time_zone, snoozed_until,
       sort_order, manual_position, created_at, updated_at, revision FROM reminders WHERE deleted_at IS NULL ORDER BY id`);
     const occurrences = await db.all(
       `SELECT reminder_id, occurrence_at, status, title, notes, list_id, urgent,
          completed_at, created_at FROM reminder_occurrences ORDER BY id`
     );
-    const notes = await db.all('SELECT id, folder_id, title, body, body_format, manual_position, created_at, updated_at FROM notes WHERE deleted_at IS NULL ORDER BY id');
-    const docs = await db.all(`SELECT id, folder_id, name, description, mime, size, stored_size,
+    const notes = await db.all('SELECT id, item_number, folder_id, title, body, body_format, manual_position, created_at, updated_at FROM notes WHERE deleted_at IS NULL ORDER BY id');
+    const docs = await db.all(`SELECT id, item_number, folder_id, name, description, mime, size, stored_size,
       original_size, compression, optimization, revision, manual_position, created_at, stored_name
       FROM attachments WHERE owner_type = 'doc' AND deleted_at IS NULL ORDER BY id`);
     const attachments = await db.all(`SELECT id, tenant, owner_type, owner_id, folder_id, name,
@@ -2597,6 +2597,12 @@ async function main() {
     }
     const counts = { listsAdded: 0, listsSkipped: 0, remindersAdded: 0, remindersSkipped: 0, occurrencesAdded: 0, occurrencesSkipped: 0, notesAdded: 0, notesSkipped: 0 };
     const knownLists = new Set((await db.all('SELECT id FROM lists')).map((r) => r.id));
+    const knownItemNumbers = new Set((await db.all(`
+      SELECT item_number AS number FROM reminders WHERE item_number IS NOT NULL
+      UNION ALL SELECT item_number AS number FROM notes WHERE item_number IS NOT NULL
+      UNION ALL SELECT item_number AS number FROM attachments
+        WHERE owner_type = 'doc' AND item_number IS NOT NULL
+    `)).map((row) => row.number));
     for (const list of Array.isArray(data.lists) ? data.lists : []) {
       if (!list || !Number.isInteger(list.id) || !String(list.name || '').trim()) {
         counts.listsSkipped += 1;
@@ -2640,15 +2646,18 @@ async function main() {
       const model = TIME_MODELS.includes(reminder.time_model) ? reminder.time_model : 'fixed';
       const zone = typeof reminder.time_zone === 'string' && recurrence.isValidTimeZone(reminder.time_zone)
         ? reminder.time_zone : null;
+      const requestedNumber = Number.isInteger(reminder.item_number) && reminder.item_number > 0
+        ? reminder.item_number : null;
+      const itemNumber = requestedNumber && !knownItemNumbers.has(requestedNumber) ? requestedNumber : null;
       try {
         await db.run(`
           INSERT INTO reminders
-            (id, list_id, title, notes, due_at, has_time, completed, completed_at, in_progress_at, urgent,
+            (id, item_number, list_id, title, notes, due_at, has_time, completed, completed_at, in_progress_at, urgent,
              repeat_rule, time_model, time_zone, snoozed_until, notified_at, last_push_at, push_count,
              sort_order, manual_position, created_at, updated_at, revision)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)
         `, [
-          reminder.id, reminder.list_id, String(reminder.title).slice(0, 500),
+          reminder.id, itemNumber, reminder.list_id, String(reminder.title).slice(0, 500),
           String(reminder.notes || '').slice(0, NOTES_MAX),
           isoOrNull(reminder.due_at),
           reminder.has_time ? 1 : 0, reminder.completed ? 1 : 0,
@@ -2665,6 +2674,8 @@ async function main() {
           Number.isInteger(reminder.revision) && reminder.revision >= 0 ? reminder.revision : 0,
         ]);
         knownReminders.add(reminder.id);
+        const storedNumber = await db.get('SELECT item_number FROM reminders WHERE id = ?', [reminder.id]);
+        if (storedNumber && storedNumber.item_number) knownItemNumbers.add(storedNumber.item_number);
         counts.remindersAdded += 1;
       } catch { counts.remindersSkipped += 1; }
     }
@@ -2712,10 +2723,13 @@ async function main() {
         counts.notesSkipped += 1;
         continue;
       }
+      const requestedNumber = Number.isInteger(note.item_number) && note.item_number > 0
+        ? note.item_number : null;
+      const itemNumber = requestedNumber && !knownItemNumbers.has(requestedNumber) ? requestedNumber : null;
       try {
         await db.run(
-          'INSERT INTO notes (id, folder_id, title, body, body_format, manual_position, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-          [note.id, note.folder_id, String(note.title).slice(0, 500),
+          'INSERT INTO notes (id, item_number, folder_id, title, body, body_format, manual_position, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          [note.id, itemNumber, note.folder_id, String(note.title).slice(0, 500),
             String(note.body || '').slice(0, NOTE_BODY_MAX),
             note.body_format === 'html' ? 'html' : 'text',
             Number.isInteger(note.manual_position) ? note.manual_position : null,
@@ -2723,6 +2737,8 @@ async function main() {
             typeof note.updated_at === 'string' ? note.updated_at : new Date().toISOString()]
         );
         knownNotes.add(note.id);
+        const storedNumber = await db.get('SELECT item_number FROM notes WHERE id = ?', [note.id]);
+        if (storedNumber && storedNumber.item_number) knownItemNumbers.add(storedNumber.item_number);
         counts.notesAdded += 1;
       } catch { counts.notesSkipped += 1; }
     }
@@ -3060,7 +3076,7 @@ async function main() {
     });
   });
 
-  const REMINDER_COLUMNS = `id, list_id, title, notes, due_at, has_time, completed,
+  const REMINDER_COLUMNS = `id, item_number, list_id, title, notes, due_at, has_time, completed,
     completed_at, in_progress_at, urgent, repeat_rule, time_model, time_zone, snoozed_until,
     notified_at, last_push_at, push_count, sort_order, manual_position, created_at, updated_at, revision`;
 
@@ -3310,14 +3326,14 @@ async function main() {
       FROM lists l ORDER BY l.tenant, l.sort_order, l.id
     `, [thirtyDayCutoff]);
     const notes = await db.all(`
-      SELECT n.id, n.folder_id, n.title, n.body, n.body_format, n.revision, n.manual_position, n.created_at, n.updated_at,
+      SELECT n.id, n.item_number, n.folder_id, n.title, n.body, n.body_format, n.revision, n.manual_position, n.created_at, n.updated_at,
              l.name AS folder_name, l.color AS folder_color
       FROM notes n JOIN lists l ON l.id = n.folder_id
       WHERE n.deleted_at IS NULL
       ORDER BY n.updated_at DESC, n.id DESC
     `);
     const docs = await db.all(`
-      SELECT a.id, a.folder_id, a.name, a.description, a.mime, a.size, a.stored_size, a.original_size, a.compression, a.optimization, a.revision, a.manual_position, a.created_at,
+      SELECT a.id, a.item_number, a.folder_id, a.name, a.description, a.mime, a.size, a.stored_size, a.original_size, a.compression, a.optimization, a.revision, a.manual_position, a.created_at,
              l.name AS folder_name, l.color AS folder_color
       FROM attachments a JOIN lists l ON l.id = a.folder_id
       WHERE a.owner_type = 'doc' AND a.deleted_at IS NULL
@@ -3425,14 +3441,14 @@ async function main() {
         [cutoffs['1m'], cutoffs['3m'], cutoffs['6m'], cutoffs['12m']]
       ) : [],
       includeNotes ? db.all(
-        `SELECT n.id, n.folder_id, n.title, n.body, n.body_format, n.revision, n.created_at, n.updated_at,
+        `SELECT n.id, n.item_number, n.folder_id, n.title, n.body, n.body_format, n.revision, n.created_at, n.updated_at,
                 l.name AS folder_name, l.color AS folder_color
          FROM notes n JOIN lists l ON l.id = n.folder_id
          WHERE n.deleted_at IS NULL
          ORDER BY n.updated_at DESC, n.id DESC`
       ) : [],
       includeDocs ? db.all(
-        `SELECT a.id, a.folder_id, a.name, a.mime, a.size, a.revision, a.created_at,
+        `SELECT a.id, a.item_number, a.folder_id, a.name, a.mime, a.size, a.revision, a.created_at,
                 l.name AS folder_name, l.color AS folder_color
          FROM attachments a JOIN lists l ON l.id = a.folder_id
          WHERE a.owner_type = 'doc' AND a.deleted_at IS NULL
@@ -3441,30 +3457,33 @@ async function main() {
       getStoreEpoch(),
     ]);
     // A bare item number ("513") or hash-prefixed one ("#513") is an exact
-    // reference to the card's visible item number, not body text. Keep the
-    // id hit at the top of its group even when the title has no digits.
+    // reference to the card's visible item number, not body text. The number
+    // pool is shared by all three tenants, so match the same field everywhere.
     const numberMatch = /^#?\s*(\d{1,12})$/.exec(query.trim());
-    const exactId = numberMatch ? Number(numberMatch[1]) : null;
-    const withExactId = (rows, matches) => {
-      if (exactId == null) return matches;
-      const byId = new Map(matches.map((entry) => [entry.reminder.id, entry]));
+    const exactItemNumber = numberMatch ? Number(numberMatch[1]) : null;
+    const withExactItemNumber = (rows, matches, key) => {
+      if (exactItemNumber == null) return matches;
+      const byId = new Map(matches.map((entry) => [entry[key].id, entry]));
       for (const row of rows) {
-        if (row.id !== exactId) continue;
+        if (row.item_number !== exactItemNumber) continue;
         const existing = byId.get(row.id);
         if (existing) existing.score = Math.max(existing.score, 1000);
-        else byId.set(row.id, { reminder: row, score: 1000 });
+        else byId.set(row.id, { [key]: row, score: 1000 });
       }
       return Array.from(byId.values()).sort((a, b) => b.score - a.score);
     };
     // rank()/rankItems() are stable for equal scores, so the SQL ordering above
     // is the tie-break. Notes search title + body; documents search name only.
-    const openMatches = includeReminders ? withExactId(openRows, fuzzy.rank(openRows, query)) : [];
+    const openMatches = includeReminders
+      ? withExactItemNumber(openRows, fuzzy.rank(openRows, query), 'reminder') : [];
     const completedMatches = includeReminders
-      ? withExactId(completedRows, fuzzy.rank(completedRows, query)) : [];
+      ? withExactItemNumber(completedRows, fuzzy.rank(completedRows, query), 'reminder') : [];
     const noteMatches = includeNotes
-      ? fuzzy.rankItems(noteRows, query, { title: 'title', notes: 'body' }) : [];
+      ? withExactItemNumber(noteRows,
+        fuzzy.rankItems(noteRows, query, { title: 'title', notes: 'body' }), 'item') : [];
     const docMatches = includeDocs
-      ? fuzzy.rankItems(docRows, query, { title: 'name', tieBreak: fuzzy.docTieBreak }) : [];
+      ? withExactItemNumber(docRows,
+        fuzzy.rankItems(docRows, query, { title: 'name', tieBreak: fuzzy.docTieBreak }), 'item') : [];
     const open = openMatches.slice(0, limit).map((entry) => entry.reminder);
     const completed = completedMatches.slice(0, limit).map((entry) => entry.reminder);
     const notes = noteMatches.slice(0, limit).map((entry) => entry.item);
@@ -3810,7 +3829,7 @@ async function main() {
 
   /* ---------------- Notes tenant ---------------- */
 
-  const NOTE_COLUMNS = 'id, folder_id, title, body, body_format, revision, manual_position, created_at, updated_at';
+  const NOTE_COLUMNS = 'id, item_number, folder_id, title, body, body_format, revision, manual_position, created_at, updated_at';
   const NOTE_WRITE_FIELDS = ['title', 'body', 'body_format', 'folder_id', 'base_revision', 'base_epoch', 'idempotency_key'];
 
   async function loadNoteRow(id) {
@@ -4426,7 +4445,7 @@ async function main() {
     }
     const where = conditions.join(' AND ');
     const rows = await db.all(
-      `SELECT a.id, a.folder_id, a.name, a.description, a.mime, a.size, a.stored_size, a.original_size, a.compression, a.optimization, a.revision, a.manual_position, a.created_at
+      `SELECT a.id, a.item_number, a.folder_id, a.name, a.description, a.mime, a.size, a.stored_size, a.original_size, a.compression, a.optimization, a.revision, a.manual_position, a.created_at
        FROM attachments a WHERE ${where}
        ORDER BY a.created_at DESC, a.id DESC${limit ? ' LIMIT ?' : ''}`,
       limit ? [...params, limit + 1] : params
@@ -4452,7 +4471,7 @@ async function main() {
     const id = parseId(req.params.id);
     if (!id) return res.status(400).json({ error: 'Invalid file' });
     const doc = await db.get(
-      `SELECT id, folder_id, name, description, mime, size, stored_size, original_size, compression, optimization, revision, manual_position, created_at
+      `SELECT id, item_number, folder_id, name, description, mime, size, stored_size, original_size, compression, optimization, revision, manual_position, created_at
        FROM attachments WHERE id = ? AND owner_type = 'doc' AND deleted_at IS NULL`, [id]
     );
     if (!doc) return res.status(404).json({ error: 'File not found' });

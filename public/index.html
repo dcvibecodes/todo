@@ -374,13 +374,15 @@
             </select>
           </label>
         </div>
-        <button type="button" id="sort-toggle" class="sort-pill sort-order-toggle" aria-label="Change sorting" aria-haspopup="menu" aria-expanded="false">
-          <svg class="ic" aria-hidden="true"><use id="sort-toggle-icon" href="#i-sort"/></svg>
-        </button>
-        <button type="button" class="sort-pill sort-completed-filter" id="sort-completed" hidden aria-label="Show completed items" aria-pressed="false">
-          <svg class="ic" aria-hidden="true"><use id="sort-completed-icon" href="#i-check"/></svg>
-          <span id="sort-completed-count">0</span>
-        </button>
+        <div class="sort-actions">
+          <button type="button" id="sort-toggle" class="sort-pill sort-order-toggle" aria-label="Change sorting" aria-haspopup="menu" aria-expanded="false">
+            <svg class="ic" aria-hidden="true"><use id="sort-toggle-icon" href="#i-sort"/></svg>
+          </button>
+          <button type="button" class="sort-pill sort-completed-filter" id="sort-completed" hidden aria-label="Show completed items" aria-pressed="false">
+            <svg class="ic" aria-hidden="true"><use id="sort-completed-icon" href="#i-check"/></svg>
+            <span id="sort-completed-count">0</span>
+          </button>
+        </div>
       </div>
       <div id="selection-bar" class="selection-bar" hidden>
         <span id="selection-count" class="selection-count">0 selected</span>

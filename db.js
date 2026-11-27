@@ -377,6 +377,79 @@ async function init() {
   await run('CREATE INDEX IF NOT EXISTS idx_attachments_deleted ON attachments(deleted_at)');
   await run('UPDATE attachments SET stored_size = size WHERE stored_size IS NULL');
   await run('UPDATE attachments SET original_size = size WHERE original_size IS NULL');
+  // One shared, never-reused item-number pool across all three tenants.
+  // Existing reminders keep the #id people already use, so the pool is seeded
+  // with their ids; Notes and Docs continue above the highest reminder number.
+  await run(`CREATE TABLE IF NOT EXISTS item_number_seq (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    value INTEGER NOT NULL
+  )`);
+  await run('INSERT OR IGNORE INTO item_number_seq (id, value) VALUES (1, 0)');
+  const addItemNumberColumn = async (table) => {
+    const columns = await all(`PRAGMA table_info(${table})`);
+    if (!columns.some((column) => column.name === 'item_number')) {
+      await run(`ALTER TABLE ${table} ADD COLUMN item_number INTEGER`);
+    }
+  };
+  await addItemNumberColumn('reminders');
+  await addItemNumberColumn('notes');
+  await addItemNumberColumn('attachments');
+  for (const row of await all('SELECT id FROM reminders WHERE item_number IS NULL ORDER BY id')) {
+    await run('UPDATE reminders SET item_number = ? WHERE id = ?', [row.id, row.id]);
+  }
+  // Start Notes/Docs above every existing reminder id so the first assignment
+  // cannot collide with a visible reminder number.
+  const maxReminderNumber = await get('SELECT MAX(item_number) AS number FROM reminders');
+  if (maxReminderNumber && Number(maxReminderNumber.number) > 0) {
+    await run('UPDATE item_number_seq SET value = ? WHERE id = 1 AND value < ?',
+      [maxReminderNumber.number, maxReminderNumber.number]);
+  }
+  for (const row of await all('SELECT id FROM notes WHERE item_number IS NULL ORDER BY id')) {
+    await run('UPDATE item_number_seq SET value = value + 1 WHERE id = 1');
+    const next = await get('SELECT value FROM item_number_seq WHERE id = 1');
+    await run('UPDATE notes SET item_number = ? WHERE id = ?', [next.value, row.id]);
+  }
+  for (const row of await all("SELECT id FROM attachments WHERE owner_type = 'doc' AND item_number IS NULL ORDER BY id")) {
+    await run('UPDATE item_number_seq SET value = value + 1 WHERE id = 1');
+    const next = await get('SELECT value FROM item_number_seq WHERE id = 1');
+    await run('UPDATE attachments SET item_number = ? WHERE id = ?', [next.value, row.id]);
+  }
+  const maxItemNumber = await get(`
+    SELECT MAX(number) AS number FROM (
+      SELECT MAX(item_number) AS number FROM reminders
+      UNION ALL SELECT MAX(item_number) AS number FROM notes
+      UNION ALL SELECT MAX(item_number) AS number FROM attachments WHERE owner_type = 'doc'
+    )`);
+  if (maxItemNumber && Number(maxItemNumber.number) > 0) {
+    await run('UPDATE item_number_seq SET value = ? WHERE id = 1 AND value < ?',
+      [maxItemNumber.number, maxItemNumber.number]);
+  }
+  await run('CREATE UNIQUE INDEX IF NOT EXISTS idx_reminders_item_number ON reminders(item_number) WHERE item_number IS NOT NULL');
+  await run('CREATE UNIQUE INDEX IF NOT EXISTS idx_notes_item_number ON notes(item_number) WHERE item_number IS NOT NULL');
+  await run('CREATE UNIQUE INDEX IF NOT EXISTS idx_attachments_item_number ON attachments(item_number) WHERE item_number IS NOT NULL');
+  // Triggers allocate from the sequence and leave sqlite3_last_insert_rowid()
+  // pointing at the newly created item, so API create responses keep their id.
+  for (const [table, extra] of [
+    ['reminders', ''],
+    ['notes', ''],
+    ['attachments', " AND NEW.owner_type = 'doc'"],
+  ]) {
+    await run(`CREATE TRIGGER IF NOT EXISTS trg_${table}_item_number_auto
+      AFTER INSERT ON ${table}
+      WHEN NEW.item_number IS NULL${extra}
+      BEGIN
+        UPDATE item_number_seq SET value = value + 1 WHERE id = 1;
+        UPDATE ${table} SET item_number = (SELECT value FROM item_number_seq WHERE id = 1) WHERE id = NEW.id;
+      END`);
+    await run(`CREATE TRIGGER IF NOT EXISTS trg_${table}_item_number_explicit
+      AFTER INSERT ON ${table}
+      WHEN NEW.item_number IS NOT NULL${extra}
+      BEGIN
+        UPDATE item_number_seq
+          SET value = CASE WHEN value < NEW.item_number THEN NEW.item_number ELSE value END
+          WHERE id = 1;
+      END`);
+  }
   await run(`CREATE TABLE IF NOT EXISTS push_subscriptions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     endpoint TEXT UNIQUE NOT NULL,

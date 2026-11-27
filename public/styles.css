@@ -1174,6 +1174,8 @@ body.app-loading .title-loading {
   font-variant-numeric: tabular-nums;
 }
 
+.main-top { --toolbar-pill-height: 28px; }
+
 .sort-bar {
   --toolbar-pill-height: 28px;
   display: flex;
@@ -1260,9 +1262,11 @@ body.app-loading .title-loading {
   position: relative;
   margin-left: 0;
   gap: 3px;
-  min-width: 0;
+  width: 52px;
+  min-width: 52px;
   height: var(--toolbar-pill-height);
-  padding: 0 6px;
+  padding: 0 4px 0 6px;
+  justify-content: flex-start;
   border: 0;
   border-radius: 999px;
   background: transparent;
@@ -5497,9 +5501,17 @@ button.link-chip { border: 0; font-family: inherit; cursor: pointer; }
 .sort-select-btn:hover { background: var(--fill); color: var(--text); }
 
 /* Sorting: an icon-only pill beside Completed; its height matches Completed. */
+.sort-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  min-width: 0;
+}
+
 .sort-order-toggle {
   position: relative;
-  margin-left: auto;
+  margin-left: 0;
   width: var(--toolbar-pill-height);
   padding: 0;
   background: transparent;
@@ -5510,7 +5522,6 @@ button.link-chip { border: 0; font-family: inherit; cursor: pointer; }
 .sort-order-toggle .ic { width: 15px; height: 15px; }
 .sort-order-toggle:hover,
 .sort-order-toggle:focus-visible { background: var(--fill); color: var(--text); outline: none; }
-.sort-order-toggle[hidden] + .sort-completed-filter { margin-left: auto; }
 
 .selection-bar {
   display: flex;
@@ -5531,10 +5542,46 @@ button.link-chip { border: 0; font-family: inherit; cursor: pointer; }
   white-space: nowrap;
 }
 .selection-bar .text-btn {
+  position: relative;
   flex: none;
-  min-height: 44px;
+  height: var(--toolbar-pill-height);
+  min-height: var(--toolbar-pill-height);
+  padding: 0 10px;
   font-size: 0.75rem;
+  line-height: 1;
   white-space: nowrap;
+}
+
+@media (pointer: coarse) {
+  .selection-bar .text-btn::after {
+    content: "";
+    position: absolute;
+    inset: -8px -4px;
+    pointer-events: auto;
+  }
+}
+
+@media (min-width: 900px) {
+  .content { scrollbar-gutter: stable; }
+  .sort-bar { padding-right: 6px; }
+  .sort-actions {
+    display: grid;
+    grid-template-columns: repeat(2, 34px);
+    gap: 2px;
+    margin-right: 15px;
+  }
+  .sort-actions .sort-order-toggle {
+    grid-column: 1;
+    grid-row: 1;
+    width: 34px;
+  }
+  .sort-actions .sort-completed-filter {
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: start;
+    margin-left: 0;
+    padding-left: 10.5px;
+  }
 }
 
 .selection-check {

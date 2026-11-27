@@ -4440,7 +4440,7 @@ function syncCompletedFilter() {
   if (icon) icon.setAttribute('href', state.showCompleted ? '#i-list' : '#i-check');
   if (sortBar) sortBar.classList.toggle('showing-completed', state.showCompleted);
   if (inline && !state.showCompleted) inline.hidden = true;
-  $('#sort-completed-count').textContent = String(alternateCount);
+  $('#sort-completed-count').textContent = alternateCount > 99 ? '99+' : String(alternateCount);
 }
 
 function renderMain() {
@@ -5002,9 +5002,19 @@ function normalizeNoteHtml(value) {
     .replace(/(?:\s*<br>)+$/, '');
 }
 
+function itemNumberNode(itemNumber) {
+  const number = Number(itemNumber);
+  return el('span', {
+    class: 'meta-id',
+    text: `#${number}`,
+    'aria-label': `Item number ${number}`,
+  });
+}
+
 function noteRow(note, options = {}) {
   const folder = listById(note.folder_id);
   const attachments = attachmentsFor('note', note.id);
+  const noteNumber = note.item_number != null ? note.item_number : note.id;
   const body = el('div', { class: 'reminder-body' }, [
     el('div', { class: 'reminder-title', text: note.title }),
     el('div', { class: 'reminder-meta' }, [
@@ -5018,12 +5028,15 @@ function noteRow(note, options = {}) {
         ? el('span', { class: 'meta-files', text: `${attachments.length} file${attachments.length === 1 ? '' : 's'}` })
         : null,
       formatAddedDate(note.created_at)
-        ? el('span', {
-          class: 'meta-added',
-          text: `Added ${formatAddedDate(note.created_at)}`,
-          title: formatRecordDate(note.created_at),
-        })
-        : null,
+        ? el('span', { class: 'meta-tail' }, [
+          el('span', {
+            class: 'meta-added',
+            text: `Added ${formatAddedDate(note.created_at)}`,
+            title: formatRecordDate(note.created_at),
+          }),
+          itemNumberNode(noteNumber),
+        ])
+        : itemNumberNode(noteNumber),
     ]),
     note.body ? el('div', { class: 'reminder-notes' }, [
       el('div', {
@@ -5113,8 +5126,14 @@ function docRow(doc, options = {}) {
         ? el('div', { class: 'doc-description', html: inlineTokensHtml(doc.description), title: doc.description })
         : null,
       formatAddedDate(doc.created_at)
-        ? el('div', { class: 'doc-added', text: `Added ${formatAddedDate(doc.created_at)}`, title: formatRecordDate(doc.created_at) })
-        : null,
+        ? el('div', { class: 'doc-added meta-tail' }, [
+          el('span', {
+            text: `Added ${formatAddedDate(doc.created_at)}`,
+            title: formatRecordDate(doc.created_at),
+          }),
+          itemNumberNode(doc.item_number != null ? doc.item_number : doc.id),
+        ])
+        : itemNumberNode(doc.item_number != null ? doc.item_number : doc.id),
     ]),
   ]);
   const storedSize = Number(doc.stored_size || doc.size || 0);
@@ -7491,7 +7510,7 @@ function reminderRow(reminder, options = {}) {
   // Item number: plain reference text at the end of the meta row. It is not a
   // control and does nothing when pressed.
   // Added date and number wrap as one unit, so the number never drops to a line of its own.
-  const idEl = el('span', { class: 'meta-id', text: `#${reminder.id}`, 'aria-label': `Item number ${reminder.id}` });
+  const idEl = itemNumberNode(reminder.item_number != null ? reminder.item_number : reminder.id);
   const addedEl = meta.querySelector(':scope > .meta-added');
   if (addedEl) {
     const tail = el('span', { class: 'meta-tail' });
@@ -11591,27 +11610,33 @@ async function runSearch(query) {
     const needle = query.toLowerCase();
     const bestOf = (entries) => (entries.length ? entries[0].score : 0);
     const numberMatch = /^#?\s*(\d{1,12})$/.exec(query.trim());
-    const exactId = numberMatch ? Number(numberMatch[1]) : null;
-    let localEntries = includeReminders && window.TodoFuzzy ? window.TodoFuzzy.rank(state.reminders, state.search) : null;
-    if (exactId != null && includeReminders) {
-      const seen = new Set((localEntries || []).map((entry) => entry.reminder.id));
-      const bumped = (localEntries || []).map((entry) => (
-        entry.reminder.id === exactId ? { ...entry, score: Math.max(entry.score, 1000) } : entry
+    const exactNumber = numberMatch ? Number(numberMatch[1]) : null;
+    const withExactNumber = (entries, items, key) => {
+      if (exactNumber == null) return entries;
+      const list = entries || [];
+      const seen = new Set(list.map((entry) => entry[key].id));
+      const bumped = list.map((entry) => (
+        entry[key].item_number === exactNumber
+          ? { ...entry, score: Math.max(entry.score, 1000) } : entry
       ));
-      const extras = state.reminders
-        .filter((reminder) => reminder.id === exactId && !seen.has(reminder.id))
-        .map((reminder) => ({ reminder, score: 1000 }));
-      localEntries = bumped.concat(extras).sort((a, b) => b.score - a.score);
-    }
+      const extras = items
+        .filter((item) => item.item_number === exactNumber && !seen.has(item.id))
+        .map((item) => ({ [key]: item, score: 1000 }));
+      return bumped.concat(extras).sort((a, b) => b.score - a.score);
+    };
+    let localEntries = includeReminders && window.TodoFuzzy ? window.TodoFuzzy.rank(state.reminders, state.search) : null;
+    if (includeReminders) localEntries = withExactNumber(localEntries, state.reminders, 'reminder');
     const local = includeReminders
       ? (localEntries
         ? localEntries.map((entry) => entry.reminder)
         : sortItems(state.reminders.filter(matchesSearch), effectiveSort(state.view)))
       : [];
-    const noteEntries = includeNotes && window.TodoFuzzy
+    let noteEntries = includeNotes && window.TodoFuzzy
       ? window.TodoFuzzy.rankItems(state.notes, state.search, { title: 'title', notes: 'body' }) : null;
-    const docEntries = includeDocs && window.TodoFuzzy
+    let docEntries = includeDocs && window.TodoFuzzy
       ? window.TodoFuzzy.rankItems(state.docs, state.search, { title: 'name', tieBreak: window.TodoFuzzy.docTieBreak }) : null;
+    if (includeNotes) noteEntries = withExactNumber(noteEntries, state.notes, 'item');
+    if (includeDocs) docEntries = withExactNumber(docEntries, state.docs, 'item');
     state.searchOpen = local.filter((reminder) => !reminder.completed);
     state.searchCompleted = local.filter((reminder) => reminder.completed);
     state.searchBest = {
