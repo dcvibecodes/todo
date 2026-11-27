@@ -532,6 +532,8 @@ body.gate-open {
   .new-list-btn::after,
   .history-undo::after,
   .sort-completed-filter::after,
+  .sort-select-btn::after,
+  .sort-order-toggle::after,
   .swatch::after {
     content: "";
     position: absolute;
@@ -545,6 +547,8 @@ body.gate-open {
   .history-undo::after { inset: -10px -6px; }
   .check::after { inset: -13px; }
   .sort-completed-filter::after { inset: -8px -4px; }
+  .sort-select-btn::after { inset: -8px -4px; }
+  .sort-order-toggle::after { inset: -8px -8px; }
   .row-copy::after { inset: -5px; }
   .row-edit::after { inset: -5px; }
   .doc-download::after { inset: -5px; }
@@ -1171,6 +1175,7 @@ body.app-loading .title-loading {
 }
 
 .sort-bar {
+  --toolbar-pill-height: 28px;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
@@ -1236,13 +1241,27 @@ body.app-loading .title-loading {
 
 .sort-control select:focus { outline: none; color: var(--text); }
 
+/* Shared compact pill height for Select, Sort and Completed. */
+.sort-pill {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--toolbar-pill-height);
+  min-height: 0;
+  border: 0;
+  border-radius: 999px;
+  flex: none;
+}
+.sort-pill[hidden] { display: none; }
+
 /* Completed filter: a compact check + count at the far right of the sort bar. */
 .sort-completed-filter {
   position: relative;
-  margin-left: auto;
+  margin-left: 0;
   gap: 3px;
   min-width: 0;
-  height: 28px;
+  height: var(--toolbar-pill-height);
   padding: 0 6px;
   border: 0;
   border-radius: 999px;
@@ -1596,6 +1615,24 @@ body.flipping .reminder-group { overflow: visible; }
 .status-menu.inline .status-menu-item .ic { width: 14px; height: 14px; }
 @keyframes status-menu-in { from { opacity: 0; transform: translateY(-2px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .status-menu { animation: none; } }
+
+.sort-menu { min-width: 208px; }
+.sort-menu-item .ic { color: var(--text-2); }
+.sort-menu-leading { display: grid; place-items: center; width: 16px; flex: none; }
+.sort-menu-leading:empty { display: block; width: 16px; }
+.sort-menu-label { flex: 1; min-width: 0; }
+.sort-menu-tail { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; color: var(--text-3); }
+.sort-menu-tick .ic { width: 14px; height: 14px; color: var(--text) !important; }
+.sort-menu-chevron .ic { width: 13px; height: 13px; transition: transform 0.15s; }
+.sort-menu-section {
+  padding: 8px 12px 4px;
+  color: var(--text-3);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.sort-menu-item.sort-subitem { padding-left: 26px; }
 
 .row-tools {
   display: flex;
@@ -5444,11 +5481,12 @@ button.link-chip { border: 0; font-family: inherit; cursor: pointer; }
 
 /* Multi-select */
 .sort-select-btn {
+  position: relative;
   margin-left: 0;
-  min-height: 44px;
+  height: var(--toolbar-pill-height);
   padding: 0 8px;
   border: 0;
-  border-radius: 6px;
+  border-radius: 999px;
   background: transparent;
   color: var(--text-3);
   font-family: inherit;
@@ -5457,7 +5495,22 @@ button.link-chip { border: 0; font-family: inherit; cursor: pointer; }
   cursor: pointer;
 }
 .sort-select-btn:hover { background: var(--fill); color: var(--text); }
-.sort-completed-filter[hidden] + .sort-select-btn { margin-left: auto; }
+
+/* Sorting: an icon-only pill beside Completed; its height matches Completed. */
+.sort-order-toggle {
+  position: relative;
+  margin-left: auto;
+  width: var(--toolbar-pill-height);
+  padding: 0;
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.sort-order-toggle .ic { width: 15px; height: 15px; }
+.sort-order-toggle:hover,
+.sort-order-toggle:focus-visible { background: var(--fill); color: var(--text); outline: none; }
+.sort-order-toggle[hidden] + .sort-completed-filter { margin-left: auto; }
 
 .selection-bar {
   display: flex;
@@ -5530,7 +5583,7 @@ body.selection-mode .fab { display: none; }
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   gap: 6px;
   width: max-content;
   max-width: calc(100vw - 16px);
@@ -5707,20 +5760,6 @@ body.selection-mode .fab { display: none; }
 #doc-description-count + .inline-link-hint { margin-top: -2px; }
 
 /* Manual item ordering */
-.sort-bar.showing-manual > label.sort-control { display: none; }
-.sort-manual-order {
-  min-height: 44px;
-  padding: 0 8px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text-3);
-  font-family: inherit;
-  font-size: 0.75rem;
-  font-weight: 500;
-  cursor: pointer;
-}
-.sort-manual-order:hover { background: var(--fill); color: var(--text); }
 .manual-order-controls {
   display: flex;
   flex-direction: column;
@@ -5754,8 +5793,6 @@ body.selection-mode .manual-order-controls { display: none; }
   .manual-order-move { width: 30px; height: 30px; }
   .manual-order-move .ic { width: 15px; height: 15px; }
 }
-.sort-manual-order { white-space: nowrap; }
-
 /* Pill/circular hover surfaces for compact actions, matching the row icons. */
 .primary-btn,
 .secondary-btn,
@@ -5763,7 +5800,6 @@ body.selection-mode .manual-order-controls { display: none; }
 .danger-btn,
 .small-btn,
 .sort-select-btn,
-.sort-manual-order,
 .note-format-btn,
 .e-more-toggle,
 .new-list-btn,

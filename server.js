@@ -4825,6 +4825,34 @@ async function main() {
 
   /* ---------------- Trash ---------------- */
 
+  app.post('/api/bulk/reminders/in-progress', async (req, res) => {
+    if (req.token) return denyToken(res);
+    const ids = Array.isArray(req.body.ids) ? req.body.ids.map(parseId).filter(Boolean) : [];
+    const inProgress = Boolean(req.body.in_progress);
+    if (!ids.length || ids.length > 200) return res.status(400).json({ error: 'Choose 1 to 200 items' });
+    let updated = 0;
+    let skipped = 0;
+    const failed = [];
+    const now = new Date().toISOString();
+    for (const id of ids) {
+      try {
+        const current = await db.get(
+          'SELECT id, completed, in_progress_at FROM reminders WHERE id = ? AND deleted_at IS NULL', [id]
+        );
+        if (!current || current.completed) { skipped += 1; continue; }
+        if (inProgress === Boolean(current.in_progress_at)) { skipped += 1; continue; }
+        await db.run(
+          'UPDATE reminders SET in_progress_at = ?, updated_at = ?, revision = revision + 1 WHERE id = ?',
+          [inProgress ? (current.in_progress_at || now) : null, now, id]
+        );
+        updated += 1;
+      } catch (err) {
+        failed.push({ id, error: err.message || 'Failed' });
+      }
+    }
+    res.json({ ok: true, updated, skipped, failed, in_progress: inProgress });
+  });
+
   app.post('/api/bulk/reminders/complete', async (req, res) => {
     if (req.token) return denyToken(res);
     const ids = Array.isArray(req.body.ids) ? req.body.ids.map(parseId).filter(Boolean) : [];

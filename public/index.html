@@ -109,6 +109,18 @@
     <symbol id="i-grip" viewBox="0 0 24 24">
       <path d="M5 8h14M5 12h14M5 16h14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
     </symbol>
+    <symbol id="i-grip-dots" viewBox="0 0 24 24">
+      <circle cx="9" cy="7" r="1.7" fill="currentColor"/>
+      <circle cx="15" cy="7" r="1.7" fill="currentColor"/>
+      <circle cx="9" cy="12" r="1.7" fill="currentColor"/>
+      <circle cx="15" cy="12" r="1.7" fill="currentColor"/>
+      <circle cx="9" cy="17" r="1.7" fill="currentColor"/>
+      <circle cx="15" cy="17" r="1.7" fill="currentColor"/>
+    </symbol>
+    <symbol id="i-sort" viewBox="0 0 24 24">
+      <path d="M4 6h9M4 12h6M4 18h3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+      <path d="M17 5v13M13.5 14.5L17 18l3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
     <symbol id="i-lock" viewBox="0 0 24 24">
       <rect x="5.5" y="10.5" width="13" height="9.5" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/>
       <path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
@@ -339,32 +351,36 @@
       </header>
 
       <div id="sort-bar" class="sort-bar" hidden>
+        <button type="button" id="select-toggle" class="sort-pill sort-select-btn" hidden>Select</button>
         <div id="completed-retention-inline" class="completed-retention-inline" hidden>
           <span id="completed-retention-inline-text"></span>
           <span class="retention-dot" aria-hidden="true">·</span>
           <button type="button" id="completed-retention-change" class="retention-change">Change</button>
         </div>
-        <label class="sort-control">
-          <span>Sort</span>
-          <select id="sort-field" aria-label="Sort items by">
-            <option value="due">Due date</option>
-            <option value="created" selected>Date added</option>
-            <option value="name">Name</option>
-          </select>
-        </label>
-        <label class="sort-control">
-          <span>Order</span>
-          <select id="sort-dir" aria-label="Sort order">
-            <option value="asc">Oldest on top</option>
-            <option value="desc" selected>Newest on top</option>
-          </select>
-        </label>
-        <button type="button" class="sort-control sort-manual-order" id="sort-manual" aria-pressed="false" hidden>Manual</button>
-        <button type="button" class="sort-control sort-completed-filter" id="sort-completed" hidden aria-label="Show completed items" aria-pressed="false">
+        <div id="sort-native-controls" hidden>
+          <label class="sort-control">
+            <span>Sort</span>
+            <select id="sort-field" aria-label="Sort items by">
+              <option value="due">Due date</option>
+              <option value="created" selected>Date added</option>
+              <option value="name">Name</option>
+            </select>
+          </label>
+          <label class="sort-control">
+            <span>Order</span>
+            <select id="sort-dir" aria-label="Sort order">
+              <option value="asc">Oldest on top</option>
+              <option value="desc" selected>Newest on top</option>
+            </select>
+          </label>
+        </div>
+        <button type="button" id="sort-toggle" class="sort-pill sort-order-toggle" aria-label="Change sorting" aria-haspopup="menu" aria-expanded="false">
+          <svg class="ic" aria-hidden="true"><use id="sort-toggle-icon" href="#i-sort"/></svg>
+        </button>
+        <button type="button" class="sort-pill sort-completed-filter" id="sort-completed" hidden aria-label="Show completed items" aria-pressed="false">
           <svg class="ic" aria-hidden="true"><use id="sort-completed-icon" href="#i-check"/></svg>
           <span id="sort-completed-count">0</span>
         </button>
-        <button type="button" id="select-toggle" class="sort-select-btn" hidden>Select</button>
       </div>
       <div id="selection-bar" class="selection-bar" hidden>
         <span id="selection-count" class="selection-count">0 selected</span>
@@ -407,6 +423,8 @@
     <div id="selection-actions" class="selection-actions" hidden>
       <button type="button" id="selection-complete" class="selection-action" hidden>Complete</button>
       <button type="button" id="selection-uncomplete" class="selection-action" hidden>Uncomplete</button>
+      <button type="button" id="selection-inprogress" class="selection-action" hidden>In progress</button>
+      <button type="button" id="selection-notstarted" class="selection-action" hidden>Not started</button>
       <button type="button" id="selection-delete" class="selection-delete">Delete</button>
     </div>
   </div>
@@ -1211,6 +1229,8 @@ curl -X POST -H "Authorization: Bearer $TOKEN" \
 
   <script src="/fuzzy-search.js"></script>
   <script src="/view-state.js"></script>
+  <script src="/status-sync.js"></script>
+  <script src="/paste-text.js"></script>
   <script src="/vendor/pdfjs/pdf.min.js"></script>
   <script src="/app.js"></script>
 </body>

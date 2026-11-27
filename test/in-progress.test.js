@@ -205,3 +205,50 @@ test('the In progress smart view, status menu and item number are served', async
   });
   assert.equal(sort.status, 200);
 });
+
+test('bulk in-progress marks open items, clears them, and skips completed items', async () => {
+  const first = await create({ title: 'Bulk one' });
+  const second = await create({ title: 'Bulk two' });
+  const done = await create({ title: 'Bulk done' });
+  await patch(done.id, { completed: true });
+  const mark = await json('/api/bulk/reminders/in-progress', {
+    method: 'POST', csrf: true, body: { ids: [first.id, second.id, done.id], in_progress: true },
+  });
+  assert.equal(mark.updated, 2);
+  assert.equal(mark.skipped, 1);
+  assert.ok((await get(first.id)).in_progress_at);
+  assert.ok((await get(second.id)).in_progress_at);
+  assert.equal((await get(done.id)).in_progress_at, null);
+  const clear = await json('/api/bulk/reminders/in-progress', {
+    method: 'POST', csrf: true, body: { ids: [first.id, second.id], in_progress: false },
+  });
+  assert.equal(clear.updated, 2);
+  assert.equal((await get(first.id)).in_progress_at, null);
+  assert.equal((await get(second.id)).in_progress_at, null);
+});
+
+test('bulk in-progress keeps the first timestamp and validates the selection', async () => {
+  const item = await create({ title: 'Bulk timestamp' });
+  await patch(item.id, { in_progress: true });
+  const stamp = (await get(item.id)).in_progress_at;
+  const again = await json('/api/bulk/reminders/in-progress', {
+    method: 'POST', csrf: true, body: { ids: [item.id], in_progress: true },
+  });
+  assert.equal(again.updated, 0);
+  assert.equal(again.skipped, 1);
+  assert.equal((await get(item.id)).in_progress_at, stamp);
+  const empty = await request('/api/bulk/reminders/in-progress', {
+    method: 'POST', csrf: true, body: { ids: [], in_progress: true },
+  });
+  assert.equal(empty.status, 400);
+});
+
+test('the selection bar serves both bulk status actions', async () => {
+  const html = await (await request('/')).text();
+  assert.match(html, /id="selection-inprogress"/);
+  assert.match(html, /id="selection-notstarted"/);
+  const app = await (await request('/app.js')).text();
+  assert.match(app, /api\/bulk\/reminders\/in-progress/);
+  const status = await (await request('/status-sync.js')).text();
+  assert.match(status, /createStatusSync/);
+});

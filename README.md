@@ -2,6 +2,15 @@
 
 A self-hosted, single-user app with three tenants — Reminders, Notes and Docs — each organised with folders. Reminders adds due dates, urgent flags, recurring reminders, natural-language quick add, smart views, floating time zones, a token API for external agents, completed history, dark mode, and web push. Notes and Docs add file attachments and local document storage. No frontend framework and no build step.
 
+## What's New in v5.18.0
+
+- **In-progress status is instant** - Mark in progress / Mark not started updates the circle and its aria-label before the PATCH goes out, like Complete and undo. A failed request puts the real state back and shows the error. The extra full-state reload and duplicate search call are gone, and the In progress view still removes an item only after the server confirms.
+- **Paste and dictation match one Enter** - In reminder notes, rich notes and doc descriptions, pasted or dictated paragraph breaks (two or more newlines, CRLF included) collapse to the same single break one Enter creates. Single newlines, typed Enter, formatting, undo, selection replacement and saved content are untouched.
+- **Compact mobile toolbar** - Select now sits on the left, Completed stays far right, and sorting is an icon-only pill beside it. The pill shows a grip for Manual and a sort glyph for Automatic, and opens a compact popover with the existing field and direction choices. The three pills share one 28px height, while their touch targets stay 44px on phones.
+- **Long-press selects text again** - Long-pressing a reminder, note or doc card no longer enters Select mode; native text selection and copy work as usual. Select mode starts only from the Select button.
+- **Bulk status actions** - Reminders selection mode gains In progress and Not started beside Complete/Uncomplete and Delete. Both apply to the selected open items, preserve the first in-progress timestamp, and skip completed items.
+- Service worker cache bumped to `workspace-v5.18.0`.
+
 ## What's New in v5.17.1
 
 - **Hover status pill is clickable** - Moving the mouse from the status circle to the Complete / Mark in progress pill no longer closes it in the gap. The pill now keeps a 200ms grace period and cancels closing as soon as the pointer reaches it, so both hover actions work with a mouse.

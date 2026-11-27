@@ -2808,6 +2808,7 @@ function syncSelectionUI() {
   const bar = $('#selection-bar');
   const actions = $('#selection-actions');
   if (sortBar) sortBar.hidden = state.view === 'home' || Boolean(state.search) || active;
+  if (active || !sortBar || sortBar.hidden) closeSortPopover();
   if (select) select.hidden = !available || active;
   if (bar) bar.hidden = !active;
   if (actions) actions.hidden = !active;
@@ -2841,6 +2842,16 @@ function syncSelectionUI() {
     uncompleteButton.disabled = !completedMode || !doneCount;
     completeButton.textContent = 'Complete';
     uncompleteButton.textContent = 'Uncomplete';
+    const showStatus = state.selection.type === 'reminders' && !completedMode;
+    for (const [button, label] of [
+      [$('#selection-inprogress'), 'Mark selected items in progress'],
+      [$('#selection-notstarted'), 'Mark selected items not started'],
+    ]) {
+      if (!button) continue;
+      button.hidden = !showStatus;
+      button.disabled = !showStatus || !openCount;
+      button.setAttribute('aria-label', label);
+    }
   }
   const all = $$('#content .reminder').map((row) => selectionIdForRow(row, state.selection.type)).filter(Boolean);
   const allSelected = all.length > 0 && all.every((id) => state.selection.ids.has(id));
@@ -3070,32 +3081,31 @@ function selectionUncomplete() {
   runBulkCompletion(items.map((item) => item.id), false);
 }
 
-function attachSelectionLongPress(row, type, id) {
-  let timer = null;
-  let start = null;
-  const clear = () => {
-    clearTimeout(timer);
-    timer = null;
-    start = null;
-  };
-  row.addEventListener('pointerdown', (event) => {
-    if (state.selection.active || event.pointerType === 'mouse') return;
-    if (event.target.closest('a, button, input, textarea, select, .attachment-thumbs')) return;
-    start = { x: event.clientX, y: event.clientY };
-    timer = setTimeout(() => {
-      timer = null;
-      if (!start) return;
-      enterSelection(type, id);
-      row.dataset.selectionSuppress = '1';
-      setTimeout(() => { delete row.dataset.selectionSuppress; }, 700);
-    }, 500);
-  });
-  row.addEventListener('pointermove', (event) => {
-    if (!start) return;
-    if (Math.hypot(event.clientX - start.x, event.clientY - start.y) > 8) clear();
-  });
-  row.addEventListener('pointerup', clear);
-  row.addEventListener('pointercancel', clear);
+async function runBulkStatus(ids, inProgress) {
+  if (!ids.length) return;
+  try {
+    const result = await api('/api/bulk/reminders/in-progress', {
+      method: 'POST',
+      body: { ids, in_progress: inProgress },
+    });
+    exitSelection();
+    state.storage = null;
+    await loadState();
+    requestRowAnimation();
+    render();
+    const count = result.updated || 0;
+    toast(count
+      ? `${count} ${count === 1 ? 'item' : 'items'} marked ${inProgress ? 'in progress' : 'not started'}`
+      : 'Nothing changed');
+  } catch (err) {
+    toast(err.message);
+  }
+}
+
+function selectionInProgress(value) {
+  const items = selectedReminderItems(false);
+  if (!items.length) return;
+  runBulkStatus(items.map((item) => item.id), value);
 }
 
 function getAccountMenu() {
@@ -4137,24 +4147,39 @@ function emptySearchState() {
   ]);
 }
 
-const MANUAL_LABEL_MOBILE = window.matchMedia('(max-width: 899px)');
+function sortFieldLabel(field) {
+  const option = $('#sort-field') && $('#sort-field').querySelector(`option[value="${field}"]`);
+  return option ? option.textContent : field;
+}
 
-function syncManualOrderToggle(view = state.view) {
-  const button = $('#sort-manual');
+function sortDirLabel(field, dir) {
+  const labels = SORT_DIR_LABELS[field] || SORT_DIR_LABELS.due;
+  return labels[dir] || dir;
+}
+
+function syncSortToolbar(view = state.view) {
+  const toggle = $('#sort-toggle');
   const sortBar = $('#sort-bar');
+  if (!toggle) return;
   const list = manualListForView(view);
-  if (!button) return;
-  const show = Boolean(list) && !state.search && view !== 'home';
-  button.hidden = !show;
-  button.setAttribute('aria-pressed', list && list.manual_order ? 'true' : 'false');
-  button.disabled = !show;
   const manual = Boolean(list && list.manual_order);
-  button.title = manual ? 'Switch to automatic ordering' : 'Switch to manual ordering';
-  button.textContent = manual
-    ? 'Automatic sorting'
-    : MANUAL_LABEL_MOBILE.matches ? 'Manual' : 'Manual sorting';
-  button.setAttribute('aria-label', button.title);
-  if (sortBar) sortBar.classList.toggle('showing-manual', Boolean(show && list && list.manual_order));
+  const show = view !== 'home' && !state.search
+    && !(typeof view === 'number' && state.showCompleted)
+    && !(sortBar && sortBar.hidden);
+  toggle.hidden = !show;
+  if (!show) {
+    closeSortPopover();
+    return;
+  }
+  const icon = $('#sort-toggle-icon');
+  if (icon) icon.setAttribute('href', manual ? '#i-grip-dots' : '#i-sort');
+  const sort = effectiveSort(view);
+  const label = manual
+    ? 'Sorted manually. Tap to change sorting.'
+    : `Sorted automatically by ${sortFieldLabel(sort.field)}, ${sortDirLabel(sort.field, sort.dir)}. Tap to change sorting.`;
+  toggle.setAttribute('aria-label', label);
+  toggle.title = label;
+  toggle.setAttribute('aria-expanded', sortPopoverEl && sortPopoverEl.anchor === toggle ? 'true' : 'false');
 }
 
 function manualItemsForView(view) {
@@ -4186,8 +4211,8 @@ function manualIdsForView(view) {
 async function setManualOrder(enabled) {
   const view = state.view;
   const list = manualListForView(view);
-  const button = $('#sort-manual');
-  if (!list || !state.storeEpoch || !button) return;
+  const button = $('#sort-toggle');
+  if (!list || !state.storeEpoch || !button) return false;
   const body = {
     enabled,
     base_revision: Number(list.manual_order_revision) || 0,
@@ -4200,10 +4225,182 @@ async function setManualOrder(enabled) {
     await loadState();
     requestRowAnimation();
     render();
+    return true;
   } catch (err) {
     toast(err.message || 'Could not save manual order');
+    return false;
+  } finally {
     button.disabled = false;
   }
+}
+
+let sortPopoverEl = null;
+let sortPopoverClose = null;
+
+function closeSortPopover(restoreFocus = false) {
+  if (!sortPopoverEl) return;
+  const { anchor } = sortPopoverEl;
+  sortPopoverEl.remove();
+  sortPopoverEl = null;
+  if (sortPopoverClose) sortPopoverClose();
+  sortPopoverClose = null;
+  if (anchor) {
+    anchor.setAttribute('aria-expanded', 'false');
+    if (restoreFocus && document.contains(anchor)) anchor.focus();
+  }
+}
+
+async function chooseSort(field, dir) {
+  const wasManual = manualModeForView(state.view);
+  closeSortPopover(true);
+  if (wasManual) {
+    const switched = await setManualOrder(false);
+    if (!switched) return;
+  }
+  const patch = field ? { field } : { dir };
+  if (field === 'due') patch.dir = 'asc';
+  else if (field === 'completed') patch.dir = 'desc';
+  setViewSort(state.view, patch);
+  requestRowAnimation();
+  render();
+}
+
+function sortPopoverRow({ label, icon, role = 'menuitem', checked = false, trailing = null, className = '', onclick }) {
+  const leading = el('span', { class: 'sort-menu-leading' }, icon ? [el('span', { html: ICON(icon, 'ic') })] : []);
+  const tail = el('span', { class: 'sort-menu-tail' });
+  if (checked) tail.append(el('span', { class: 'sort-menu-tick', html: ICON('check', 'ic') }));
+  if (trailing) tail.append(el('span', { class: 'sort-menu-chevron', html: ICON(trailing, 'ic') }));
+  const attrs = {
+    type: 'button',
+    class: 'status-menu-item sort-menu-item' + (className ? ` ${className}` : ''),
+    role,
+    onclick,
+  };
+  if (role === 'menuitemradio') attrs['aria-checked'] = checked ? 'true' : 'false';
+  return el('button', attrs, [
+    leading,
+    el('span', { class: 'sort-menu-label', text: label }),
+    tail,
+  ]);
+}
+
+function openSortPopover(anchor) {
+  if (sortPopoverEl && sortPopoverEl.anchor === anchor) {
+    closeSortPopover(true);
+    return;
+  }
+  closeSortPopover();
+  const view = state.view;
+  const list = manualListForView(view);
+  const manual = Boolean(list && list.manual_order);
+  const sort = effectiveSort(view);
+  let autoOpen = !manual;
+  const menu = el('div', {
+    class: 'status-menu sort-menu',
+    role: 'menu',
+    'aria-label': 'Sorting',
+  });
+
+  const focusFirst = () => {
+    if (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) return;
+    const first = menu.querySelector('button');
+    if (first) first.focus();
+  };
+
+  const build = () => {
+    menu.replaceChildren();
+    if (list) {
+      menu.append(sortPopoverRow({
+        label: 'Manual',
+        icon: 'grip-dots',
+        checked: manual,
+        onclick: () => {
+          closeSortPopover(true);
+          setManualOrder(true);
+        },
+      }));
+      menu.append(sortPopoverRow({
+        label: 'Automatic',
+        icon: 'sort',
+        checked: !manual,
+        trailing: 'chevron',
+        onclick: () => {
+          autoOpen = !autoOpen;
+          build();
+          focusFirst();
+        },
+      }));
+    }
+    if (!autoOpen) return;
+    menu.append(el('div', { class: 'sort-menu-section', text: 'Sort by' }));
+    const options = $$('#sort-field option');
+    for (const option of options) {
+      const field = option.value;
+      menu.append(sortPopoverRow({
+        label: option.textContent,
+        role: 'menuitemradio',
+        checked: sort.field === field,
+        className: 'sort-subitem',
+        onclick: () => chooseSort(field, null),
+      }));
+    }
+    menu.append(el('div', { class: 'sort-menu-section', text: 'Order' }));
+    const labels = SORT_DIR_LABELS[sort.field] || SORT_DIR_LABELS.due;
+    for (const dir of ['asc', 'desc']) {
+      menu.append(sortPopoverRow({
+        label: labels[dir],
+        role: 'menuitemradio',
+        checked: sort.dir === dir,
+        className: 'sort-subitem',
+        onclick: () => chooseSort(null, dir),
+      }));
+    }
+  };
+
+  build();
+  document.body.append(menu);
+  menu.anchor = anchor;
+  sortPopoverEl = menu;
+  anchor.setAttribute('aria-expanded', 'true');
+
+  const rect = anchor.getBoundingClientRect();
+  const width = menu.offsetWidth;
+  const height = menu.offsetHeight;
+  let left = Math.min(rect.right - width, window.innerWidth - width - 8);
+  left = Math.max(8, left);
+  let top = rect.bottom + 8;
+  if (top + height > window.innerHeight - 8) top = Math.max(8, rect.top - height - 8);
+  menu.style.left = `${left}px`;
+  menu.style.top = `${top}px`;
+
+  const onPointerDown = (event) => {
+    if (!menu.contains(event.target) && !anchor.contains(event.target)) closeSortPopover();
+  };
+  const onKey = (event) => {
+    if (event.key === 'Escape') {
+      event.stopPropagation();
+      closeSortPopover(true);
+      return;
+    }
+    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+    const items = [...menu.querySelectorAll('button')];
+    const index = items.indexOf(document.activeElement);
+    event.preventDefault();
+    const next = event.key === 'ArrowDown' ? index + 1 : index - 1;
+    items[(next + items.length) % items.length].focus();
+  };
+  const onClose = () => closeSortPopover();
+  document.addEventListener('pointerdown', onPointerDown, true);
+  document.addEventListener('keydown', onKey, true);
+  window.addEventListener('scroll', onClose, true);
+  window.addEventListener('resize', onClose);
+  sortPopoverClose = () => {
+    document.removeEventListener('pointerdown', onPointerDown, true);
+    document.removeEventListener('keydown', onKey, true);
+    window.removeEventListener('scroll', onClose, true);
+    window.removeEventListener('resize', onClose);
+  };
+  focusFirst();
 }
 
 function syncCompletedFilter() {
@@ -4247,6 +4444,7 @@ function syncCompletedFilter() {
 }
 
 function renderMain() {
+  closeSortPopover();
   resetCardBatch();
   const view = state.view;
   const content = $('#content');
@@ -4269,7 +4467,7 @@ function renderMain() {
   // the list has nothing completed. Hidden during search and on Home.
   const isList = typeof view === 'number';
   syncCompletedFilter();
-  syncManualOrderToggle(view);
+  syncSortToolbar(view);
 
   if (state.search) {
     renderSearchResults(content);
@@ -4868,10 +5066,6 @@ function noteRow(note, options = {}) {
     onClick: (event) => {
       const row = event.currentTarget;
       if (event.target.closest('a, button, input, textarea, select')) return;
-      if (row.dataset.selectionSuppress) {
-        delete row.dataset.selectionSuppress;
-        return;
-      }
       if (state.selection.active) {
         toggleSelection('notes', note.id);
         return;
@@ -4888,7 +5082,6 @@ function noteRow(note, options = {}) {
     content: [body, tools],
   });
   row.append(el('span', { class: 'selection-check', 'aria-hidden': 'true', html: ICON('check', 'ic') }));
-  attachSelectionLongPress(row, 'notes', note.id);
   makeItemMoveControl(row, {
     type: 'note', id: note.id, folderId: note.folder_id, tenant: 'notes', label: note.title,
   });
@@ -4948,10 +5141,6 @@ function docRow(doc, options = {}) {
     onClick: (event) => {
       if (event.target.closest('a, button, input, textarea, select')) return;
       const row = event.currentTarget;
-      if (row.dataset.selectionSuppress) {
-        delete row.dataset.selectionSuppress;
-        return;
-      }
       if (state.selection.active) {
         toggleSelection('docs', doc.id);
         return;
@@ -4966,7 +5155,6 @@ function docRow(doc, options = {}) {
     content: [body, side, tools],
   });
   row.append(el('span', { class: 'selection-check', 'aria-hidden': 'true', html: ICON('check', 'ic') }));
-  attachSelectionLongPress(row, 'docs', doc.id);
   makeItemMoveControl(row, {
     type: 'doc', id: doc.id, folderId: doc.folder_id, tenant: 'docs', label: doc.name,
   });
@@ -7184,13 +7372,16 @@ function reminderRow(reminder, options = {}) {
     if (actionGroups.length) body.append(el('div', { class: 'row-action-stack' }, actionGroups));
   }
 
-  const inProgress = Boolean(reminder.in_progress_at) && !reminder.completed;
+  const pendingProgress = progressInFlight.get(reminder.id);
+  const inProgress = pendingProgress && !pendingProgress.settled
+    ? Boolean(pendingProgress.value) && !reminder.completed
+    : Boolean(reminder.in_progress_at) && !reminder.completed;
   const check = el('button', {
     type: 'button',
     class: 'check',
     'aria-label': reminder.completed
       ? 'Mark incomplete'
-      : `${inProgress ? 'In progress' : 'Not started'}. Change status`,
+      : statusCheckLabel(inProgress),
     html: ICON('check'),
   });
   if (!reminder.completed) {
@@ -7314,10 +7505,6 @@ function reminderRow(reminder, options = {}) {
       // A swipe or scroll that just ended must not select/expand a note.
       if (event.target.closest('a, button, input, textarea, select')) return;
       const row = event.currentTarget;
-      if (row.dataset.selectionSuppress) {
-        delete row.dataset.selectionSuppress;
-        return;
-      }
       if (state.selection.active) {
         toggleSelection('reminders', reminder.id);
         return;
@@ -7337,7 +7524,6 @@ function reminderRow(reminder, options = {}) {
   }, dayPreview ? [content] : [background, content]);
   if (!dayPreview) {
     row.append(el('span', { class: 'selection-check', 'aria-hidden': 'true', html: ICON('check', 'ic') }));
-    attachSelectionLongPress(row, 'reminders', reminder.id);
     makeItemMoveControl(row, {
       type: 'reminder', id: reminder.id, folderId: reminder.list_id, tenant: 'reminders', label: reminder.title,
     });
@@ -7603,6 +7789,8 @@ function escapeHtml(value) {
 // PATCHes (for recurring series the second tap used to advance the series
 // twice, silently skipping an occurrence).
 const completingInFlight = new Map();
+const progressInFlight = new Map();
+const progressStatusSync = window.WorkspaceStatusSync.createStatusSync();
 
 /* ---------------- Item status menu ---------------- */
 
@@ -7622,18 +7810,60 @@ function closeStatusMenu(restoreFocus = false) {
   }
 }
 
+function statusCheckLabel(inProgress) {
+  return inProgress ? 'In progress. Change status' : 'Not started. Change status';
+}
+
+function applyStatusRowState(row, inProgress) {
+  if (!row) return;
+  row.classList.toggle('in-progress', Boolean(inProgress));
+  const check = row.querySelector('.check');
+  if (check) check.setAttribute('aria-label', statusCheckLabel(inProgress));
+}
+
+function applyStatusRows(id, inProgress) {
+  $$(`.reminder[data-reminder-id="${id}"]`).forEach((row) => applyStatusRowState(row, inProgress));
+}
+
+function setLocalInProgress(id, value) {
+  const found = findReminder(id);
+  const stamp = value ? (found && found.in_progress_at) || new Date().toISOString() : null;
+  const apply = (item) => {
+    if (item && item.id === id) item.in_progress_at = stamp;
+  };
+  state.reminders.forEach(apply);
+  (state.searchOpen || []).forEach(apply);
+  (state.searchCompleted || []).forEach(apply);
+}
+
 async function setReminderInProgress(reminder, value) {
-  try {
-    await api('/api/reminders/' + reminder.id, {
+  closeStatusMenu();
+  const id = reminder.id;
+  const wanted = Boolean(value) && !reminder.completed;
+  const real = Boolean(reminder.in_progress_at) && !reminder.completed;
+  const outcome = await progressStatusSync.run(id, {
+    optimistic() {
+      progressInFlight.set(id, { value: wanted, settled: false });
+      applyStatusRows(id, wanted);
+    },
+    request: () => api('/api/reminders/' + id, {
       method: 'PATCH',
-      body: { in_progress: value },
-    });
-    await loadState();
-    if (state.search) await runSearch(state.search);
-    render();
-  } catch (err) {
-    toast(err.message);
-  }
+      body: { in_progress: wanted },
+    }),
+    commit() {
+      setLocalInProgress(id, wanted);
+      const entry = progressInFlight.get(id);
+      if (entry) entry.settled = true;
+      requestRowAnimation();
+      render();
+    },
+    rollback(err) {
+      progressInFlight.delete(id);
+      applyStatusRows(id, real);
+      toast(err.message);
+    },
+  });
+  if (!outcome.skipped) progressInFlight.delete(id);
 }
 
 // mode 'hover' is the desktop pill beside the circle; 'menu' is the small
@@ -9952,7 +10182,6 @@ $('#content').addEventListener('pointerdown', (event) => {
     active: false,
     fromOpen: row.classList.contains('swipe-open'),
   };
-  try { row.setPointerCapture(event.pointerId); } catch { /* ignore */ }
 });
 
 $('#content').addEventListener('pointermove', (event) => {
@@ -9981,6 +10210,7 @@ $('#content').addEventListener('pointermove', (event) => {
       return;
     }
     swipe.active = true;
+    try { swipe.row.setPointerCapture(event.pointerId); } catch { /* ignore */ }
     const content = swipeContentOf(swipe.row);
     if (content) content.classList.add('swiping');
     swipe.row.classList.add('swipe-active');
@@ -11427,6 +11657,8 @@ $('#selection-cancel').addEventListener('click', exitSelection);
 $('#selection-delete').addEventListener('click', deleteSelection);
 $('#selection-complete').addEventListener('click', selectionComplete);
 $('#selection-uncomplete').addEventListener('click', selectionUncomplete);
+$('#selection-inprogress').addEventListener('click', () => selectionInProgress(true));
+$('#selection-notstarted').addEventListener('click', () => selectionInProgress(false));
 $('#bulk-complete-confirm').addEventListener('click', () => {
   const pending = pendingBulkCompletion;
   pendingBulkCompletion = null;
@@ -11561,19 +11793,37 @@ $('#n-body').addEventListener('click', (event) => {
   const link = event.target.closest('a');
   if (link) event.preventDefault();
 });
-$('#n-body').addEventListener('paste', (event) => {
-  event.preventDefault();
-  const text = event.clipboardData.getData('text/plain');
-  document.execCommand('insertText', false, text);
-  requestAnimationFrame(updateNoteFormatState);
-});
+function normalizePastedText(text) {
+  if (window.WorkspacePasteText) return window.WorkspacePasteText.normalizePastedParagraphs(text);
+  return String(text == null ? '' : text).replace(/\r\n?/g, '\n').replace(/\n{2,}/g, '\n');
+}
 function insertPlainClipboardText(event) {
   event.preventDefault();
-  const text = event.clipboardData.getData('text/plain');
+  const text = normalizePastedText(event.clipboardData.getData('text/plain'));
   document.execCommand('insertText', false, text);
 }
+$('#n-body').addEventListener('paste', (event) => {
+  insertPlainClipboardText(event);
+  requestAnimationFrame(updateNoteFormatState);
+});
 $('#e-notes').addEventListener('paste', insertPlainClipboardText);
 $('#doc-description').addEventListener('paste', insertPlainClipboardText);
+
+function insertNormalizedParagraphs(event) {
+  if (event.inputType !== 'insertFromPaste' && event.inputType !== 'insertFromDictation') return;
+  if (!event.cancelable) return;
+  const raw = typeof event.data === 'string'
+    ? event.data
+    : event.dataTransfer ? event.dataTransfer.getData('text/plain') : '';
+  if (!raw || !/\n{2,}/.test(raw.replace(/\r\n?/g, '\n'))) return;
+  event.preventDefault();
+  document.execCommand('insertText', false, normalizePastedText(raw));
+  if (event.target && event.target.id === 'n-body') requestAnimationFrame(updateNoteFormatState);
+}
+for (const id of ['e-notes', 'n-body', 'doc-description']) {
+  const field = document.getElementById(id);
+  if (field) field.addEventListener('beforeinput', insertNormalizedParagraphs);
+}
 $('#n-body').addEventListener('input', updateNoteFormatState);
 document.addEventListener('selectionchange', () => {
   updateNoteFormatState();
@@ -11725,16 +11975,9 @@ $('#sort-dir').addEventListener('change', (event) => {
 // Toggle the folder between its open and completed lists.
 const folderOpenScroll = new Map();
 
-$('#sort-manual').addEventListener('click', () => {
-  const list = manualListForView(state.view);
-  if (!list) return;
-  setManualOrder(!list.manual_order);
-});
-
-MANUAL_LABEL_MOBILE.addEventListener('change', () => {
-  if (typeof state.view === 'number' || String(state.view).startsWith('notes-folder-') || String(state.view).startsWith('docs-folder-')) {
-    syncManualOrderToggle();
-  }
+$('#sort-toggle').addEventListener('click', (event) => {
+  event.stopPropagation();
+  openSortPopover(event.currentTarget);
 });
 
 $('#sort-completed').addEventListener('click', (event) => {
